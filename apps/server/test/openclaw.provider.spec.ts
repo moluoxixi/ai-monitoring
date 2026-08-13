@@ -11,12 +11,18 @@ let connectorCallbacks: {
   onSuccess: (credentials: Array<{ appId: string; appSecret: string; userOpenid?: string }>) => void;
   onFailure: (error: Error) => void;
 } | null = null;
+let weixinCallbacks: {
+  onQrDisplayed: (url: string) => void;
+  onSuccess: () => void;
+  onFailure: (error: Error) => void;
+} | null = null;
 const dispose = vi.fn();
 
 const temporary: string[] = [];
 
 afterEach(() => {
   connectorCallbacks = null;
+  weixinCallbacks = null;
   dispose.mockClear();
   for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
 });
@@ -44,12 +50,36 @@ describe('OpenClawProvider binding', () => {
       callbacks?.onQrDisplayed?.('https://q.qq.com/example');
       return dispose;
     };
+    (provider as any).launchWeixinLogin = async (callbacks: typeof weixinCallbacks) => {
+      weixinCallbacks = callbacks;
+      callbacks?.onQrDisplayed('https://weixin.qq.com/example');
+      return dispose;
+    };
   });
 
-  it('returns an external flow for Weixin without inventing a recent-chat binding', async () => {
-    const result = await provider.startBinding(OPENCLAW_WEIXIN);
-    expect(result.mode).toBe('external');
-    expect(provider.availableChannels()).not.toContain(OPENCLAW_WEIXIN);
+  it('uses the official Weixin QR flow and persists only its outbound target', async () => {
+    let hasContext = false;
+    (provider as any).latestWeixinBinding = () => ({ accountId: 'weixin-account', target: 'self@im.wechat', hasContext });
+    const started = await provider.startBinding(OPENCLAW_WEIXIN);
+    expect(started).toMatchObject({ mode: 'qr', qrUrl: 'https://weixin.qq.com/example' });
+
+    weixinCallbacks?.onSuccess();
+    const pending = await provider.waitBinding(OPENCLAW_WEIXIN);
+    expect(pending).toEqual({
+      connected: false,
+      bound: false,
+      message: '扫码已确认，请先在微信中给机器人发送任意一条消息以启用通知',
+    });
+    hasContext = true;
+    const result = await provider.waitBinding(OPENCLAW_WEIXIN);
+
+    expect(result).toEqual({ connected: true, bound: true, message: '微信机器人已绑定' });
+    expect(provider.availableChannels()).toContain(OPENCLAW_WEIXIN);
+    const persisted = JSON.parse(readFileSync(config.openClawBindingsPath, 'utf8'));
+    expect(persisted.bindings[OPENCLAW_WEIXIN]).toEqual({
+      provider: OPENCLAW_WEIXIN, target: 'self@im.wechat', account_id: 'weixin-account',
+    });
+    expect(readFileSync(config.openClawBindingsPath, 'utf8')).not.toContain('token');
   });
 
   it('starts QQ QR login, persists the official result, and stores only the delivery binding', async () => {

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import type { QrConnectCredentials, startQrConnect as StartQrConnect } from '@tencent-connect/qqbot-connector';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import type {
@@ -34,12 +36,19 @@ interface QrSession {
   persisting?: Promise<BindingWaitResult>;
 }
 
+interface WeixinBindingTarget {
+  accountId: string;
+  hasContext: boolean;
+  target: string;
+}
+
 @Injectable()
 export class OpenClawProvider implements ChannelProvider {
   readonly ids = [OPENCLAW_QQ, OPENCLAW_WEIXIN] as const;
   private readonly outboundDir: string;
   private readonly emitterPath: string;
-  private qrSession: QrSession | null = null;
+  private qqQrSession: QrSession | null = null;
+  private weixinQrSession: QrSession | null = null;
 
   constructor(
     private readonly config: AppConfigService,
@@ -59,7 +68,7 @@ export class OpenClawProvider implements ChannelProvider {
     let payload: Record<string, unknown> = {};
     let commandError = false;
     try {
-      payload = await this.runJson(['channels', 'status', '--json'], 5_000);
+      payload = await this.runJson(['channels', 'status', '--json'], 15_000);
       commandError = payload.gatewayReachable === false || Boolean(payload.error);
     } catch {
       commandError = true;
@@ -67,66 +76,49 @@ export class OpenClawProvider implements ChannelProvider {
     const channels = this.objectValue(payload.channels);
     return [
       this.statusItem(OPENCLAW_QQ, 'QQ 机器人', 'qqbot', 'qr', bindings, channels, commandError),
-      {
-        ...this.statusItem(OPENCLAW_WEIXIN, '微信机器人', OPENCLAW_WEIXIN, 'external', bindings, channels, commandError),
-        message: '当前 OpenClaw 微信插件未公开可路由的二维码登录接口，需在 OpenClaw 中完成登录。',
-      },
+      this.statusItem(OPENCLAW_WEIXIN, '微信机器人', OPENCLAW_WEIXIN, 'qr', bindings, channels, commandError),
     ];
   }
 
   async startBinding(channel: string): Promise<BindingStartResult> {
-    if (channel === OPENCLAW_WEIXIN) {
-      return {
-        mode: 'external',
-        message: '当前微信插件不支持从本页面发起扫码，请先在 OpenClaw 中完成官方登录。',
-      };
-    }
+    if (channel === OPENCLAW_WEIXIN) return this.startWeixinBinding();
     if (channel !== OPENCLAW_QQ) throw new Error(`unsupported OpenClaw channel: ${channel}`);
 
-    this.cancelQrSession();
-    let notify = (): void => undefined;
-    let changed = new Promise<void>((resolve) => { notify = resolve; });
-    const session: QrSession = {
-      qrUrl: '', state: 'starting', dispose: () => undefined, changed, notify,
-    };
-    const signalChange = (): void => {
-      session.notify();
-      session.changed = new Promise<void>((resolve) => { session.notify = resolve; });
-    };
+    this.cancelQqQrSession();
+    const session = this.newQrSession();
     const startQrConnect = await this.loadConnector();
     session.dispose = startQrConnect({
       onQrDisplayed: (url) => {
         session.qrUrl = url;
         session.state = 'pending';
-        signalChange();
+        this.signalChange(session);
       },
-      onQrExpired: () => signalChange(),
+      onQrExpired: () => this.signalChange(session),
       onSuccess: (credentials) => {
         session.credentials = credentials;
         session.state = 'connected';
-        signalChange();
+        this.signalChange(session);
       },
       onFailure: (error) => {
         session.error = error.message;
         session.state = 'failed';
-        signalChange();
+        this.signalChange(session);
       },
     }, { displayQrCodeToConsole: false, source: 'ai-monitor' });
-    this.qrSession = session;
+    this.qqQrSession = session;
 
     if (!session.qrUrl) await this.waitForChange(session, 15_000);
     if (!session.qrUrl) {
-      this.cancelQrSession();
+      this.cancelQqQrSession();
       throw new Error(session.error || 'QQ 二维码生成超时，请重试');
     }
     return { mode: 'qr', qrUrl: session.qrUrl, message: '请使用手机 QQ 扫描二维码完成绑定' };
   }
 
   async waitBinding(channel: string): Promise<BindingWaitResult> {
-    if (channel !== OPENCLAW_QQ) {
-      return { connected: false, bound: false, message: '该通道不支持从本页面等待扫码结果' };
-    }
-    const session = this.qrSession;
+    if (channel === OPENCLAW_WEIXIN) return this.waitWeixinBinding();
+    if (channel !== OPENCLAW_QQ) return { connected: false, bound: false, message: '未知消息通道' };
+    const session = this.qqQrSession;
     if (!session) return { connected: false, bound: false, message: '二维码会话不存在或已过期，请重新绑定' };
     if (session.state === 'starting' || session.state === 'pending') await this.waitForChange(session, 25_000);
     if (session.state === 'starting' || session.state === 'pending') {
@@ -134,7 +126,7 @@ export class OpenClawProvider implements ChannelProvider {
     }
     if (session.state === 'failed') {
       const message = session.error || 'QQ 绑定失败，请重新尝试';
-      this.cancelQrSession();
+      this.cancelQqQrSession();
       return { connected: false, bound: false, message };
     }
     session.persisting ||= this.completeQqBinding(session);
@@ -142,7 +134,7 @@ export class OpenClawProvider implements ChannelProvider {
   }
 
   async unbind(channel: string): Promise<boolean> {
-    if (channel === OPENCLAW_QQ) this.cancelQrSession();
+    this.cancelBindingSession(channel);
     const bindings = this.loadBindings();
     if (!bindings[channel]) return false;
     delete bindings[channel];
@@ -151,7 +143,7 @@ export class OpenClawProvider implements ChannelProvider {
   }
 
   async cancelBinding(channel: string): Promise<void> {
-    if (channel === OPENCLAW_QQ) this.cancelQrSession();
+    this.cancelBindingSession(channel);
   }
 
   async send(channel: string, title: string, body: string): Promise<void> {
@@ -176,12 +168,179 @@ export class OpenClawProvider implements ChannelProvider {
         account_id: 'default',
       };
       this.saveBindings(bindings);
-      this.cancelQrSession();
+      this.cancelQqQrSession();
       return { connected: true, bound: true, message: 'QQ 机器人已绑定' };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'QQ 绑定失败';
-      this.cancelQrSession();
+      this.cancelQqQrSession();
       return { connected: true, bound: false, message };
+    }
+  }
+
+  private async startWeixinBinding(): Promise<BindingStartResult> {
+    this.cancelWeixinQrSession();
+    const session = this.newQrSession();
+    session.dispose = await this.launchWeixinLogin({
+      onQrDisplayed: (url) => {
+        session.qrUrl = url;
+        session.state = 'pending';
+        this.signalChange(session);
+      },
+      onSuccess: () => {
+        session.state = 'connected';
+        this.signalChange(session);
+      },
+      onFailure: (error) => {
+        session.error = error.message;
+        session.state = 'failed';
+        this.signalChange(session);
+      },
+    });
+    this.weixinQrSession = session;
+    if (!session.qrUrl) await this.waitForChange(session, 20_000);
+    if (!session.qrUrl) {
+      this.cancelWeixinQrSession();
+      throw new Error(session.error || '微信二维码生成超时，请重试');
+    }
+    return { mode: 'qr', qrUrl: session.qrUrl, message: '请使用手机微信扫描二维码并确认连接' };
+  }
+
+  private async waitWeixinBinding(): Promise<BindingWaitResult> {
+    const session = this.weixinQrSession;
+    if (!session) return { connected: false, bound: false, message: '二维码会话不存在或已过期，请重新绑定' };
+    if (session.state === 'starting' || session.state === 'pending') await this.waitForChange(session, 25_000);
+    if (session.state === 'starting' || session.state === 'pending') {
+      return { connected: false, bound: false, message: '等待扫码', qrUrl: session.qrUrl || undefined };
+    }
+    if (session.state === 'failed') {
+      const message = session.error || '微信绑定失败，请重新尝试';
+      this.cancelWeixinQrSession();
+      return { connected: false, bound: false, message };
+    }
+    return this.completeWeixinBinding();
+  }
+
+  private async completeWeixinBinding(): Promise<BindingWaitResult> {
+    try {
+      const target = this.latestWeixinBinding();
+      if (!target) throw new Error('微信登录已完成，但未找到可用于通知的本人接收目标');
+      if (!target.hasContext) {
+        return {
+          connected: false,
+          bound: false,
+          message: '扫码已确认，请先在微信中给机器人发送任意一条消息以启用通知',
+        };
+      }
+      const bindings = this.loadBindings();
+      bindings[OPENCLAW_WEIXIN] = {
+        provider: OPENCLAW_WEIXIN,
+        target: target.target,
+        account_id: target.accountId,
+      };
+      this.saveBindings(bindings);
+      this.cancelWeixinQrSession();
+      return { connected: true, bound: true, message: '微信机器人已绑定' };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '微信绑定失败';
+      this.cancelWeixinQrSession();
+      return { connected: true, bound: false, message };
+    }
+  }
+
+  private async launchWeixinLogin(callbacks: {
+    onQrDisplayed: (url: string) => void;
+    onSuccess: () => void;
+    onFailure: (error: Error) => void;
+  }): Promise<() => void> {
+    const cliModule = join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs');
+    if (!existsSync(cliModule)) throw new Error('OpenClaw CLI is unavailable');
+    const env = { ...process.env };
+    if (!env.OPENCLAW_GATEWAY_TOKEN) {
+      const token = await this.gatewayToken();
+      if (token) env.OPENCLAW_GATEWAY_TOKEN = token;
+    }
+    const child = spawn(process.execPath, [cliModule, 'channels', 'login', '--channel', OPENCLAW_WEIXIN], {
+      cwd: this.config.projectRoot,
+      env,
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let output = '';
+    let displayedQr = '';
+    const inspect = (chunk: Buffer): void => {
+      output = `${output}${chunk.toString('utf8')}`.slice(-64_000);
+      const plain = output.replace(/\x1b\[[0-9;]*m/g, '');
+      const matches = [...plain.matchAll(/(?:二维码链接:|若二维码未能显示或无法使用，你可以访问以下链接以继续：)\s*(data:image\/[^\s]+|https:\/\/[^\s]+)/g)];
+      const qrUrl = matches.at(-1)?.[1]?.replace(/[)\]}>,.;]+$/, '');
+      if (!qrUrl || qrUrl === displayedQr) return;
+      displayedQr = qrUrl;
+      callbacks.onQrDisplayed(qrUrl);
+    };
+    child.stdout.on('data', inspect);
+    child.stderr.on('data', inspect);
+    child.once('error', () => callbacks.onFailure(new Error('无法启动微信官方登录流程')));
+    child.once('exit', (code, signal) => {
+      if (signal) return;
+      if (code === 0) callbacks.onSuccess();
+      else callbacks.onFailure(new Error('微信扫码登录未完成，请重试'));
+    });
+    return () => {
+      child.removeAllListeners();
+      child.stdout.removeAllListeners();
+      child.stderr.removeAllListeners();
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      if (process.platform === 'win32' && child.pid) {
+        spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+          windowsHide: true, stdio: 'ignore',
+        });
+      } else {
+        child.kill();
+      }
+    };
+  }
+
+  private latestWeixinBinding(): WeixinBindingTarget | null {
+    const stateRoot = process.env.OPENCLAW_STATE_DIR?.trim() || process.env.CLAWDBOT_STATE_DIR?.trim() || join(homedir(), '.openclaw');
+    const stateDir = join(stateRoot, OPENCLAW_WEIXIN);
+    const indexPath = join(stateDir, 'accounts.json');
+    if (!existsSync(indexPath)) return null;
+    let accountIds: unknown;
+    try {
+      accountIds = JSON.parse(readFileSync(indexPath, 'utf8'));
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(accountIds)) return null;
+    const candidates: Array<WeixinBindingTarget & { savedAt: number }> = [];
+    for (const rawId of accountIds) {
+      if (typeof rawId !== 'string' || !rawId) continue;
+      const accountPath = join(stateDir, 'accounts', `${rawId}.json`);
+      if (!existsSync(accountPath)) continue;
+      try {
+        const account = this.objectValue(JSON.parse(readFileSync(accountPath, 'utf8')));
+        if (typeof account.token !== 'string' || !account.token || typeof account.userId !== 'string' || !account.userId.endsWith('@im.wechat')) continue;
+        candidates.push({
+          accountId: rawId,
+          hasContext: this.hasWeixinContext(stateDir, rawId, account.userId),
+          target: account.userId,
+          savedAt: typeof account.savedAt === 'string' ? Date.parse(account.savedAt) || 0 : 0,
+        });
+      } catch {
+        // Ignore incomplete account files while the official login flow is persisting them.
+      }
+    }
+    candidates.sort((left, right) => right.savedAt - left.savedAt);
+    return candidates[0] || null;
+  }
+
+  private hasWeixinContext(stateDir: string, accountId: string, userId: string): boolean {
+    const contextPath = join(stateDir, 'accounts', `${accountId}.context-tokens.json`);
+    if (!existsSync(contextPath)) return false;
+    try {
+      const contexts = this.objectValue(JSON.parse(readFileSync(contextPath, 'utf8')));
+      return typeof contexts[userId] === 'string' && Boolean(contexts[userId]);
+    } catch {
+      return false;
     }
   }
 
@@ -335,9 +494,30 @@ export class OpenClawProvider implements ChannelProvider {
     renameSync(temporary, this.config.openClawBindingsPath);
   }
 
-  private cancelQrSession(): void {
-    this.qrSession?.dispose();
-    this.qrSession = null;
+  private newQrSession(): QrSession {
+    let notify = (): void => undefined;
+    const changed = new Promise<void>((resolve) => { notify = resolve; });
+    return { qrUrl: '', state: 'starting', dispose: () => undefined, changed, notify };
+  }
+
+  private signalChange(session: QrSession): void {
+    session.notify();
+    session.changed = new Promise<void>((resolve) => { session.notify = resolve; });
+  }
+
+  private cancelBindingSession(channel: string): void {
+    if (channel === OPENCLAW_QQ) this.cancelQqQrSession();
+    if (channel === OPENCLAW_WEIXIN) this.cancelWeixinQrSession();
+  }
+
+  private cancelQqQrSession(): void {
+    this.qqQrSession?.dispose();
+    this.qqQrSession = null;
+  }
+
+  private cancelWeixinQrSession(): void {
+    this.weixinQrSession?.dispose();
+    this.weixinQrSession = null;
   }
 
   private async waitForChange(session: QrSession, timeoutMs: number): Promise<void> {

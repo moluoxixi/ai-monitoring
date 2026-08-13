@@ -66,7 +66,7 @@ QQ 可直接在通知中心绑定：
 3. 扫码凭据由腾讯官方 `@tencent-connect/qqbot-connector` 获取并写入 OpenClaw；本项目自己的绑定文件只保存发送所需的不透明 target/account ID，UI 和日志不展示这些值。
 4. 绑定完成后，为所需 AI 软件选择“QQ 机器人”并保存。
 
-当前安装的 OpenClaw 微信插件没有公开可路由的二维码登录方法，因此本页面会明确提示外部登录，不会再通过“最近私聊”猜测绑定关系。微信需执行 `openclaw channels login --channel openclaw-weixin` 完成插件官方登录；在插件提供可验证的绑定目标接口前，本项目不会把最近会话伪装为已绑定。
+微信也可在通知中心点击“绑定”。服务调用腾讯插件官方 `openclaw channels login --channel openclaw-weixin` 流程，并把插件生成的二维码显示在页面中；扫码确认后，需要先在微信中给机器人发送任意一条消息，使腾讯协议签发主动回复所需的 context token。页面验证该 token 已由插件落盘后，才会读取当前账号 ID 和扫码用户 ID 作为通知路由并显示绑定成功。本项目自己的绑定文件不保存微信 token，也不会通过“最近私聊”猜测接收目标。
 
 通知由 OpenClaw command cron 确定性投递，正文不经过模型改写。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
 
@@ -98,7 +98,7 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 
 - **Claude Code**：官方 hook 覆盖 `Stop`、`StopFailure`、`PostToolUseFailure`，可监测任务完成、API/轮次失败和工具失败。
 - **Qoder CLI**：官方 hook 覆盖 `Stop`、`StopFailure`、`PostToolUseFailure`。本仓库只接 CLI hooks；`Stop` 代表当前响应结束，不等价于业务目标成功。
-- **Codex 完成事件**：官方 Arize `notify` integration 可用于 Codex CLI/Desktop；本仓库 multiplexer 保留已有 notify 命令并并行发送 Phoenix trace 和完成通知。
+- **Codex 完成事件**：官方 Arize `notify` integration 可用于 Codex CLI/Desktop；本仓库 multiplexer 保留已有 notify 命令并并行发送 Phoenix trace 和完成通知。通知中心同时监听 Codex 的结构化 session JSONL，补齐 Desktop 未触发 notify 的完成、中断和带错误的终态；启动回扫只补消息概览，不补发历史通知，实时新增终态才创建投递。
 - **Codex 严格错误终态**：只有通过 [Codex App Server 正式协议](https://learn.chatgpt.com/docs/app-server) 的客户端，才能可靠获得 `error`、`turn/completed` 的 `completed/interrupted/failed` 以及 `item/completed`。使用 `.\scripts\run-codex-app-server-proxy.ps1` 作为该客户端的 stdio server command。
 - **Codex Desktop 限制**：Desktop 当前没有向第三方公开其内部 App Server 事件订阅，因此无法承诺外部监控能捕获每一次 Desktop API 失败。仅靠 `notify` 或猜测私有日志不能满足“错误必检”。
 - **Claude Desktop 限制**：当前接入的是 Claude Code hooks，不是 Claude Desktop；不能把 Claude Code 的配置推断为 Desktop 已接入。

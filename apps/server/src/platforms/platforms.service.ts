@@ -10,7 +10,7 @@ const BUILT_INS: PlatformDefinition[] = [
     integration: {
       adapterId: 'codex-monitor', mode: 'notify-and-app-server', state: 'ready',
       capabilities: { completed: true, failed: true, interrupted: true, toolFailed: true, tracing: true },
-      description: 'Notify 捕获任务完成，App Server 补充失败、工具调用和 Trace 状态。',
+      description: 'Notify 与结构化 session watcher 捕获任务终态，App Server 补充工具调用和 Trace 状态。',
     },
   },
   {

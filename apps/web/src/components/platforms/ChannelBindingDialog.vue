@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import QRCode from 'qrcode'
-import { CircleCheck, Loading } from '@element-plus/icons-vue'
+import { CircleCheck, Loading, Refresh } from '@element-plus/icons-vue'
 import { monitorApi } from '../../api/monitor'
 
 const props = defineProps<{
@@ -15,6 +15,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean]; bound: []; fai
 const qrImage = ref('')
 const state = ref<'preparing' | 'waiting' | 'success' | 'error'>('preparing')
 const stateMessage = ref('')
+const refreshing = ref(false)
 let generation = 0
 let completed = false
 
@@ -70,6 +71,30 @@ const close = (value: boolean) => {
   emit('update:modelValue', value)
   if (!value && !completed && props.channel) void monitorApi.cancelBinding(props.channel).catch(() => undefined)
 }
+
+const refreshQr = async () => {
+  generation += 1
+  const current = generation
+  refreshing.value = true
+  state.value = 'preparing'
+  stateMessage.value = '正在刷新二维码'
+  try {
+    const result = await monitorApi.startBinding(props.channel)
+    if (result.mode !== 'qr') throw new Error(result.message)
+    qrImage.value = await renderQr(result.qrUrl)
+    if (!props.modelValue || current !== generation) return
+    state.value = 'waiting'
+    stateMessage.value = result.message
+    void poll(current)
+  } catch (error) {
+    if (current !== generation) return
+    state.value = 'error'
+    stateMessage.value = error instanceof Error ? error.message : '二维码刷新失败'
+    emit('failed', stateMessage.value)
+  } finally {
+    if (current === generation) refreshing.value = false
+  }
+}
 </script>
 
 <template>
@@ -77,11 +102,14 @@ const close = (value: boolean) => {
     <div class="qr-binding">
       <div v-if="state === 'success'" class="binding-result success"><el-icon><CircleCheck /></el-icon><strong>绑定完成</strong></div>
       <template v-else>
-        <div class="qr-frame"><img v-if="qrImage" :src="qrImage" alt="QQ 机器人绑定二维码" /><el-icon v-else class="is-loading"><Loading /></el-icon></div>
-        <p>{{ stateMessage || '请使用手机 QQ 扫描二维码' }}</p>
+        <div class="qr-frame"><img v-if="qrImage" :src="qrImage" :alt="`${label}绑定二维码`" /><el-icon v-else class="is-loading"><Loading /></el-icon></div>
+        <p>{{ stateMessage || `请扫描二维码绑定${label}` }}</p>
         <el-tag :type="state === 'error' ? 'danger' : 'info'" effect="plain">{{ state === 'error' ? '绑定失败' : '等待扫码' }}</el-tag>
       </template>
     </div>
-    <template #footer><el-button @click="close(false)">{{ state === 'success' ? '完成' : '取消' }}</el-button></template>
+    <template #footer>
+      <el-button v-if="state !== 'success'" :icon="Refresh" :loading="refreshing" @click="refreshQr">刷新二维码</el-button>
+      <el-button @click="close(false)">{{ state === 'success' ? '完成' : '取消' }}</el-button>
+    </template>
   </el-dialog>
 </template>

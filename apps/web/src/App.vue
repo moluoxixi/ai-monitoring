@@ -91,8 +91,15 @@ const bindChannel = async (channel: string) => {
 }
 
 const bindingCompleted = async () => {
-  ElMessage.success(`${bindingLabel.value}已绑定`)
-  await refresh(true)
+  try {
+    await monitorApi.updatePlatform(selectedPlatform.value, { channel: bindingChannel.value })
+    ElMessage.success(`${bindingLabel.value}已绑定并用于当前平台`)
+    await refresh(true)
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error
+      ? `通道已绑定，但自动分配失败：${reason.message}`
+      : '通道已绑定，但自动分配到当前平台失败')
+  }
 }
 
 const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel), '通道已解绑')

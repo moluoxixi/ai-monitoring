@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 
 const numberValue = (value: string | undefined, fallback: number): number => {
@@ -17,6 +18,8 @@ export class AppConfigService {
     process.env.AIMONITOR_OPENCLAW_BINDINGS_PATH || 'data/openclaw-channels.json',
   );
   readonly phoenixUrl = process.env.AIMONITOR_PHOENIX_URL?.trim() || 'http://127.0.0.1:6006';
+  readonly codexSessionsPath = resolve(process.env.AIMONITOR_CODEX_SESSIONS_PATH?.trim() || resolve(homedir(), '.codex', 'sessions'));
+  readonly codexBackfillMinutes = numberValue(process.env.AIMONITOR_CODEX_BACKFILL_MINUTES, 120);
   readonly ingestToken = process.env.AIMONITOR_INGEST_TOKEN || '';
   readonly appriseUrls = (process.env.AIMONITOR_APPRISE_URLS || '')
     .split(',')
