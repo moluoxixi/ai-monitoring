@@ -1,7 +1,7 @@
 import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { ChannelsService } from '../channels/channels.service';
 import { DatabaseService } from '../database/database.service';
-import { PlatformsService } from '../platforms/platforms.service';
+import { ExtensionsService } from '../extensions/extensions.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { normalizeEvent } from './event-normalizer';
 
@@ -10,7 +10,7 @@ export class EventsController {
   constructor(
     private readonly database: DatabaseService,
     private readonly channels: ChannelsService,
-    private readonly platforms: PlatformsService,
+    private readonly extensions: ExtensionsService,
   ) {}
 
   @Get('stats')
@@ -31,15 +31,15 @@ export class EventsController {
   @Post('events')
   ingest(@Body() body: CreateEventDto) {
     const event = normalizeEvent(body);
-    const resolved = this.platforms.resolve(event.client);
+    const resolved = this.extensions.resolve(event.client);
     if (resolved !== 'other') event.client = resolved;
-    const [eventId, inserted] = this.database.insertEvent(event, this.channels.channelsForClient(event.client));
+    const [eventId, inserted] = this.database.insertEvent(event, this.channels.deliveryChannels());
     return { ok: true, event_id: eventId, inserted };
   }
 
   @Post('test-notification')
   testNotification(@Body() body: { client?: string }) {
-    const client = body.client && this.platforms.resolve(body.client) !== 'other' ? this.platforms.resolve(body.client) : 'codex';
+    const client = body.client && this.extensions.resolve(body.client) !== 'other' ? this.extensions.resolve(body.client) : 'codex';
     const event = normalizeEvent({
       source: 'dashboard',
       client,
@@ -47,10 +47,10 @@ export class EventsController {
       kind: 'test_notification',
       status: 'completed',
       title: 'AI Monitor 测试通知',
-      message: `${this.platforms.get(client).definition.label} 的本地通知链路工作正常。`,
+      message: `${this.extensions.get(client).label} 的本地通知链路工作正常。`,
       metadata: { manual: true },
     });
-    const selected = this.channels.channelsForClient(client);
+    const selected = this.channels.deliveryChannels();
     const [eventId, inserted] = this.database.insertEvent(event, selected);
     return { ok: true, event_id: eventId, inserted, channels: selected };
   }

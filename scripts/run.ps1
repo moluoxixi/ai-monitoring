@@ -12,6 +12,8 @@ if (-not (Test-Path -LiteralPath $EntryPoint)) {
     throw "NestJS build was not found. Run npm run build or .\scripts\install.ps1 first."
 }
 
+& (Join-Path $Root "scripts\patch-openclaw-weixin.ps1") -QuietIfMissing
+
 $env:AIMONITOR_HOST = $BindHost
 $env:AIMONITOR_PORT = [string]$Port
 & node $EntryPoint

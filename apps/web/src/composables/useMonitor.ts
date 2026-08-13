@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { monitorApi } from '../api/monitor'
-import type { MonitorEvent, MonitorStats, PlatformCard, PlatformPayload } from '../types/monitor'
+import type { Delivery, ExtensionPayload, MonitorEvent, MonitorStats } from '../types/monitor'
 
 const emptyStats = (): MonitorStats => ({
   events: 0, completed: 0, failed: 0, interrupted: 0, tool_failed: 0,
@@ -10,34 +10,44 @@ const emptyStats = (): MonitorStats => ({
 export const useMonitor = () => {
   const stats = ref<MonitorStats>(emptyStats())
   const events = ref<MonitorEvent[]>([])
-  const platformPayload = ref<PlatformPayload>({ channels: [], clients: [] })
+  const extensionPayload = ref<ExtensionPayload>({ channels: [], extensions: [] })
   const loading = ref(true)
   const refreshing = ref(false)
   const error = ref('')
-  const updatedAt = ref<Date | null>(null)
   let timer: number | undefined
 
-  const platforms = computed(() => platformPayload.value.clients)
-  const channels = computed(() => platformPayload.value.channels)
+  const extensions = computed(() => extensionPayload.value.extensions)
+  const channels = computed(() => extensionPayload.value.channels)
 
   const refresh = async (quiet = false) => {
     if (!quiet) refreshing.value = true
     try {
-      const [nextStats, nextEvents, nextDeliveries, nextPlatforms] = await Promise.all([
-        monitorApi.stats(), monitorApi.events(100), monitorApi.deliveries(200), monitorApi.platforms(),
+      const [nextStats, nextEvents, nextDeliveries, nextExtensions] = await Promise.all([
+        monitorApi.stats(), monitorApi.events(100), monitorApi.deliveries(200), monitorApi.extensions(),
       ])
       stats.value = nextStats
-      const deliveryByEvent = new Map(nextDeliveries.map(item => [item.event_id, item]))
+      const deliveryByEvent = new Map<number, Delivery[]>()
+      for (const delivery of nextDeliveries) {
+        deliveryByEvent.set(delivery.event_id, [...(deliveryByEvent.get(delivery.event_id) || []), delivery])
+      }
       events.value = nextEvents.map(event => {
-        const delivery = deliveryByEvent.get(event.id)
+        const deliveries = deliveryByEvent.get(event.id) || []
+        const deliveryState = deliveries.some(item => item.state === 'dead') ? 'dead'
+          : deliveries.some(item => item.state === 'retrying') ? 'retrying'
+            : deliveries.some(item => item.state === 'pending') ? 'pending'
+              : deliveries.length && deliveries.every(item => item.state === 'sent') ? 'sent' : 'not_configured'
+        const deliveryTime = deliveries
+          .map(item => item.sent_at || item.next_attempt_at)
+          .filter((value): value is string => Boolean(value))
+          .sort().at(-1) || null
         return {
           ...event,
-          delivery_state: delivery?.state || 'not_configured',
-          delivery_time: delivery ? delivery.sent_at || delivery.next_attempt_at : null,
+          deliveries,
+          delivery_state: deliveryState,
+          delivery_time: deliveryTime,
         }
       })
-      platformPayload.value = nextPlatforms
-      updatedAt.value = new Date()
+      extensionPayload.value = nextExtensions
       error.value = ''
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : '数据加载失败'
@@ -47,17 +57,11 @@ export const useMonitor = () => {
     }
   }
 
-  const replacePlatform = (platform: PlatformCard) => {
-    const index = platformPayload.value.clients.findIndex((item) => item.key === platform.key)
-    if (index === -1) platformPayload.value.clients.push(platform)
-    else platformPayload.value.clients[index] = platform
-  }
-
   onMounted(() => {
     void refresh()
     timer = window.setInterval(() => void refresh(true), 15_000)
   })
   onBeforeUnmount(() => window.clearInterval(timer))
 
-  return { stats, events, platforms, channels, loading, refreshing, error, updatedAt, refresh, replacePlatform }
+  return { stats, events, extensions, channels, loading, refreshing, error, refresh }
 }

@@ -24,9 +24,9 @@ Qoder CLI
   -> 通知中心 :8787 -> OpenClaw / Apprise
 ```
 
-Phoenix 负责 Projects、Sessions、Traces、Spans、模型/工具调用、延迟、Token、错误状态与筛选。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息概览”和“平台配置”两个视图：消息概览支持搜索、按 AI 软件和状态筛选；平台配置为每个软件保存一个通知通道。点击消息统一打开本机 Phoenix。
+Phoenix 负责 Projects、Sessions、Traces、Spans、模型/工具调用、延迟、Token、错误状态与筛选。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”和“扩展”两个视图：消息支持搜索、按 AI 扩展和状态筛选；扩展用于查看 Codex、Claude、Qoder 采集能力和绑定全局通知通道。点击消息统一打开本机 Phoenix。
 
-通知中心采用标准 npm workspace：`apps/web` 是 Vue 3 + Vite + Element Plus，`apps/server` 是 NestJS。平台、事件、数据库、通道 provider、投递 worker 和页面组件均为独立模块。内置 Codex、Claude、Qoder 的采集适配器，也可从页面注册其它 AI 软件及其事件别名。
+通知中心采用标准 npm workspace：`apps/web` 是 Vue 3 + Vite + Element Plus，`apps/server` 是 NestJS。扩展、事件、数据库、通道 provider、投递 worker 和页面组件均为独立模块。Codex、Claude、Qoder 都是内置采集扩展；新 AI 软件需在代码中提供 hook、插件或协议适配器后才会出现在界面中。
 
 ## Windows 快速部署
 
@@ -44,9 +44,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 安装脚本从 [Arize coding-harness-tracing](https://github.com/Arize-ai/coding-harness-tracing) 的已验证 commit `d8e19a5b967774cdc21db666a895390349734e30` 部署官方 Claude/Codex integration。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，不进入仓库。默认关闭提示词/回复正文与工具输出内容记录，仅保留工具详情。
 
-首页默认按 Codex、Claude、Qoder 三个平台分组，也可注册其它 AI 软件。每个平台只能配置一个消息通道；不配置通道时事件仍保留在本地/Phoenix，但不会产生外发消息。Phoenix 地址由服务级 `AIMONITOR_PHOENIX_URL` 固定配置，默认 `http://127.0.0.1:6006`，不是逐平台配置项。
-
-注册自定义 AI 软件只会建立消息分类和通用 `POST /api/events` 事件契约，不等于已经完成原生监控。要自动捕获该软件的完成和错误事件，仍需为它编写 hook、插件或协议适配器，并明确验证该软件实际开放的事件能力。
+首页默认按 Codex、Claude、Qoder 三个扩展分组。消息平台绑定后全局生效：绑定多少个，所有 AI 软件的新事件就向多少个通道分别创建 outbox 投递，其中一个失败不会阻断其它通道。不绑定通道时事件仍保留在本地/Phoenix，但不会产生外发消息。Phoenix 地址由服务级 `AIMONITOR_PHOENIX_URL` 固定配置，默认 `http://127.0.0.1:6006`，不是逐扩展配置项。
 
 `scripts/install.ps1` 会自动安装 workspace 依赖并构建。开发模式使用 `npm run dev`，完整生产构建使用 `npm run build`，类型检查使用 `npm run typecheck`，测试使用 `npm test`。
 
@@ -61,14 +59,14 @@ openclaw plugins install @tencent-weixin/openclaw-weixin@2.4.6 --pin
 
 QQ 可直接在通知中心绑定：
 
-1. 在 `8787` 的平台配置页点击 QQ 机器人的“绑定”。
+1. 在 `8787` 的扩展页点击 QQ 机器人的“绑定”。
 2. 页面弹出二维码后使用手机 QQ 扫码确认。
 3. 扫码凭据由腾讯官方 `@tencent-connect/qqbot-connector` 获取并写入 OpenClaw；本项目自己的绑定文件只保存发送所需的不透明 target/account ID，UI 和日志不展示这些值。
-4. 绑定完成后，为所需 AI 软件选择“QQ 机器人”并保存。
+4. 绑定完成后立即生效，之后所有 AI 软件的新事件都会发送到 QQ。
 
 微信也可在通知中心点击“绑定”。服务调用腾讯插件官方 `openclaw channels login --channel openclaw-weixin` 流程，并把插件生成的二维码显示在页面中；扫码确认后，需要先在微信中给机器人发送任意一条消息，使腾讯协议签发主动回复所需的 context token。页面验证该 token 已由插件落盘后，才会读取当前账号 ID 和扫码用户 ID 作为通知路由并显示绑定成功。本项目自己的绑定文件不保存微信 token，也不会通过“最近私聊”猜测接收目标。
 
-通知由 OpenClaw command cron 确定性投递，正文不经过模型改写。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
+QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，`scripts/patch-openclaw-weixin.ps1` 会在安装和启动时校验并应用兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
 
 ## 其它通知通道
 

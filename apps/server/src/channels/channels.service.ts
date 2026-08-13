@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { AppriseProvider } from './apprise.provider';
 import type { BindingStartResult, BindingWaitResult, ChannelProvider, ChannelStatus } from './channel-provider';
 import { OpenClawProvider } from './openclaw.provider';
-import { PlatformsService } from '../platforms/platforms.service';
 
 @Injectable()
 export class ChannelsService {
@@ -12,7 +11,6 @@ export class ChannelsService {
   constructor(
     apprise: AppriseProvider,
     openClaw: OpenClawProvider,
-    private readonly platforms: PlatformsService,
   ) {
     this.providers = [apprise, openClaw];
   }
@@ -21,14 +19,8 @@ export class ChannelsService {
     return this.providers.flatMap((provider) => provider.availableChannels());
   }
 
-  channelsForClient(client: string): string[] {
-    let selected: string | null = null;
-    try {
-      selected = this.platforms.get(this.platforms.resolve(client)).binding.channel;
-    } catch {
-      return [];
-    }
-    return selected && this.availableChannels().includes(selected) ? [selected] : [];
+  deliveryChannels(): string[] {
+    return this.availableChannels();
   }
 
   async status(force = false): Promise<ChannelStatus[]> {

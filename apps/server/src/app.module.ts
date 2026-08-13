@@ -7,21 +7,21 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DatabaseModule } from './database/database.module';
 import { DeliveriesModule } from './deliveries/deliveries.module';
 import { EventsModule } from './events/events.module';
-import { PlatformsController } from './platforms/platforms.controller';
-import { PlatformsModule } from './platforms/platforms.module';
+import { ExtensionsController } from './extensions/extensions.controller';
+import { ExtensionsModule } from './extensions/extensions.module';
 
 @Module({
   imports: [
     ConfigModule,
     AuthModule,
     ScheduleModule.forRoot(),
-    PlatformsModule,
+    ExtensionsModule,
     DatabaseModule,
     ChannelsModule,
     EventsModule,
     DeliveriesModule,
     DashboardModule,
   ],
-  controllers: [PlatformsController],
+  controllers: [ExtensionsController],
 })
 export class AppModule {}

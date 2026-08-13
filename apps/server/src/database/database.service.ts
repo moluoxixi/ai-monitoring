@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
-import { PlatformsService } from '../platforms/platforms.service';
+import { ExtensionsService } from '../extensions/extensions.service';
 import type { DeliveryRow, EventRow, NormalizedEvent } from './database.types';
 
 export const utcNow = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
@@ -26,13 +26,13 @@ export class DatabaseService implements OnModuleDestroy {
 
   constructor(
     config: AppConfigService,
-    private readonly platforms: PlatformsService,
+    private readonly extensions: ExtensionsService,
   ) {
     mkdirSync(dirname(config.dbPath), { recursive: true });
     this.db = new Database(config.dbPath, { timeout: 30_000 });
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
-    this.db.function('ai_client_key', (value: unknown) => this.platforms.resolve(typeof value === 'string' ? value : null));
+    this.db.function('ai_client_key', (value: unknown) => this.extensions.resolve(typeof value === 'string' ? value : null));
     this.initialize();
   }
 
@@ -42,8 +42,24 @@ export class DatabaseService implements OnModuleDestroy {
 
   insertEvent(event: NormalizedEvent, channels: string[]): [number, boolean] {
     return this.db.transaction((): [number, boolean] => {
-      const existing = this.db.prepare('SELECT id FROM events WHERE source_event_id = ?').get(event.source_event_id) as { id: number } | undefined;
-      if (existing) return [existing.id, false];
+      const existing = this.db.prepare('SELECT id, metadata_json FROM events WHERE source_event_id = ?').get(event.source_event_id) as { id: number; metadata_json: string } | undefined;
+      if (existing) {
+        const currentMetadata = parseMetadata(existing.metadata_json);
+        const taskSummary = typeof event.metadata.task_summary === 'string' ? event.metadata.task_summary : '';
+        if (taskSummary && typeof currentMetadata.task_summary !== 'string') {
+          this.db.prepare('UPDATE events SET message = ?, metadata_json = ? WHERE id = ?').run(
+            event.message,
+            JSON.stringify({ ...currentMetadata, task_summary: taskSummary }),
+            existing.id,
+          );
+        }
+        const delivery = this.db.prepare(
+          'INSERT OR IGNORE INTO deliveries (event_id, channel, next_attempt_at) VALUES (?, ?, ?)',
+        );
+        const createdAt = utcNow();
+        for (const channel of channels) delivery.run(existing.id, channel, createdAt);
+        return [existing.id, false];
+      }
 
       const createdAt = utcNow();
       const result = this.db.prepare(`
@@ -75,7 +91,7 @@ export class DatabaseService implements OnModuleDestroy {
     const safeLimit = this.limit(limit);
     let rows: Record<string, unknown>[];
     if (client) {
-      const resolved = this.platforms.resolve(client);
+      const resolved = this.extensions.resolve(client);
       const predicate = resolved === 'other' ? 'lower(client) = lower(?)' : 'ai_client_key(client) = ?';
       rows = this.db.prepare(`SELECT * FROM events WHERE ${predicate} ORDER BY id DESC LIMIT ?`)
         .all(resolved === 'other' ? client : resolved, safeLimit) as Record<string, unknown>[];
@@ -85,6 +101,14 @@ export class DatabaseService implements OnModuleDestroy {
     return rows.map((row) => this.eventRow(row));
   }
 
+  countEvents(client: string): number {
+    const resolved = this.extensions.resolve(client);
+    const predicate = resolved === 'other' ? 'lower(client) = lower(?)' : 'ai_client_key(client) = ?';
+    const row = this.db.prepare(`SELECT COUNT(*) AS count FROM events WHERE ${predicate}`)
+      .get(resolved === 'other' ? client : resolved) as { count: number };
+    return row.count;
+  }
+
   listDeliveries(limit = 100, client?: string): DeliveryRow[] {
     const safeLimit = this.limit(limit);
     let query = `
@@ -92,7 +116,7 @@ export class DatabaseService implements OnModuleDestroy {
       FROM deliveries d JOIN events e ON e.id = d.event_id`;
     const params: Array<string | number> = [];
     if (client) {
-      const resolved = this.platforms.resolve(client);
+      const resolved = this.extensions.resolve(client);
       query += resolved === 'other' ? ' WHERE lower(e.client) = lower(?)' : ' WHERE ai_client_key(e.client) = ?';
       params.push(resolved === 'other' ? client : resolved);
     }

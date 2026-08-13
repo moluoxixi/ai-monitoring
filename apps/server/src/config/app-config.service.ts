@@ -13,7 +13,6 @@ export class AppConfigService {
   readonly host = process.env.AIMONITOR_HOST?.trim() || '127.0.0.1';
   readonly port = numberValue(process.env.AIMONITOR_PORT, 8787);
   readonly dbPath = this.path(process.env.AIMONITOR_DB_PATH || 'data/monitor.db');
-  readonly clientConfigPath = this.path(process.env.AIMONITOR_CLIENT_CONFIG_PATH || 'data/client-config.json');
   readonly openClawBindingsPath = this.path(
     process.env.AIMONITOR_OPENCLAW_BINDINGS_PATH || 'data/openclaw-channels.json',
   );

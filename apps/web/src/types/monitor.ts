@@ -13,6 +13,7 @@ export interface MonitorEvent {
   error_code: string | null
   metadata: Record<string, unknown>
   created_at: string
+  deliveries?: Delivery[]
   delivery_state?: DeliveryState
   delivery_time?: string | null
 }
@@ -37,10 +38,9 @@ export interface BindingWaitResult {
   qrUrl?: string
 }
 
-export interface PlatformIntegration {
-  adapterId: string
-  mode: 'notify-and-app-server' | 'hooks' | 'generic-webhook'
-  state: 'ready' | 'manual'
+export interface ExtensionAdapter {
+  id: string
+  active: boolean
   capabilities: {
     completed: boolean
     failed: boolean
@@ -48,24 +48,20 @@ export interface PlatformIntegration {
     toolFailed: boolean
     tracing: boolean
   }
-  description: string
 }
 
-export interface PlatformCard {
+export interface ExtensionCard {
   key: string
   label: string
   aliases: string[]
-  custom: boolean
-  integration: PlatformIntegration
-  channel: string | null
+  adapter: ExtensionAdapter
   detail_url: string
-  channel_status: ChannelStatus
-  messages: MonitorEvent[]
+  event_count: number
 }
 
-export interface PlatformPayload {
+export interface ExtensionPayload {
   channels: ChannelStatus[]
-  clients: PlatformCard[]
+  extensions: ExtensionCard[]
 }
 
 export interface MonitorStats {

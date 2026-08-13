@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { watch, type FSWatcher } from 'chokidar';
-import { createReadStream, existsSync, statSync, type Stats } from 'node:fs';
-import { extname } from 'node:path';
+import { createReadStream, existsSync, readdirSync, statSync, type Stats } from 'node:fs';
+import { extname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
@@ -14,11 +14,13 @@ interface FileState {
   identity: string;
   offset: number;
   sessionId: string;
+  taskSummary: string;
 }
 
 interface ParsedTerminalEvent {
   event?: NormalizedEvent;
   sessionId: string;
+  taskSummary: string;
   timestampMs: number | null;
 }
 
@@ -31,26 +33,44 @@ const safeErrorCode = (error: Record<string, unknown>): string => {
   return candidate && /^[a-z0-9_.:-]{1,100}$/i.test(candidate) ? candidate : 'codex_task_failed';
 };
 
-export const parseCodexSessionLine = (line: string, currentSessionId = ''): ParsedTerminalEvent => {
+export const summarizeTask = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  const cleaned = value
+    .replace(/<in-app-browser-context\b[^>]*>[\s\S]*?<\/in-app-browser-context>/gi, ' ')
+    .replace(/##\s*My request:\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (/^The following is the Codex agent history whose request action you are assessing\./i.test(cleaned)) return '';
+  return cleaned.length > 160 ? `${cleaned.slice(0, 157).trimEnd()}...` : cleaned;
+};
+
+export const parseCodexSessionLine = (line: string, currentSessionId = '', currentTaskSummary = ''): ParsedTerminalEvent => {
   let raw: unknown;
   try {
     raw = JSON.parse(line);
   } catch {
-    return { sessionId: currentSessionId, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
   }
   const item = recordValue(raw);
   const payload = recordValue(item.payload);
   if (item.type === 'session_meta') {
     const sessionId = String(payload.session_id || payload.id || currentSessionId);
-    return { sessionId, timestampMs: null };
+    return { sessionId, taskSummary: currentTaskSummary, timestampMs: null };
   }
-  if (item.type !== 'event_msg') return { sessionId: currentSessionId, timestampMs: null };
+  if (item.type !== 'event_msg') return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
   const kind = String(payload.type || '');
+  if (kind === 'user_message') {
+    return {
+      sessionId: currentSessionId,
+      taskSummary: summarizeTask(payload.message) || currentTaskSummary,
+      timestampMs: null,
+    };
+  }
   if (!['task_complete', 'turn_aborted'].includes(kind)) {
-    return { sessionId: currentSessionId, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
   }
   const turnId = String(payload.turn_id || '');
-  if (!currentSessionId || !turnId) return { sessionId: currentSessionId, timestampMs: null };
+  if (!currentSessionId || !turnId) return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
 
   const error = recordValue(payload.error);
   const failed = kind === 'task_complete' && Object.keys(error).length > 0;
@@ -63,6 +83,7 @@ export const parseCodexSessionLine = (line: string, currentSessionId = ''): Pars
   const timestamp = typeof item.timestamp === 'string' ? Date.parse(item.timestamp) : Number.NaN;
   return {
     sessionId: currentSessionId,
+    taskSummary: '',
     timestampMs: Number.isFinite(timestamp) ? timestamp : null,
     event: {
       source_event_id: `${currentSessionId}:${turnId}:${status}`,
@@ -71,9 +92,13 @@ export const parseCodexSessionLine = (line: string, currentSessionId = ''): Pars
       kind,
       status,
       title: labels[status].title,
-      message: labels[status].message,
+      message: currentTaskSummary ? `提问：${currentTaskSummary}` : labels[status].message,
       error_code: failed ? safeErrorCode(error) : null,
-      metadata: { thread_id: currentSessionId, turn_id: turnId },
+      metadata: {
+        thread_id: currentSessionId,
+        turn_id: turnId,
+        ...(currentTaskSummary ? { task_summary: currentTaskSummary } : {}),
+      },
     },
   };
 };
@@ -86,7 +111,6 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
   private readonly files = new Map<string, FileState>();
   private watcher: FSWatcher | null = null;
   private queue = Promise.resolve();
-  private initialScanComplete = false;
 
   constructor(
     private readonly config: AppConfigService,
@@ -96,6 +120,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
 
   onModuleInit(): void {
     if (!existsSync(this.config.codexSessionsPath)) return;
+    const startupFiles = this.captureStartupFiles(this.config.codexSessionsPath);
     this.watcher = watch(this.config.codexSessionsPath, {
       ignoreInitial: false,
       ignored: (path, stats) => Boolean(stats?.isFile()) && extname(path).toLowerCase() !== '.jsonl',
@@ -103,15 +128,19 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     });
     this.watcher.on('add', (path) => {
       if (extname(path).toLowerCase() !== '.jsonl') return;
-      const createDeliveries = this.initialScanComplete;
-      const backfillEnd = createDeliveries ? undefined : statSync(path).size;
-      this.enqueue(path, createDeliveries, backfillEnd);
+      const backfillEnd = startupFiles.get(path);
+      startupFiles.delete(path);
+      if (backfillEnd === undefined) {
+        this.enqueue(path, true);
+        return;
+      }
+      this.enqueue(path, false, backfillEnd);
+      this.enqueue(path, true);
     });
     this.watcher.on('change', (path) => {
       if (extname(path).toLowerCase() === '.jsonl') this.enqueue(path, true);
     });
     this.watcher.on('unlink', (path) => this.files.delete(path));
-    this.watcher.on('ready', () => { this.initialScanComplete = true; });
     this.watcher.on('error', (error) => {
       this.logger.error(`Codex session watcher failed: ${error instanceof Error ? error.message : String(error)}`);
     });
@@ -131,13 +160,14 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     if (!state || state.identity !== identity || readableSize < state.offset) {
       const cutoff = Date.now() - this.config.codexBackfillMinutes * 60_000;
       if (stats.mtimeMs < cutoff) {
-        this.files.set(path, { identity, offset: readableSize, sessionId: '' });
+        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '' });
         return;
       }
       state = {
         identity,
         offset: Math.max(0, readableSize - INITIAL_TAIL_BYTES),
         sessionId: await this.readSessionId(path),
+        taskSummary: '',
       };
       this.files.set(path, state);
     }
@@ -155,11 +185,12 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     for (const rawLine of lines) {
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       if (!line) continue;
-      const parsed = parseCodexSessionLine(line, state.sessionId);
+      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary);
       state.sessionId = parsed.sessionId;
+      state.taskSummary = parsed.taskSummary;
       if (!parsed.event) continue;
       if (initial && parsed.timestampMs !== null && parsed.timestampMs < cutoff) continue;
-      const channels = createDeliveries ? this.channels.channelsForClient(parsed.event.client) : [];
+      const channels = createDeliveries ? this.channels.deliveryChannels() : [];
       this.database.insertEvent(parsed.event, channels);
     }
     state.offset = start + lastNewline + 1;
@@ -169,6 +200,19 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     this.queue = this.queue.then(() => this.syncFile(path, createDeliveries, readLimit)).catch((error: unknown) => {
       this.logger.warn(`Unable to read Codex session update: ${error instanceof Error ? error.message : String(error)}`);
     });
+  }
+
+  private captureStartupFiles(root: string): Map<string, number> {
+    const files = new Map<string, number>();
+    const visit = (directory: string): void => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) visit(path);
+        else if (entry.isFile() && extname(entry.name).toLowerCase() === '.jsonl') files.set(path, statSync(path).size);
+      }
+    };
+    visit(root);
+    return files;
   }
 
   private async readSessionId(path: string): Promise<string> {

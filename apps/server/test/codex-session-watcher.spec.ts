@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigService } from '../src/config/app-config.service';
 import type { ChannelsService } from '../src/channels/channels.service';
 import type { DatabaseService } from '../src/database/database.service';
-import { CodexSessionWatcherService, parseCodexSessionLine } from '../src/events/codex-session-watcher.service';
+import { CodexSessionWatcherService, parseCodexSessionLine, summarizeTask } from '../src/events/codex-session-watcher.service';
 
 const tempDirectories: string[] = [];
 
@@ -16,7 +16,7 @@ const serviceFor = (directory: string) => {
   const insertEvent = vi.fn();
   const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
   const database = { insertEvent } as unknown as DatabaseService;
-  const channels = { channelsForClient: vi.fn(() => []) } as unknown as ChannelsService;
+  const channels = { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService;
   return { service: new CodexSessionWatcherService(config, database, channels), insertEvent };
 };
 
@@ -25,6 +25,26 @@ afterEach(() => {
 });
 
 describe('Codex session watcher parser', () => {
+  it('keeps a short user task summary for the terminal event', () => {
+    const prompt = parseCodexSessionLine(terminalLine({
+      type: 'user_message', message: '<in-app-browser-context>ignore me</in-app-browser-context> ## My request: 修复登录失败',
+    }), 'session-1');
+    const result = parseCodexSessionLine(terminalLine({
+      type: 'task_complete', turn_id: 'turn-1', last_agent_message: 'private response',
+    }), prompt.sessionId, prompt.taskSummary);
+
+    expect(result.event).toMatchObject({
+      message: '提问：修复登录失败',
+      metadata: { task_summary: '修复登录失败' },
+    });
+    expect(result.taskSummary).toBe('');
+  });
+
+  it('normalizes and truncates task summaries', () => {
+    expect(summarizeTask(`  ${'a'.repeat(170)}  `)).toHaveLength(160);
+    expect(summarizeTask('The following is the Codex agent history whose request action you are assessing.')).toBe('');
+  });
+
   it('maps task_complete without retaining conversation content', () => {
     const meta = parseCodexSessionLine(JSON.stringify({
       type: 'session_meta', payload: { session_id: 'session-1', base_instructions: 'private' },
@@ -135,13 +155,13 @@ describe('Codex session file synchronization', () => {
     const insertEvent = vi.fn();
     const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
     const database = { insertEvent } as unknown as DatabaseService;
-    const channelsForClient = vi.fn(() => ['openclaw-qq']);
-    const channels = { channelsForClient } as unknown as ChannelsService;
+    const deliveryChannels = vi.fn(() => ['openclaw-qq']);
+    const channels = { deliveryChannels } as unknown as ChannelsService;
     const service = new CodexSessionWatcherService(config, database, channels);
 
     await service.syncFile(path, false);
 
-    expect(channelsForClient).not.toHaveBeenCalled();
+    expect(deliveryChannels).not.toHaveBeenCalled();
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       source_event_id: 'backfill-session:backfill-turn:completed',
     }), []);
@@ -157,8 +177,8 @@ describe('Codex session file synchronization', () => {
     const insertEvent = vi.fn();
     const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
     const database = { insertEvent } as unknown as DatabaseService;
-    const channelsForClient = vi.fn(() => ['openclaw-qq']);
-    const channels = { channelsForClient } as unknown as ChannelsService;
+    const deliveryChannels = vi.fn(() => ['openclaw-qq']);
+    const channels = { deliveryChannels } as unknown as ChannelsService;
     const service = new CodexSessionWatcherService(config, database, channels);
 
     await service.syncFile(path, false, backfillEnd);
@@ -167,5 +187,25 @@ describe('Codex session file synchronization', () => {
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       source_event_id: 'race-session:live-turn:completed',
     }), ['openclaw-qq']);
+  });
+
+  it('notifies when a terminal event is appended before the initial add event settles', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'startup-add-race.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'startup-session' } })}\n`);
+    const insertEvent = vi.fn();
+    const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
+    const database = { insertEvent } as unknown as DatabaseService;
+    const channels = { deliveryChannels: vi.fn(() => ['openclaw-qq', 'openclaw-weixin']) } as unknown as ChannelsService;
+    const service = new CodexSessionWatcherService(config, database, channels);
+
+    service.onModuleInit();
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'startup-live-turn' })}\n`);
+
+    await vi.waitFor(() => expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'startup-session:startup-live-turn:completed',
+    }), ['openclaw-qq', 'openclaw-weixin']), { timeout: 3000 });
+    await service.onModuleDestroy();
   });
 });

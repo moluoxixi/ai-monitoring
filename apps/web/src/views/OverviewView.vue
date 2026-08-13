@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
-import type { MonitorEvent, PlatformCard } from '../types/monitor'
+import type { ChannelStatus, ExtensionCard, MonitorEvent } from '../types/monitor'
 import MessageFeed from '../components/overview/MessageFeed.vue'
 
-const props = defineProps<{ events: MonitorEvent[]; platforms: PlatformCard[] }>()
+const props = defineProps<{ events: MonitorEvent[]; extensions: ExtensionCard[]; channels: ChannelStatus[]; eventCount: number }>()
 const query = ref('')
-const platform = ref('all')
+const extension = ref('all')
 const status = ref('all')
 const statusOptions = [
   { value: 'all', label: '全部状态' },
@@ -16,14 +16,16 @@ const statusOptions = [
   { value: 'interrupted', label: '已中断' },
 ]
 
-const platformCount = (key: string) => props.events.filter(event => key === 'all' || event.client === key).length
+const extensionCount = (key: string) => key === 'all'
+  ? props.eventCount
+  : props.extensions.find(item => item.key === key)?.event_count || 0
 const visibleEvents = computed(() => {
   const needle = query.value.trim().toLowerCase()
   return props.events.filter((event) => {
-    if (platform.value !== 'all' && event.client !== platform.value) return false
+    if (extension.value !== 'all' && event.client !== extension.value) return false
     if (status.value !== 'all' && event.status !== status.value) return false
     if (!needle) return true
-    return [event.title, event.message, event.client, event.kind, event.error_code || '']
+    return [event.title, event.message, String(event.metadata.task_summary || ''), event.client, event.kind, event.error_code || '']
       .some(value => value.toLowerCase().includes(needle))
   })
 })
@@ -32,25 +34,25 @@ const visibleEvents = computed(() => {
 <template>
   <section class="message-surface">
     <div class="message-toolbar">
-      <el-input v-model="query" :prefix-icon="Search" clearable placeholder="搜索标题、内容或错误码" />
+      <el-input v-model="query" :prefix-icon="Search" clearable placeholder="搜索任务或错误码" />
       <el-select v-model="status" class="status-select" aria-label="消息状态">
         <el-option v-for="option in statusOptions" :key="option.value" :label="option.label" :value="option.value" />
       </el-select>
     </div>
-    <div class="platform-filter" role="tablist" aria-label="AI 软件分类">
-      <button :class="{ active: platform === 'all' }" type="button" @click="platform = 'all'">
-        全部 <span>{{ platformCount('all') }}</span>
+    <div class="extension-filter" role="tablist" aria-label="AI 扩展分类">
+      <button :class="{ active: extension === 'all' }" type="button" @click="extension = 'all'">
+        全部 <span>{{ extensionCount('all') }}</span>
       </button>
       <button
-        v-for="item in platforms"
+        v-for="item in extensions"
         :key="item.key"
-        :class="{ active: platform === item.key }"
+        :class="{ active: extension === item.key }"
         type="button"
-        @click="platform = item.key"
+        @click="extension = item.key"
       >
-        {{ item.label }} <span>{{ platformCount(item.key) }}</span>
+        {{ item.label }} <span>{{ extensionCount(item.key) }}</span>
       </button>
     </div>
-    <MessageFeed :events="visibleEvents" :platforms="platforms" />
+    <MessageFeed :events="visibleEvents" :extensions="extensions" :channels="channels" />
   </section>
 </template>

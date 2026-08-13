@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
-import { PlatformsModule } from '../platforms/platforms.module';
+import { ExtensionsModule } from '../extensions/extensions.module';
 import { DatabaseService } from './database.service';
 
 @Module({
-  imports: [PlatformsModule],
+  imports: [ExtensionsModule],
   providers: [DatabaseService],
   exports: [DatabaseService],
 })

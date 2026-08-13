@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
@@ -17,6 +18,19 @@ TARGETS_PATH = ROOT / "data" / "codex-notify-targets.json"
 load_dotenv(ROOT / ".env", override=False)
 
 
+def summarize_task(value: Any) -> str:
+    messages = value if isinstance(value, list) else [value]
+    text = next((item for item in messages if isinstance(item, str) and item.strip()), "")
+    text = re.sub(r"<in-app-browser-context\b[^>]*>[\s\S]*?</in-app-browser-context>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"##\s*My request:\s*", " ", text, flags=re.IGNORECASE)
+    summary = " ".join(text.split()).strip()
+    if re.match(r"^The following is the Codex agent history whose request action you are assessing\.", summary, flags=re.IGNORECASE):
+        return ""
+    if len(summary) > 160:
+        summary = summary[:157].rstrip() + "..."
+    return summary
+
+
 def load_targets() -> list[list[str]]:
     if not TARGETS_PATH.exists():
         return []
@@ -27,6 +41,7 @@ def load_targets() -> list[list[str]]:
 def relay_completion(payload: dict[str, Any]) -> None:
     thread_id = str(payload.get("thread-id") or payload.get("thread_id") or payload.get("threadId") or "unknown-thread")
     turn_id = str(payload.get("turn-id") or payload.get("turn_id") or payload.get("turnId") or "unknown-turn")
+    task_summary = summarize_task(payload.get("input-messages") or payload.get("input_messages"))
     event = {
         "source": "codex",
         "client": "codex-notify",
@@ -34,8 +49,12 @@ def relay_completion(payload: dict[str, Any]) -> None:
         "kind": "agent-turn-complete",
         "status": "completed",
         "title": "Codex task completed",
-        "message": "Codex turn completed",
-        "metadata": {"thread_id": thread_id, "turn_id": turn_id},
+        "message": f"提问：{task_summary}" if task_summary else "Codex turn completed",
+        "metadata": {
+            "thread_id": thread_id,
+            "turn_id": turn_id,
+            **({"task_summary": task_summary} if task_summary else {}),
+        },
     }
     headers = {"Content-Type": "application/json"}
     token = os.getenv("AIMONITOR_INGEST_TOKEN")

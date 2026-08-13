@@ -149,7 +149,12 @@ export class OpenClawProvider implements ChannelProvider {
   async send(channel: string, title: string, body: string): Promise<void> {
     const binding = this.loadBindings()[channel];
     if (!binding) throw new Error(`OpenClaw channel is not bound: ${channel}`);
-    await this.sendCommandNotification(binding, `${title}\n\n${body}`.trim());
+    const message = `${title}\n\n${body}`.trim();
+    if (channel === OPENCLAW_QQ) {
+      await this.sendGatewayAnnouncement(binding, message);
+      return;
+    }
+    await this.sendDirectMessage(binding, message);
   }
 
   private async completeQqBinding(session: QrSession): Promise<BindingWaitResult> {
@@ -384,7 +389,21 @@ export class OpenClawProvider implements ChannelProvider {
     };
   }
 
-  private async sendCommandNotification(binding: Binding, message: string): Promise<void> {
+  private async sendDirectMessage(binding: Binding, message: string): Promise<void> {
+    const result = await this.runJson([
+      'message', 'send',
+      '--channel', binding.provider,
+      '--account', binding.account_id,
+      '--target', binding.target,
+      '--message', message,
+      '--json',
+    ], 60_000, [binding.target, binding.account_id]);
+    if (result.action !== 'send' || result.dryRun === true || typeof result.messageId !== 'string' || !result.messageId) {
+      throw new Error('OpenClaw did not confirm direct message delivery');
+    }
+  }
+
+  private async sendGatewayAnnouncement(binding: Binding, message: string): Promise<void> {
     mkdirSync(this.outboundDir, { recursive: true });
     const messagePath = join(this.outboundDir, `notification-${randomUUID()}.txt`);
     writeFileSync(messagePath, message, { encoding: 'utf8', mode: 0o600 });
@@ -409,13 +428,18 @@ export class OpenClawProvider implements ChannelProvider {
       jobId = this.findId(created);
       if (!jobId) throw new Error('OpenClaw did not return a notification job id');
       await this.run(['cron', 'run', jobId, '--wait', '--wait-timeout', '2m', '--poll-interval', '1s'], 150_000, [binding.target, binding.account_id]);
+      const history = await this.runJson(['cron', 'runs', '--id', jobId, '--limit', '1'], 30_000, [binding.target, binding.account_id]);
+      const latest = Array.isArray(history.entries) ? this.objectValue(history.entries[0]) : {};
+      if (latest.status !== 'ok' || latest.delivered !== true || latest.deliveryStatus !== 'delivered') {
+        throw new Error('OpenClaw Gateway did not confirm QQ message delivery');
+      }
     } finally {
       if (existsSync(messagePath)) unlinkSync(messagePath);
       if (jobId) {
         try {
           await this.run(['cron', 'rm', jobId, '--json'], 30_000);
         } catch {
-          // Job cleanup is best-effort after the notification has completed.
+          // Cleanup is best-effort after the Gateway has completed the delivery.
         }
       }
     }
@@ -536,20 +560,20 @@ export class OpenClawProvider implements ChannelProvider {
     return (await nativeImport('@tencent-connect/qqbot-connector')).startQrConnect;
   }
 
+  private objectValue(value: unknown): Record<string, any> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
+  }
+
   private findId(value: unknown): string {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
     const record = value as Record<string, unknown>;
     for (const key of ['id', 'jobId', 'job_id']) {
-      if (typeof record[key] === 'string' && record[key]) return record[key];
+      if (typeof record[key] === 'string' && record[key]) return record[key] as string;
     }
     for (const item of Object.values(record)) {
       const found = this.findId(item);
       if (found) return found;
     }
     return '';
-  }
-
-  private objectValue(value: unknown): Record<string, any> {
-    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
   }
 }

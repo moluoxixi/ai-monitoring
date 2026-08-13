@@ -21,8 +21,14 @@ export class DeliveryWorkerService {
     if (this.processing) return;
     this.processing = true;
     try {
+      const byEvent = new Map<number, DeliveryRow[]>();
       for (const delivery of this.database.dueDeliveries(utcNow(), 20)) {
-        await this.deliver(delivery);
+        const group = byEvent.get(delivery.event_id) || [];
+        group.push(delivery);
+        byEvent.set(delivery.event_id, group);
+      }
+      for (const deliveries of byEvent.values()) {
+        await Promise.all(deliveries.map((delivery) => this.deliver(delivery)));
       }
     } catch (error) {
       this.logger.error('Delivery loop failed', error instanceof Error ? error.stack : undefined);
@@ -60,8 +66,11 @@ export class DeliveryWorkerService {
   }
 
   private formatBody(row: DeliveryRow): string {
-    let body = `[${row.client}] ${row.status}\n${row.message}`;
-    if (row.error_code) body += `\nerror_code: ${row.error_code}`;
+    const status = {
+      completed: '已完成', failed: '任务失败', interrupted: '已中断', tool_failed: '调用失败', unknown: '未知',
+    }[row.status] || row.status;
+    let body = `软件：${row.client}\n状态：${status}\n${row.message}`;
+    if (row.error_code) body += `\n错误码：${row.error_code}`;
     return body.slice(0, 12_000);
   }
 }

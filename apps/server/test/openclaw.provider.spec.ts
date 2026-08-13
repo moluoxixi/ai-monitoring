@@ -121,4 +121,76 @@ describe('OpenClawProvider binding', () => {
     expect(result.bound).toBe(false);
     expect(provider.availableChannels()).not.toContain(OPENCLAW_QQ);
   });
+
+  it('sends through the standard direct outbound command and requires a message id', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_WEIXIN]: { provider: OPENCLAW_WEIXIN, target: 'self@im.wechat', account_id: 'weixin-account' } },
+    }));
+    run.mockResolvedValueOnce(JSON.stringify({
+      action: 'send', channel: OPENCLAW_WEIXIN, dryRun: false, messageId: 'message-1',
+    }));
+
+    await provider.send(OPENCLAW_WEIXIN, 'title', 'body');
+
+    expect(run).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(['message', 'send', '--channel', OPENCLAW_WEIXIN, '--message', 'title\n\nbody', '--json']),
+      expect.objectContaining({ redact: expect.arrayContaining(['self@im.wechat', 'weixin-account']) }),
+    );
+  });
+
+  it('sends QQ through the running Gateway cron announcement path', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_QQ]: { provider: 'qqbot', target: 'qqbot:c2c:user-openid', account_id: 'default' } },
+    }));
+    run.mockImplementation(async (_executable: string, args: string[]) => {
+      if (args.includes('cron') && args.includes('add')) return JSON.stringify({ id: 'job-1' });
+      if (args.includes('cron') && args.includes('run')) return 'completed';
+      if (args.includes('cron') && args.includes('runs')) return JSON.stringify({
+        entries: [{ jobId: 'job-1', status: 'ok', delivered: true, deliveryStatus: 'delivered' }],
+      });
+      return JSON.stringify({ ok: true });
+    });
+
+    await provider.send(OPENCLAW_QQ, 'title', 'body');
+
+    expect(run).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(['cron', 'add', '--announce', '--channel', 'qqbot', '--to', 'qqbot:c2c:user-openid', '--account', 'default']),
+      expect.objectContaining({ redact: expect.arrayContaining(['qqbot:c2c:user-openid', 'default']) }),
+    );
+    expect(run).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.arrayContaining(['cron', 'run', 'job-1', '--wait']),
+      expect.objectContaining({ redact: expect.arrayContaining(['qqbot:c2c:user-openid', 'default']) }),
+    );
+  });
+
+  it('rejects QQ Gateway runs without a delivered result', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_QQ]: { provider: 'qqbot', target: 'qqbot:c2c:user-openid', account_id: 'default' } },
+    }));
+    run.mockImplementation(async (_executable: string, args: string[]) => {
+      if (args.includes('cron') && args.includes('add')) return JSON.stringify({ id: 'job-1' });
+      if (args.includes('cron') && args.includes('runs')) return JSON.stringify({
+        entries: [{ jobId: 'job-1', status: 'error', delivered: false, deliveryStatus: 'failed' }],
+      });
+      return 'completed';
+    });
+
+    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toThrow('did not confirm');
+  });
+
+  it('rejects direct outbound responses without a message id', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_WEIXIN]: { provider: OPENCLAW_WEIXIN, target: 'self@im.wechat', account_id: 'weixin-account' } },
+    }));
+    run.mockResolvedValueOnce(JSON.stringify({ action: 'send', channel: OPENCLAW_WEIXIN, dryRun: false }));
+
+    await expect(provider.send(OPENCLAW_WEIXIN, 'title', 'body')).rejects.toThrow('did not confirm');
+  });
 });

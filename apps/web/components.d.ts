@@ -12,15 +12,11 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AppHeader: typeof import('./src/components/layout/AppHeader.vue')['default']
-    ChannelBindingDialog: typeof import('./src/components/platforms/ChannelBindingDialog.vue')['default']
-    CreatePlatformDialog: typeof import('./src/components/platforms/CreatePlatformDialog.vue')['default']
+    ChannelBindingDialog: typeof import('./src/components/channels/ChannelBindingDialog.vue')['default']
     ElAlert: typeof import('element-plus/es')['ElAlert']
-    ElBadge: typeof import('element-plus/es')['ElBadge']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElDialog: typeof import('element-plus/es')['ElDialog']
     ElEmpty: typeof import('element-plus/es')['ElEmpty']
-    ElForm: typeof import('element-plus/es')['ElForm']
-    ElFormItem: typeof import('element-plus/es')['ElFormItem']
     ElIcon: typeof import('element-plus/es')['ElIcon']
     ElInput: typeof import('element-plus/es')['ElInput']
     ElOption: typeof import('element-plus/es')['ElOption']
@@ -29,8 +25,8 @@ declare module 'vue' {
     ElTabs: typeof import('element-plus/es')['ElTabs']
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
+    ExtensionPanel: typeof import('./src/components/extensions/ExtensionPanel.vue')['default']
     MessageFeed: typeof import('./src/components/overview/MessageFeed.vue')['default']
-    PlatformConfigPanel: typeof import('./src/components/platforms/PlatformConfigPanel.vue')['default']
   }
   export interface GlobalDirectives {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

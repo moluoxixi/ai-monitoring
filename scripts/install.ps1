@@ -40,6 +40,8 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to install Node.js workspace dependenci
 & npm run build
 if ($LASTEXITCODE -ne 0) { throw "Failed to build the NestJS service and Vue dashboard." }
 
+& (Join-Path $Root "scripts\patch-openclaw-weixin.ps1") -QuietIfMissing
+
 $EnvFile = Join-Path $Root ".env"
 if (-not (Test-Path $EnvFile)) {
     Copy-Item (Join-Path $Root ".env.example") $EnvFile
