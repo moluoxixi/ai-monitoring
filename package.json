@@ -1,0 +1,20 @@
+{
+  "name": "ai-monitoring",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/server",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build -w @ai-monitor/web && npm run build -w @ai-monitor/server",
+    "dev": "concurrently -n server,web -c green,cyan \"npm run start:dev -w @ai-monitor/server\" \"npm run dev -w @ai-monitor/web\"",
+    "start": "npm run start:prod -w @ai-monitor/server",
+    "test": "npm run test -w @ai-monitor/server && npm run test -w @ai-monitor/web",
+    "typecheck": "npm run typecheck -w @ai-monitor/server && npm run typecheck -w @ai-monitor/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.2"
+  }
+}

@@ -1,0 +1,51 @@
+# Local Moluoxixi Architecture Overview
+
+`meta` is for user projects initialized by the `init-project` skill. The project contains the generated Moluoxixi files and `.moluoxixi/runtime`; no npm-installed Moluoxixi command is required.
+
+Therefore, when an AI uses this skill, the default customization target is local files inside the user project:
+
+- `.moluoxixi/`: workflow, tasks, specs, memory, scripts, and runtime state.
+- Platform directories: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`, `.kiro/`, `.gemini/`, `.qoder/`, `.codebuddy/`, `.github/`, `.factory/`, `.pi/`, `.kilocode/`, `.agent/`, `.devin/`, `.reasonix/`, `.zcode/`, and similar directories.
+- Shared skill layer: `.agents/skills/`.
+
+Do not default to guiding the user to fork Moluoxixi. Treat `roles/moluoxixi/` as the distribution source only when the user explicitly wants to change the AIRules role; otherwise work in the initialized project.
+
+## Local System Model
+
+Moluoxixi provides three layers inside a user project:
+
+1. **Workflow layer**: `.moluoxixi/workflow.md` defines phases, routing, next actions, and prompt blocks.
+2. **Persistence layer**: `.moluoxixi/tasks/`, `.moluoxixi/spec/`, and `.moluoxixi/workspace/` store tasks, specs, and session memory.
+3. **Platform integration layer**: hooks, settings, agents, skills, commands, prompts, and workflows in platform directories connect the Moluoxixi workflow to different AI tools.
+
+All three layers live inside the user project, so an AI can read and modify them directly.
+
+## Core Paths
+
+| Path | Purpose |
+| --- | --- |
+| `.moluoxixi/workflow.md` | Workflow phases, skill routing, and workflow-state prompt blocks. |
+| `.moluoxixi/config.yaml` | Project configuration, task lifecycle hooks, monorepo package configuration, and journal configuration. |
+| `.moluoxixi/spec/` | The user's project-specific coding conventions and thinking guides. |
+| `.moluoxixi/tasks/` | Each task's PRD, technical notes, research files, and JSONL context. |
+| `.moluoxixi/workspace/` | Per-developer journals and cross-session memory. |
+| `.moluoxixi/scripts/` | Local Python runtime used by commands, hooks, and context injection. |
+| `.moluoxixi/.runtime/` | Session-level runtime state, such as the current task pointer. |
+| `.moluoxixi/airules-init-manifest.json` | Template hashes for Moluoxixi-managed files, used by update to determine whether local files were modified by the user. |
+
+## AI Customization Principles
+
+1. **Find the local source of truth first**: Do not edit from memory. Read `.moluoxixi/workflow.md`, `.moluoxixi/config.yaml`, the relevant platform directory, and related task files first.
+2. **Edit the user project, not the role runtime**: Modify generated files inside the project and leave `.moluoxixi/runtime` alone unless the request is specifically about runtime implementation.
+3. **Keep platform files aligned with `.moluoxixi/`**: If workflow routing changes, also check whether platform skills or commands still describe the same flow.
+4. **Put project-specific rules in `.moluoxixi/spec/` or a local skill**: Do not put team conventions into `meta`.
+5. **Preserve user changes**: If a file was already modified locally, work from the current content instead of overwriting it with a default template.
+
+## How To Use This Directory
+
+- To understand which files exist after init, read `generated-files.md`.
+- To change phases, routing, or next actions, read `workflow.md`.
+- To change the task model, JSONL context, or active task behavior, read `task-system.md`.
+- To change coding convention injection, read `spec-system.md`.
+- To understand journals and cross-session memory, read `workspace-memory.md`.
+- To change hooks or sub-agent context loading, read `context-injection.md`.

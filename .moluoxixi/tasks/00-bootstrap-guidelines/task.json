@@ -1,0 +1,44 @@
+{
+  "id": "00-bootstrap-guidelines",
+  "name": "00-bootstrap-guidelines",
+  "title": "Bootstrap Guidelines",
+  "description": "Fill in project development guidelines for AI agents",
+  "status": "planning",
+  "complexity": {
+    "level": "complex",
+    "signals": [
+      "initializer",
+      "multi_deliverable"
+    ],
+    "reason": "Repository-wide knowledge bootstrap requires reviewed proposals"
+  },
+  "executionApproval": {
+    "mode": "manual",
+    "granted": false,
+    "source": null,
+    "grantedAt": null,
+    "reason": ""
+  },
+  "dev_type": "docs",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "wl",
+  "assignee": "wl",
+  "createdAt": "2026-08-13",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": null,
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    ".moluoxixi/spec/backend/",
+    ".moluoxixi/spec/frontend/"
+  ],
+  "notes": "First-time setup task created by Moluoxixi init (fullstack project)",
+  "meta": {}
+}

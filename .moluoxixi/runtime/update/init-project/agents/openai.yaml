@@ -1,0 +1,4 @@
+interface:
+  display_name: Initialize Moluoxixi Project
+  short_description: Initialize projects with self-contained Moluoxixi assets
+  default_prompt: Use $init-project to initialize Moluoxixi workflow assets in this project.

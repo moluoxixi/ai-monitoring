@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+node_modules/
+apps/server/dist/
+apps/web/dist/
+data/*.db
+data/*.db-*
+data/openclaw-channels.json
+data/client-config.json
+data/openclaw-outbound/
+logs/
+.env
+.idea/
+*.tsbuildinfo
