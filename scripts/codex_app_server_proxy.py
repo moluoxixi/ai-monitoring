@@ -10,6 +10,7 @@ import urllib.request
 from typing import Any
 
 from dotenv import load_dotenv
+from scripts.codex_session_identity import is_subagent_session, session_kind
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -82,6 +83,8 @@ class ProtocolMonitor:
     def _relay(key: tuple[str, str], suffix: Any, kind: str, message: str, metadata: dict[str, Any]) -> None:
         url = os.getenv("AIMONITOR_URL", "http://127.0.0.1:8787/api/events")
         thread_id, turn_id = key
+        if is_subagent_session(thread_id) or session_kind(thread_id) == "codex-desktop":
+            return
         event = {
             "source": "codex", "client": "codex-cli",
             "event_id": f"{thread_id}:{turn_id}:{suffix}:{kind}", "kind": kind,

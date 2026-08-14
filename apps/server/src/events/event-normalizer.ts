@@ -38,7 +38,10 @@ export const normalizeEvent = (item: CreateEventDto): NormalizedEvent => {
   const status = item.status && item.status !== 'unknown' ? String(item.status) : statusForKind(kind);
   const message = truncateText(String(item.message || messageFromMetadata(metadata) || kind), 24_000);
   const digest = createHash('sha256').update(stableStringify(item)).digest('hex').slice(0, 24);
-  const eventId = String(item.event_id || metadata.event_id || `${source}:${kind}:${digest}`);
+  const producerEventId = String(item.event_id || metadata.event_id || `${source}:${kind}:${digest}`);
+  // source_event_id is globally unique in SQLite. Scope producer-local IDs so
+  // equal session/turn IDs from different products or runtimes cannot merge.
+  const eventId = `v1:${encodeURIComponent(source)}:${encodeURIComponent(client)}:${producerEventId}`;
   const labels: Record<string, string> = {
     completed: '任务完成',
     failed: '任务失败',

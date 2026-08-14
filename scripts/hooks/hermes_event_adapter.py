@@ -88,9 +88,17 @@ def _session_source(session_id: str) -> str:
         return ""
 
 
-def _client_for(item: dict[str, object], extra: dict[str, object], session_source: str = "") -> str:
+def _runtime_argument() -> str:
+    for index, argument in enumerate(sys.argv):
+        if argument == "--runtime" and index + 1 < len(sys.argv):
+            return sys.argv[index + 1]
+    return ""
+
+
+def _client_for(item: dict[str, object], extra: dict[str, object], session_source: str = "", runtime_override: str = "") -> str | None:
     requested = _text(
-        item.get("client")
+        runtime_override
+        or item.get("client")
         or item.get("runtime")
         or item.get("platform")
         or extra.get("client")
@@ -99,13 +107,19 @@ def _client_for(item: dict[str, object], extra: dict[str, object], session_sourc
         80,
     ).lower()
     desktop_sources = {"desktop", "gateway", "tui"}
-    return "hermes-desktop" if "desktop" in requested or requested in desktop_sources or session_source in desktop_sources else "hermes-cli"
+    cli_sources = {"cli", "terminal", "shell"}
+    if "desktop" in requested or requested in desktop_sources or session_source in desktop_sources:
+        return "hermes-desktop"
+    if "cli" in requested or requested in cli_sources or session_source in cli_sources:
+        return "hermes-cli"
+    return None
 
 
 def _event_id(item: dict[str, object], extra: dict[str, object], name: str, session_id: str) -> str:
     value = item.get("event_id") or extra.get("event_id") or extra.get("api_request_id")
     value = value or extra.get("turn_id") or extra.get("task_id") or item.get("timestamp")
-    return str(value) if value else f"{session_id}:{name}:{uuid.uuid4().hex}"
+    identity = str(value) if value else uuid.uuid4().hex
+    return f"{session_id}:{name}:{identity}"
 
 
 def _post(event: dict[str, object]) -> int:
@@ -150,7 +164,7 @@ def main() -> int:
         2_000,
     )
     if name == "api_request_error":
-        status = "failed"
+        status = "tool_failed"
         error = _mapping(extra.get("error"))
         message = _text(extra.get("error_message") or error or extra.get("reason") or "Hermes API request failed")
         error_code = _text(extra.get("error_type") or extra.get("status_code") or "hermes_api_request_error", 200)
@@ -161,6 +175,7 @@ def main() -> int:
             "status_code": extra.get("status_code"),
             "retry_count": extra.get("retry_count"),
             "failure_message": message,
+            "notification_state": "diagnostic",
         }
     else:
         completed = extra.get("completed") is True or item.get("completed") is True or bool(stored_answer)
@@ -182,14 +197,16 @@ def main() -> int:
             **({"failure_message": message} if status == "failed" else {}),
     }
     metadata = {key: value for key, value in metadata.items() if value not in (None, "")}
-    client = _client_for(item, extra, session_source)
+    client = _client_for(item, extra, session_source, _runtime_argument())
+    if client is None:
+        return 0
     event = {
         "source": "hermes",
         "client": client,
         "event_id": _event_id(item, extra, name, session_id),
         "kind": name,
         "status": status,
-        "title": f"Hermes {'task failed' if status == 'failed' else 'task completed' if status == 'completed' else 'task interrupted'}",
+        "title": f"Hermes {'task failed' if status == 'failed' else 'tool call failed' if status == 'tool_failed' else 'task completed' if status == 'completed' else 'task interrupted'}",
         "message": message,
         "error_code": error_code,
         "metadata": metadata,

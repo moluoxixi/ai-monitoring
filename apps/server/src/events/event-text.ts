@@ -25,3 +25,13 @@ export const cleanAnswerText = (value: string): string => {
     .trim();
   return truncateTail(cleaned, MAX_ANSWER_TEXT_LENGTH);
 };
+
+/**
+ * Provider/network failures can end one turn while the client is still able
+ * to retry or continue the conversation. They are kept in the event history,
+ * but their notification must wait for a terminal outcome.
+ */
+export const isRecoverableFailure = (value: unknown): boolean => {
+  if (typeof value !== 'string') return false;
+  return /(?:stream\s+(?:disconnected|closed)|before\s+(?:completion|response\.completed)|server(?:s)?\s+(?:are\s+)?overloaded|(?:too\s+many\s+requests|rate\s+limit)|(?:https?|upstream|unexpected\s+status)\s*(?:status\s*)?(?:408|425|429|5\d\d)|\b(?:502|503|504|512)\b|(?:connection|network|socket)\s+(?:failed|reset|refused|closed)|\b(?:timeout|timed\s+out)\b)/i.test(value);
+};

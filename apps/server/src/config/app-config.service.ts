@@ -26,6 +26,11 @@ export class AppConfigService {
     process.env.AIMONITOR_USER_SETTINGS_PATH || 'data/user-settings.json',
   );
   readonly answerCaptureGraceMs = Math.max(0, numberValue(process.env.AIMONITOR_ANSWER_CAPTURE_GRACE_MS, 1_500));
+  /** Delay recoverable provider failures so a follow-up/retry can suppress them. */
+  readonly recoverableFailureGraceMs = Math.max(
+    0,
+    numberValue(process.env.AIMONITOR_RECOVERABLE_FAILURE_GRACE_MS, 10 * 60_000),
+  );
   readonly codexSessionsPath = resolve(process.env.AIMONITOR_CODEX_SESSIONS_PATH?.trim() || resolve(homedir(), '.codex', 'sessions'));
   readonly claudeDesktopSessionsPath = resolve(
     process.env.AIMONITOR_CLAUDE_DESKTOP_SESSIONS_PATH?.trim()

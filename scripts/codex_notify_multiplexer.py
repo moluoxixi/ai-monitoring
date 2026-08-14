@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from scripts.codex_session_identity import is_subagent_session, session_kind
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,6 +36,10 @@ def answer_source(value: Any) -> str:
     return value[-24_000:] if isinstance(value, str) else ""
 
 
+def payload_thread_id(payload: dict[str, Any]) -> str:
+    return str(payload.get("thread-id") or payload.get("thread_id") or payload.get("threadId") or "unknown-thread")
+
+
 def load_targets() -> list[list[str]]:
     if not TARGETS_PATH.exists():
         return []
@@ -43,14 +48,17 @@ def load_targets() -> list[list[str]]:
 
 
 def relay_completion(payload: dict[str, Any]) -> bool:
-    thread_id = str(payload.get("thread-id") or payload.get("thread_id") or payload.get("threadId") or "unknown-thread")
+    thread_id = payload_thread_id(payload)
     turn_id = str(payload.get("turn-id") or payload.get("turn_id") or payload.get("turnId") or "unknown-turn")
+    kind = session_kind(thread_id)
+    if is_subagent_session(thread_id) or kind == "codex-desktop":
+        return False
     task_summary = summarize_task(payload.get("input-messages") or payload.get("input_messages"))
     if not task_summary:
         return False
     event = {
         "source": "codex",
-        "client": "codex-cli",
+        "client": "codex-cli" if kind in (None, "codex-cli") else kind,
         "event_id": f"{thread_id}:{turn_id}:completed",
         "kind": "agent-turn-complete",
         "status": "completed",
@@ -91,13 +99,17 @@ def main() -> int:
     except json.JSONDecodeError:
         payload = {}
 
-    for target in load_targets():
-        try:
-            subprocess.run([*target, raw_payload], check=False, timeout=30)
-        except Exception as exc:
-            print(f"Codex notify target failed ({target[0]}): {exc}", file=sys.stderr)
+    is_completion = isinstance(payload, dict) and payload.get("type") == "agent-turn-complete"
+    thread_kind = session_kind(payload_thread_id(payload)) if is_completion else None
+    is_suppressed = is_completion and (is_subagent_session(payload_thread_id(payload)) or thread_kind == "codex-desktop")
+    if not is_suppressed:
+        for target in load_targets():
+            try:
+                subprocess.run([*target, raw_payload], check=False, timeout=30)
+            except Exception as exc:
+                print(f"Codex notify target failed ({target[0]}): {exc}", file=sys.stderr)
 
-    if isinstance(payload, dict) and payload.get("type") == "agent-turn-complete":
+    if is_completion and not is_suppressed:
         try:
             relay_completion(payload)
         except Exception as exc:

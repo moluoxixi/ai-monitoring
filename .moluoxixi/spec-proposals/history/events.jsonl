@@ -3,3 +3,5 @@
 {"schemaVersion":1,"at":"2026-08-14T00:51:20.584Z","type":"proposed","proposalId":"20260814005120-database-guidelines-312cd5","target":"backend/database-guidelines.md"}
 {"schemaVersion":1,"at":"2026-08-14T01:39:14.282Z","type":"proposed","proposalId":"20260814013914-database-guidelines-a08563","target":"backend/database-guidelines.md"}
 {"schemaVersion":1,"at":"2026-08-14T03:43:58.813Z","type":"proposed","proposalId":"20260814034358-quality-guidelines-3c55ff","target":"backend/quality-guidelines.md"}
+{"schemaVersion":1,"at":"2026-08-14T15:18:16.134Z","type":"proposed","proposalId":"20260814151816-error-handling-f14bc7","target":"backend/error-handling.md"}
+{"schemaVersion":1,"at":"2026-08-14T16:16:45.917Z","type":"proposed","proposalId":"20260814161645-error-handling-aa1ff5","target":"backend/error-handling.md"}

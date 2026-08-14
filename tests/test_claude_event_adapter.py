@@ -27,6 +27,16 @@ def test_stop_failure_forwards_only_minimal_metadata():
     assert "sensitive" not in json.dumps(event)
 
 
+def test_tool_failure_is_diagnostic_and_not_a_task_failure():
+    payload = {"hook_event_name": "PostToolUseFailure", "session_id": "session", "turn_id": "turn", "error": {"message": "tool failed"}}
+    with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(claude_event_adapter, "post", return_value=0) as post:
+        assert claude_event_adapter.main() == 0
+    event = post.call_args.args[0]
+    assert event["status"] == "tool_failed"
+    assert event["error_code"] == "tool failed"
+    assert event["metadata"]["notification_state"] == "diagnostic"
+
+
 def test_unrelated_hook_is_ignored():
     payload = {"hook_event_name": "PreToolUse", "session_id": "session"}
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(claude_event_adapter, "post") as post:

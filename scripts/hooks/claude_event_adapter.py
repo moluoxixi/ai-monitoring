@@ -139,7 +139,7 @@ def main() -> int:
     name = str(item.get("hook_event_name") or item.get("event") or "unknown")
     if name not in RELAY_EVENTS:
         return 0
-    status = "failed" if name != "Stop" else "completed"
+    status = "tool_failed" if name == "PostToolUseFailure" else "failed" if name != "Stop" else "completed"
     session_id = str(item.get("session_id") or item.get("agent_id") or "unknown-session")
     turn_id = _turn_id(item)
     event_id = str(item.get("event_id") or f"{session_id}:{name}:{turn_id}")
@@ -160,12 +160,13 @@ def main() -> int:
         "status": status,
         "title": f"Claude {name}",
         "message": message,
-        "error_code": _text(item.get("error_code") or (error if status == "failed" else ""), 200) or None,
+        "error_code": _text(item.get("error_code") or (error if status in {"failed", "tool_failed"} else ""), 200) or None,
         "metadata": {
             "session_id": session_id,
             "turn_id": turn_id,
             **({"task_summary": task_summary} if task_summary else {}),
             **({"answer_source": assistant_answer} if assistant_answer else {}),
+            **({"notification_state": "diagnostic"} if status == "tool_failed" else {}),
         },
     }
     return post(event)

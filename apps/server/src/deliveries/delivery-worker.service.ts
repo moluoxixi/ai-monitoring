@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
+import { DeliveryOutcomeUnknownError } from '../channels/channel-provider';
 import { DatabaseService, utcNow } from '../database/database.service';
 import type { DeliveryRow } from '../database/database.types';
 import { cleanAnswerText, truncateText } from '../events/event-text';
@@ -94,6 +95,9 @@ export class DeliveryWorkerService {
   private async deliver(row: DeliveryRow): Promise<void> {
     if (!row.lease_token) return;
     if (!this.database.renewClaimedDelivery(row.id, row.lease_token, utcNow(), LEASE_MS)) return;
+    // A follow-up turn may have suppressed this provisional delivery after it
+    // was claimed. Do not create an external side effect for a stale claim.
+    if (!this.database.isClaimedDeliveryActive(row.id, row.lease_token)) return;
     const attempts = row.attempts + 1;
     const renewal = setInterval(() => {
       try {
@@ -114,6 +118,16 @@ export class DeliveryWorkerService {
         sentAt: now,
       });
     } catch (error) {
+      if (error instanceof DeliveryOutcomeUnknownError) {
+        const now = utcNow();
+        this.database.markClaimedDelivery(row.id, row.lease_token, {
+          state: 'dead',
+          attempts,
+          nextAttemptAt: now,
+          lastError: error.message.slice(0, 2000),
+        });
+        return;
+      }
       const delay = Math.min(
         this.config.retryMaxSeconds,
         this.config.retryBaseSeconds * 2 ** Math.min(attempts - 1, 10),

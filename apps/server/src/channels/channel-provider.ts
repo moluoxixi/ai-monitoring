@@ -31,3 +31,18 @@ export interface ChannelProvider {
   unbind?(channel: string): Promise<boolean>;
 }
 import type { ChannelFormSchema } from './apprise-platforms';
+
+/**
+ * The remote channel may have accepted a message even though its confirmation
+ * command failed or timed out. Retrying this error can create duplicate
+ * notifications, so delivery workers must treat it as terminal until a user
+ * confirms the remote result.
+ */
+export class DeliveryOutcomeUnknownError extends Error {
+  readonly code = 'delivery_outcome_unknown';
+
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'DeliveryOutcomeUnknownError';
+  }
+}

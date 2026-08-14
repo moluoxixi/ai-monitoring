@@ -4,7 +4,7 @@ import { DatabaseService } from '../database/database.service';
 import type { NormalizedEvent } from '../database/database.types';
 import { ExtensionsService } from '../extensions/extensions.service';
 import { UserSettingsService } from '../settings/user-settings.service';
-import { cleanAnswerText } from './event-text';
+import { cleanAnswerText, isRecoverableFailure } from './event-text';
 
 const VERIFIED_SOURCES: Record<string, Set<string>> = {
   'codex-cli': new Set(['codex', 'codex-notify', 'codex-app-server']),
@@ -46,8 +46,29 @@ export class EventIngestionService {
       ? answerSource
       : typeof metadataSource === 'string' ? metadataSource : '';
     if (event.status === 'completed' && source) event.metadata.answer_text = cleanAnswerText(source);
-    const deliveryDelay = event.status === 'completed' ? this.config.answerCaptureGraceMs : 0;
-    const [eventId, inserted] = this.database.insertEvent(event, channels, deliveryDelay);
+    const failureText = [
+      event.message,
+      event.error_code || '',
+      typeof event.metadata.failure_message === 'string' ? event.metadata.failure_message : '',
+    ].join(' ');
+    const explicitlyDiagnostic = event.metadata.notification_state === 'diagnostic'
+      || event.metadata.terminal === false
+      || event.status === 'tool_failed';
+    const recoverableFailure = event.status === 'failed' && !explicitlyDiagnostic && isRecoverableFailure(failureText);
+    if (explicitlyDiagnostic) event.metadata.notification_state = 'diagnostic';
+    else if (recoverableFailure) event.metadata.notification_state = 'provisional';
+
+    const deliveryChannels = explicitlyDiagnostic ? [] : channels;
+    const deliveryDelay = event.status === 'completed'
+      ? this.config.answerCaptureGraceMs
+      : recoverableFailure ? Number(this.config.recoverableFailureGraceMs || 0) : 0;
+    const [eventId, inserted] = this.database.insertEvent(event, deliveryChannels, deliveryDelay);
+    const sessionId = typeof event.metadata.session_id === 'string'
+      ? event.metadata.session_id
+      : typeof event.metadata.thread_id === 'string' ? event.metadata.thread_id : '';
+    if (sessionId && ['completed', 'interrupted'].includes(event.status)) {
+      this.suppressProvisionalFailures(event.client, sessionId);
+    }
     const extensionKey = this.extensions.resolve(event.client);
     if (extensionKey !== 'other' && (VERIFIED_SOURCES[extensionKey]?.has(event.source.trim().toLowerCase()) ?? false) && inserted) {
       try {
@@ -57,5 +78,14 @@ export class EventIngestionService {
       }
     }
     return [eventId, inserted];
+  }
+
+  /** Called by watchers when a user starts a follow-up turn. */
+  suppressProvisionalFailures(client: string, sessionId: string): void {
+    try {
+      this.database.suppressProvisionalFailures(this.extensions.resolve(client), sessionId);
+    } catch (error) {
+      this.logger.warn(`Unable to suppress provisional failures: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

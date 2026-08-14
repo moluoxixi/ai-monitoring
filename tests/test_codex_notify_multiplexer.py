@@ -39,6 +39,48 @@ def test_completion_without_a_task_summary_is_left_to_the_session_watcher():
     post.assert_not_called()
 
 
+def test_subagent_completion_is_not_relayed():
+    payload = {
+        "type": "agent-turn-complete",
+        "thread-id": "subagent-thread",
+        "turn-id": "turn",
+        "input-messages": ["internal review"],
+    }
+    with patch.object(codex_notify_multiplexer, "is_subagent_session", return_value=True), patch.object(codex_notify_multiplexer, "session_kind", return_value="subagent"), patch("urllib.request.urlopen") as post:
+        assert codex_notify_multiplexer.relay_completion(payload) is False
+    post.assert_not_called()
+
+
+def test_subagent_completion_is_not_fanned_out_to_legacy_targets(monkeypatch):
+    payload = json.dumps({
+        "type": "agent-turn-complete",
+        "thread-id": "subagent-thread",
+        "turn-id": "turn",
+    })
+    monkeypatch.setattr(codex_notify_multiplexer, "is_subagent_session", lambda thread_id: True)
+    monkeypatch.setattr(codex_notify_multiplexer, "session_kind", lambda thread_id: "subagent")
+    monkeypatch.setattr(codex_notify_multiplexer, "load_targets", lambda: [["target.exe"]])
+    monkeypatch.setattr(codex_notify_multiplexer.sys, "argv", ["wrapper", payload])
+    with patch.object(codex_notify_multiplexer.subprocess, "run") as run, patch.object(codex_notify_multiplexer, "relay_completion") as relay:
+        assert codex_notify_multiplexer.main() == 0
+    run.assert_not_called()
+    relay.assert_not_called()
+
+
+def test_desktop_completion_is_owned_by_the_session_watcher(monkeypatch):
+    payload = {
+        "type": "agent-turn-complete",
+        "thread-id": "desktop-thread",
+        "turn-id": "turn",
+        "input-messages": ["desktop task"],
+    }
+    monkeypatch.setattr(codex_notify_multiplexer, "is_subagent_session", lambda thread_id: False)
+    monkeypatch.setattr(codex_notify_multiplexer, "session_kind", lambda thread_id: "codex-desktop")
+    with patch("urllib.request.urlopen") as post:
+        assert codex_notify_multiplexer.relay_completion(payload) is False
+    post.assert_not_called()
+
+
 def test_task_summary_has_a_strict_length_limit():
     assert len(codex_notify_multiplexer.summarize_task("a" * 2_100)) == 2_000
     assert codex_notify_multiplexer.summarize_task(

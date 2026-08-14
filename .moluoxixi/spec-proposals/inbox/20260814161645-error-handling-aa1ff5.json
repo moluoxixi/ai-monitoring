@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "20260814161645-error-handling-aa1ff5",
+  "createdAt": "2026-08-14T16:16:45.912Z",
+  "createdBy": "wl",
+  "sourceTask": ".moluoxixi/tasks/08-14-platform-discovery-settings",
+  "reason": "记录中间错误、可恢复终态、outbox 撤销、运行端隔离和跨平台事件 ID 的可执行通知契约；该提案应在评审时取代较早的局部 error-handling 提案。",
+  "target": "backend/error-handling.md",
+  "kind": "file",
+  "baseHash": "f6b4145a8fcdfd8f0006bec6dd9c9b4a7fa69a7bd5f6e0c851dee5db39ea7273",
+  "contentFile": "content/20260814161645-error-handling-aa1ff5.md",
+  "contentHash": "e4f427e0608569df4ba5a44ff99f12ab584afb7203812437d5b915bbaf6742e9"
+}

@@ -90,8 +90,15 @@ def _windows_process_ancestors() -> tuple[str, ...]:
     return tuple(names)
 
 
-def _client(item: dict) -> str | None:
-    for value in (item.get("client"), item.get("platform"), item.get("runtime"), os.getenv("QODER_RUNTIME")):
+def _runtime_argument() -> str:
+    for index, argument in enumerate(sys.argv):
+        if argument == "--runtime" and index + 1 < len(sys.argv):
+            return sys.argv[index + 1]
+    return ""
+
+
+def _client(item: dict, runtime_override: str = "") -> str | None:
+    for value in (runtime_override, item.get("client"), item.get("platform"), item.get("runtime"), os.getenv("QODER_RUNTIME")):
         client = _canonical_client(value)
         if client:
             return client
@@ -103,7 +110,7 @@ def _client(item: dict) -> str | None:
         return None
     if "qoder.exe" in ancestors:
         return "qoder-desktop"
-    return "qoder-cli"
+    return None
 
 def _summary(item: dict) -> str:
     return _text(item.get("task_summary") or item.get("user_prompt") or item.get("prompt"), 2_000)
@@ -214,7 +221,7 @@ def main() -> int:
     name = str(item.get("hook_event_name") or item.get("event") or "unknown")
     if name not in RELAY_EVENTS:
         return 0
-    status = "completed" if name == "Stop" else "failed"
+    status = "completed" if name == "Stop" else "tool_failed"
     session_id = str(item.get("session_id") or item.get("sessionId") or "unknown-session")
     turn_id = _turn_id(item)
     event_id = str(item.get("event_id") or item.get("eventId") or f"{session_id}:{name}:{turn_id}")
@@ -226,7 +233,7 @@ def main() -> int:
         task_summary = transcript_summary
     assistant_answer = _assistant_answer(item) if status == "completed" else ""
     assistant_answer = assistant_answer or transcript_answer
-    client = _client(item)
+    client = _client(item, _runtime_argument())
     if client is None:
         return 0
     event = {
@@ -237,12 +244,13 @@ def main() -> int:
         "status": status,
         "title": f"Qoder {name}",
         "message": message,
-        "error_code": _text(item.get("error_type") or (error if status == "failed" else ""), 200) or None,
+        "error_code": _text(item.get("error_type") or (error if status in {"failed", "tool_failed"} else ""), 200) or None,
         "metadata": {
             "session_id": session_id,
             "turn_id": turn_id,
             **({"task_summary": task_summary} if task_summary else {}),
             **({"answer_source": assistant_answer} if assistant_answer else {}),
+            **({"notification_state": "diagnostic"} if status == "tool_failed" else {}),
         },
     }
     return post(event)

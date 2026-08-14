@@ -75,7 +75,9 @@ const probes: Record<string, Probe> = {
     monitorPaths: [join(homedir(), '.qoder', 'settings.json')], monitorKind: 'hooks',
   },
   'qoder-quest': {
-    commands: [], executables: [], processNames: ['qoder.exe'],
+    // Quest sessions are not distinguishable from the desktop process by
+    // executable name. Never report a generic qoder.exe as Quest.
+    commands: [], executables: [], processNames: [],
     paths: [envPath(process.env.APPDATA, 'Qoder', 'logs')],
     monitorPaths: [join(homedir(), '.qoder', 'settings.json')], monitorKind: 'hooks',
   },
@@ -229,11 +231,23 @@ export class PlatformScannerService implements OnModuleInit {
     if (key === 'claude-desktop') {
       return this.hasAuditFile(this.config.claudeDesktopSessionsPath);
     }
-    if (key === 'qoder-cli' || key === 'qoder-desktop' || key === 'qoder-quest') {
-      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(path, 'qoder_event_adapter.py', ['Stop', 'PostToolUseFailure']));
+    if (key === 'qoder-cli') {
+      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
+        path,
+        'qoder_event_adapter.py',
+        ['Stop', 'PostToolUseFailure'],
+        '--runtime cli',
+      ));
     }
+    if (key === 'qoder-desktop' || key === 'qoder-quest') return false;
     if (key === 'cursor-cli' || key === 'cursor-desktop') {
-      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(path, 'cursor_event_adapter.py', ['stop', 'postToolUseFailure']));
+      const runtime = key === 'cursor-cli' ? 'cli' : 'desktop';
+      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
+        path,
+        'cursor_event_adapter.py',
+        ['stop', 'postToolUseFailure'],
+        `--runtime ${runtime}`,
+      ));
     }
     if (key === 'hermes-cli') {
       return probe.monitorPaths.some((path) => this.hermesHooksConfigured(path));
@@ -258,29 +272,32 @@ export class PlatformScannerService implements OnModuleInit {
     }
   }
 
-  private jsonHooksConfigured(path: string, adapterName: string, events: string[]): boolean {
+  private jsonHooksConfigured(path: string, adapterName: string, events: string[], requiredCommandFragment = ''): boolean {
     try {
       const document = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
       const hooks = document.hooks;
       if (!hooks || typeof hooks !== 'object' || Array.isArray(hooks)) return false;
       const adapterPath = join(this.config.projectRoot, 'scripts', 'hooks', adapterName).toLowerCase();
+      if (!existsSync(adapterPath)) return false;
+      const required = requiredCommandFragment.toLowerCase().replace(/\s+/g, ' ').trim();
+      const commandConfigured = (value: unknown): boolean => {
+        if (typeof value !== 'string') return false;
+        const command = value.toLowerCase().replace(/\s+/g, ' ').trim();
+        return command.includes(adapterName.toLowerCase()) && (!required || command.includes(required));
+      };
       return events.every((event) => {
         const entries = (hooks as Record<string, unknown>)[event];
         if (!Array.isArray(entries)) return false;
         return entries.some((entry) => {
           if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
           const direct = entry as Record<string, unknown>;
-          const directCommand = typeof direct.command === 'string' ? direct.command.toLowerCase() : '';
-          if (direct.type === 'command' && directCommand.includes(adapterName.toLowerCase())) {
-            return existsSync(adapterPath);
-          }
+          if (direct.type === 'command' && commandConfigured(direct.command)) return true;
           const nested = (entry as Record<string, unknown>).hooks;
           if (!Array.isArray(nested)) return false;
           return nested.some((hook) => {
             if (!hook || typeof hook !== 'object' || Array.isArray(hook)) return false;
             const candidate = hook as Record<string, unknown>;
-            const command = typeof candidate.command === 'string' ? candidate.command.toLowerCase() : '';
-            return candidate.type === 'command' && command.includes(adapterName.toLowerCase()) && existsSync(adapterPath);
+            return candidate.type === 'command' && commandConfigured(candidate.command);
           });
         });
       });
@@ -304,7 +321,11 @@ export class PlatformScannerService implements OnModuleInit {
           const command = entry && typeof entry === 'object' && !Array.isArray(entry)
             ? (entry as Record<string, unknown>).command
             : undefined;
-          return typeof command === 'string' && command.toLowerCase().includes('hermes_event_adapter.py') && existsSync(adapterPath);
+          if (typeof command !== 'string') return false;
+          const normalized = command.toLowerCase().replace(/\s+/g, ' ');
+          return normalized.includes('hermes_event_adapter.py')
+            && normalized.includes('--runtime cli')
+            && existsSync(adapterPath);
         });
       });
       if (!configured) return false;

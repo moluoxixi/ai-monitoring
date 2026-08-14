@@ -146,6 +146,59 @@ export class DatabaseService implements OnModuleDestroy {
     return row ? this.eventRow(row) : null;
   }
 
+  /**
+   * Cancel notification attempts for a recoverable failure when the same
+   * client/session starts a follow-up turn. The event remains in history for
+   * diagnostics, but it can no longer produce a stale failure notification.
+   */
+  suppressProvisionalFailures(client: string, sessionId: string): number {
+    const normalizedSessionId = sessionId.trim();
+    if (!normalizedSessionId) return 0;
+    return this.db.transaction(() => {
+      const rows = this.db.prepare(`
+        SELECT e.id, e.metadata_json
+        FROM events e
+        WHERE e.client = ?
+          AND e.status = 'failed'
+          AND json_extract(e.metadata_json, '$.notification_state') = 'provisional'
+          AND (
+            json_extract(e.metadata_json, '$.session_id') = ?
+            OR json_extract(e.metadata_json, '$.thread_id') = ?
+          )
+      `).all(client, normalizedSessionId, normalizedSessionId) as Array<{ id: number; metadata_json: string }>;
+      if (!rows.length) return 0;
+      const markDeliveries = this.db.prepare(`
+        UPDATE deliveries
+        SET state = 'dead', last_error = ?, lease_token = NULL, lease_expires_at = NULL
+        WHERE event_id = ? AND state IN ('pending', 'retrying', 'claimed')
+      `);
+      const markEvent = this.db.prepare('UPDATE events SET metadata_json = ? WHERE id = ?');
+      let changed = 0;
+      for (const row of rows) {
+        const current = parseMetadata(row.metadata_json);
+        markDeliveries.run('superseded by a follow-up turn', row.id);
+        markEvent.run(JSON.stringify({ ...current, notification_state: 'suppressed' }), row.id);
+        changed += 1;
+      }
+      return changed;
+    })();
+  }
+
+  /**
+   * Re-check a delivery immediately before an external send. A follow-up turn
+   * can suppress a claimed delivery after the worker has loaded its row; the
+   * lease token makes that state transition observable without allowing a
+   * stale worker to mark the row sent afterwards.
+   */
+  isClaimedDeliveryActive(id: number, leaseToken: string): boolean {
+    const row = this.db.prepare(`
+      SELECT 1 AS active
+      FROM deliveries
+      WHERE id = ? AND state = 'claimed' AND lease_token = ?
+    `).get(id, leaseToken) as { active: number } | undefined;
+    return row?.active === 1;
+  }
+
   countEvents(client: string): number {
     const resolved = this.extensions.resolve(client);
     const predicate = resolved === 'other' ? 'lower(client) = lower(?)' : 'ai_client_key(client) = ?';

@@ -162,6 +162,47 @@ describe('DatabaseService idempotent event enrichment', () => {
     database.onModuleDestroy();
   });
 
+  it('suppresses pending provisional failures for a follow-up session', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+    const provisional = database.insertEvent({
+      ...event({ session_id: 'session', notification_state: 'provisional', failure_message: 'stream disconnected' }, 'stream disconnected'),
+      source_event_id: 'session:turn:provisional',
+    }, ['pushplus'], 600_000)[0];
+
+    expect(database.suppressProvisionalFailures('codex-cli', 'session')).toBe(1);
+    expect(database.getDeliveriesForEvent(provisional)).toEqual([
+      expect.objectContaining({ state: 'dead', last_error: 'superseded by a follow-up turn' }),
+    ]);
+    expect(database.getEvent(provisional)?.metadata).toMatchObject({ notification_state: 'suppressed' });
+    database.onModuleDestroy();
+  });
+
+  it('also suppresses a provisional failure already claimed by the worker', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+    const provisional = database.insertEvent({
+      ...event({ session_id: 'claimed-session', notification_state: 'provisional', failure_message: '502 upstream' }, '502 upstream'),
+      source_event_id: 'claimed:turn:provisional',
+    }, ['pushplus'])[0];
+    const claimed = database.claimDueDeliveries(utcNowForTest(), 20);
+
+    expect(claimed).toHaveLength(1);
+    expect(database.suppressProvisionalFailures('codex-cli', 'claimed-session')).toBe(1);
+    expect(database.getDeliveriesForEvent(provisional)).toEqual([
+      expect.objectContaining({ state: 'dead', lease_token: null, last_error: 'superseded by a follow-up turn' }),
+    ]);
+    database.onModuleDestroy();
+  });
+
   it('claims a due delivery only once across database connections and fences stale workers', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);
@@ -196,3 +237,5 @@ describe('DatabaseService idempotent event enrichment', () => {
     second.onModuleDestroy();
   });
 });
+
+const utcNowForTest = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');

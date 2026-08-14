@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { OPENCLAW_QQ, OPENCLAW_WEIXIN, OpenClawProvider } from '../src/channels/openclaw.provider';
+import { DeliveryOutcomeUnknownError } from '../src/channels/channel-provider';
 import { ProcessExecutionError } from '../src/channels/process-runner.service';
 import type { ProcessRunnerService } from '../src/channels/process-runner.service';
 
@@ -183,6 +184,51 @@ describe('OpenClawProvider binding', () => {
     });
 
     await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toThrow('did not confirm');
+  });
+
+  it('does not classify a QQ execution timeout as retryable', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_QQ]: { provider: 'qqbot', target: 'qqbot:c2c:user-openid', account_id: 'default' } },
+    }));
+    run.mockImplementation(async (_executable: string, args: string[]) => {
+      if (args.includes('cron') && args.includes('add')) return JSON.stringify({ id: 'job-1' });
+      if (args.includes('cron') && args.includes('run')) throw new ProcessExecutionError('gateway timed out after delivery');
+      return JSON.stringify({ ok: true });
+    });
+
+    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+  });
+
+  it('does not classify an unreadable QQ history as retryable', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_QQ]: { provider: 'qqbot', target: 'qqbot:c2c:user-openid', account_id: 'default' } },
+    }));
+    run.mockImplementation(async (_executable: string, args: string[]) => {
+      if (args.includes('cron') && args.includes('add')) return JSON.stringify({ id: 'job-1' });
+      if (args.includes('cron') && args.includes('run')) return 'completed';
+      if (args.includes('cron') && args.includes('runs')) throw new ProcessExecutionError('history unavailable');
+      return JSON.stringify({ ok: true });
+    });
+
+    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+  });
+
+  it('does not retry a QQ history entry that is still pending', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_QQ]: { provider: 'qqbot', target: 'qqbot:c2c:user-openid', account_id: 'default' } },
+    }));
+    run.mockImplementation(async (_executable: string, args: string[]) => {
+      if (args.includes('cron') && args.includes('add')) return JSON.stringify({ id: 'job-1' });
+      if (args.includes('cron') && args.includes('runs')) return JSON.stringify({
+        entries: [{ jobId: 'job-1', status: 'pending', delivered: false, deliveryStatus: 'pending' }],
+      });
+      return 'completed';
+    });
+
+    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
   });
 
   it('rejects direct outbound responses without a message id', async () => {

@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from scripts.codex_app_server_proxy import ProtocolMonitor
 
@@ -50,3 +50,14 @@ def test_nonzero_process_exit_without_turn_is_relayed(relay):
     relay.assert_called_once_with(
         ("transport", "process"), "exit", "api_failed", "Codex App Server exited with code 7", {},
     )
+
+
+def test_subagent_protocol_event_is_filtered_before_network_post(monkeypatch):
+    monkeypatch.setattr("scripts.codex_app_server_proxy.is_subagent_session", lambda thread_id: thread_id == "subagent")
+    monkeypatch.setattr("scripts.codex_app_server_proxy.session_kind", lambda thread_id: None)
+    request = Mock()
+    request.__enter__ = Mock(return_value=request)
+    request.__exit__ = Mock(return_value=False)
+    with patch("urllib.request.urlopen", return_value=request) as post:
+        ProtocolMonitor._relay(("subagent", "turn"), "turn", "failed", "internal", {})
+    post.assert_not_called()

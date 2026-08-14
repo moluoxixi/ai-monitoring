@@ -81,7 +81,7 @@ if ($ConfigureNotifications) {
     $QoderAdapter = Join-Path $PSScriptRoot "hooks\qoder_event_adapter.py"
     $QoderPythonPosix = $ProjectPython.Replace('\', '/')
     $QoderAdapterPosix = $QoderAdapter.Replace('\', '/')
-    $QoderCommand = "`"$QoderPythonPosix`" `"$QoderAdapterPosix`""
+    $QoderCommand = "`"$QoderPythonPosix`" `"$QoderAdapterPosix`" --runtime cli"
     & $ProjectPython (Join-Path $PSScriptRoot "configure_qoder_hooks.py") --config $QoderConfig --command $QoderCommand
     if ($LASTEXITCODE -ne 0) { throw "Failed to configure Qoder lifecycle hooks." }
     Write-Host "Qoder completion and failure notification hooks registered."
@@ -91,7 +91,7 @@ if ($ConfigureNotifications) {
     # keep absolute Windows paths intact for its executable/readability checks.
     $HermesPythonPosix = $ProjectPython.Replace('\', '/')
     $HermesAdapterPosix = $HermesAdapter.Replace('\', '/')
-    $HermesCommand = "`"$HermesPythonPosix`" `"$HermesAdapterPosix`""
+    $HermesCommand = "`"$HermesPythonPosix`" `"$HermesAdapterPosix`" --runtime cli"
     & $ProjectPython (Join-Path $PSScriptRoot "configure_hermes_hooks.py") --config $HermesConfig --command $HermesCommand
     if ($LASTEXITCODE -ne 0) { throw "Failed to configure Hermes lifecycle hooks." }
     Write-Host "Hermes completion and API failure hooks registered."
@@ -99,7 +99,7 @@ if ($ConfigureNotifications) {
     $CursorAdapter = Join-Path $PSScriptRoot "hooks\cursor_event_adapter.py"
     $CursorPythonPosix = $ProjectPython.Replace('\', '/')
     $CursorAdapterPosix = $CursorAdapter.Replace('\', '/')
-    $CursorCommand = "`"$CursorPythonPosix`" `"$CursorAdapterPosix`""
+    $CursorCommand = "`"$CursorPythonPosix`" `"$CursorAdapterPosix`" --runtime desktop"
     & $ProjectPython (Join-Path $PSScriptRoot "configure_cursor_hooks.py") --config $CursorConfig --command $CursorCommand
     if ($LASTEXITCODE -ne 0) { throw "Failed to configure Cursor lifecycle hooks." }
     Write-Host "Cursor completion and tool failure hooks registered."

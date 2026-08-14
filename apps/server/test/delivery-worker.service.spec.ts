@@ -3,6 +3,7 @@ import type { AppConfigService } from '../src/config/app-config.service';
 import type { ChannelsService } from '../src/channels/channels.service';
 import type { DatabaseService } from '../src/database/database.service';
 import type { DeliveryRow } from '../src/database/database.types';
+import { DeliveryOutcomeUnknownError } from '../src/channels/channel-provider';
 import { DeliveryWorkerService, notificationContent } from '../src/deliveries/delivery-worker.service';
 
 const delivery = (id: number, channel: string, eventId = 42): DeliveryRow => ({
@@ -34,6 +35,7 @@ const serviceFor = (
     claimDueDeliveries: vi.fn(() => rows),
     markClaimedDelivery: markDelivery,
     renewClaimedDelivery: vi.fn(() => true),
+    isClaimedDeliveryActive: vi.fn(() => true),
   } as unknown as DatabaseService;
   const channels = { send } as unknown as ChannelsService;
   const config = { retryBaseSeconds: 5, retryMaxSeconds: 300 } as AppConfigService;
@@ -231,5 +233,30 @@ describe('DeliveryWorkerService', () => {
       lastError: 'QQ unavailable',
     }));
     expect(markDelivery).toHaveBeenCalledWith(2, 'lease-2', expect.objectContaining({ state: 'sent', attempts: 1 }));
+  });
+
+  it('stops retrying when the remote channel outcome is unknown', async () => {
+    const send = vi.fn(() => Promise.reject(new DeliveryOutcomeUnknownError('QQ 消息可能已送达')));
+    const { service, markDelivery } = serviceFor(send, [delivery(1, 'openclaw-qq')]);
+
+    await service.processOnce();
+
+    expect(markDelivery).toHaveBeenCalledWith(1, 'lease-1', expect.objectContaining({
+      state: 'dead',
+      attempts: 1,
+      lastError: 'QQ 消息可能已送达',
+    }));
+  });
+
+  it('does not send a claim suppressed by a follow-up turn', async () => {
+    const send = vi.fn(() => Promise.resolve());
+    const { service, markDelivery } = serviceFor(send, [delivery(1, 'openclaw-qq')]);
+    const database = (service as unknown as { database: DatabaseService }).database;
+    vi.mocked(database.isClaimedDeliveryActive).mockReturnValue(false);
+
+    await service.processOnce();
+
+    expect(send).not.toHaveBeenCalled();
+    expect(markDelivery).not.toHaveBeenCalled();
   });
 });

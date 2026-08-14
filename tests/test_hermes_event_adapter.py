@@ -10,6 +10,7 @@ def test_completed_session_forwards_summary_and_answer():
     payload = {
         "hook_event_name": "on_session_end",
         "session_id": "session",
+        "runtime": "cli",
         "extra": {"completed": True, "turn_id": "turn", "user_message": "fix the bug", "assistant_response": "done"},
     }
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
@@ -24,6 +25,7 @@ def test_api_error_forwards_failure_metadata_without_request_body():
     payload = {
         "hook_event_name": "api_request_error",
         "session_id": "session",
+        "runtime": "cli",
         "extra": {
             "turn_id": "turn",
             "api_request_id": "request",
@@ -37,7 +39,9 @@ def test_api_error_forwards_failure_metadata_without_request_body():
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
         assert hermes_event_adapter.main() == 0
     event = post.call_args.args[0]
-    assert event["status"] == "failed"
+    assert event["event_id"] == "session:api_request_error:request"
+    assert event["status"] == "tool_failed"
+    assert event["metadata"]["notification_state"] == "diagnostic"
     assert event["error_code"] == "TimeoutError"
     assert event["metadata"]["status_code"] == 502
     assert "private" not in json.dumps(event)
@@ -69,7 +73,7 @@ def test_tui_session_source_is_hermes_desktop(tmp_path, monkeypatch):
     connection.commit()
     connection.close()
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    payload = {"hook_event_name": "on_session_end", "session_id": "session", "extra": {"completed": True}}
+    payload = {"hook_event_name": "on_session_end", "session_id": "session", "runtime": "cli", "extra": {"completed": True}}
 
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
         assert hermes_event_adapter.main() == 0
@@ -78,7 +82,7 @@ def test_tui_session_source_is_hermes_desktop(tmp_path, monkeypatch):
 
 
 def test_windows_utf8_bom_does_not_drop_hermes_hook():
-    payload = {"hook_event_name": "api_request_error", "session_id": "session"}
+    payload = {"hook_event_name": "api_request_error", "session_id": "session", "runtime": "cli"}
     with patch("sys.stdin", io.StringIO("\ufeff" + json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
         assert hermes_event_adapter.main() == 0
     post.assert_called_once()
@@ -106,6 +110,7 @@ def test_persisted_answer_corrects_false_completed_flag_and_supplies_content(tmp
     payload = {
         "hook_event_name": "on_session_end",
         "session_id": "session",
+        "runtime": "cli",
         "extra": {"completed": False, "interrupted": False, "platform": "cli"},
     }
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
@@ -137,6 +142,7 @@ def test_interrupted_session_stays_interrupted_even_if_an_older_answer_exists(tm
     payload = {
         "hook_event_name": "on_session_end",
         "session_id": "session",
+        "runtime": "cli",
         "extra": {"completed": False, "interrupted": True},
     }
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
@@ -167,6 +173,7 @@ def test_previous_turn_answer_does_not_complete_a_new_unanswered_turn(tmp_path, 
     payload = {
         "hook_event_name": "on_session_end",
         "session_id": "session",
+        "runtime": "cli",
         "extra": {"completed": False, "interrupted": False},
     }
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post", return_value=0) as post:
@@ -179,6 +186,13 @@ def test_previous_turn_answer_does_not_complete_a_new_unanswered_turn(tmp_path, 
 
 def test_unknown_or_finalize_hooks_are_not_reported_as_task_failure():
     payload = {"hook_event_name": "on_session_finalize", "session_id": "session"}
+    with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post") as post:
+        assert hermes_event_adapter.main() == 0
+    post.assert_not_called()
+
+
+def test_unknown_runtime_is_ignored_instead_of_being_cli():
+    payload = {"hook_event_name": "on_session_end", "session_id": "session", "extra": {"completed": True}}
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(hermes_event_adapter, "_post") as post:
         assert hermes_event_adapter.main() == 0
     post.assert_not_called()

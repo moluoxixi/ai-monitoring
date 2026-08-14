@@ -11,6 +11,7 @@ def test_qoder_failure_is_minimal_and_failed():
         "hook_event_name": "PostToolUseFailure",
         "session_id": "session",
         "turn_id": "turn",
+        "runtime": "cli",
         "error_type": "authentication_failed",
         "error": {"message": "auth failed"},
         "tool_output": "sensitive output",
@@ -20,13 +21,14 @@ def test_qoder_failure_is_minimal_and_failed():
         assert qoder_event_adapter.main() == 0
     event = post.call_args.args[0]
     assert event["client"] == "qoder-cli"
-    assert event["status"] == "failed"
+    assert event["status"] == "tool_failed"
+    assert event["metadata"]["notification_state"] == "diagnostic"
     assert event["error_code"] == "authentication_failed"
     assert "sensitive" not in json.dumps(event)
 
 
 def test_qoder_stop_is_completed():
-    with patch("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "Stop", "session_id": "s"}))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
+    with patch("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "Stop", "session_id": "s", "runtime": "cli"}))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
         assert qoder_event_adapter.main() == 0
     assert post.call_args.args[0]["status"] == "completed"
 
@@ -82,8 +84,15 @@ def test_qoderwork_process_is_not_misclassified_as_qoder_cli():
     post.assert_not_called()
 
 
+def test_qoder_unknown_runtime_is_not_guessed_as_cli():
+    payload = {"hook_event_name": "Stop", "session_id": "s"}
+    with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "_windows_process_ancestors", return_value=("bash.exe",)), patch.object(qoder_event_adapter, "post", return_value=0) as post:
+        assert qoder_event_adapter.main() == 0
+    post.assert_not_called()
+
+
 def test_prompt_summary_is_forwarded():
-    payload = {"hook_event_name": "Stop", "session_id": "s", "user_prompt": "update the dashboard", "assistant_message": {"content": "dashboard updated"}}
+    payload = {"hook_event_name": "Stop", "session_id": "s", "runtime": "cli", "user_prompt": "update the dashboard", "assistant_message": {"content": "dashboard updated"}}
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
         assert qoder_event_adapter.main() == 0
     assert post.call_args.args[0]["metadata"]["task_summary"] == "update the dashboard"
@@ -97,7 +106,7 @@ def test_stop_reads_prompt_and_answer_from_qoder_transcript(tmp_path):
         json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "thinking", "thinking": "private"}]}}),
         json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "real qoder answer"}]}}),
     ]), encoding="utf-8")
-    payload = {"hook_event_name": "Stop", "session_id": "s", "transcript_path": str(transcript)}
+    payload = {"hook_event_name": "Stop", "session_id": "s", "runtime": "cli", "transcript_path": str(transcript)}
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
         assert qoder_event_adapter.main() == 0
     metadata = post.call_args.args[0]["metadata"]
@@ -115,7 +124,7 @@ def test_tool_result_does_not_replace_qoder_prompt(tmp_path):
         }}}),
         json.dumps({"type": "assistant", "message": {"role": "assistant", "content": "failure reported"}}),
     ]), encoding="utf-8")
-    payload = {"hook_event_name": "Stop", "session_id": "s", "transcript_path": str(transcript)}
+    payload = {"hook_event_name": "Stop", "session_id": "s", "runtime": "cli", "transcript_path": str(transcript)}
 
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
         assert qoder_event_adapter.main() == 0
@@ -134,7 +143,7 @@ def test_stop_uses_hook_working_directory_when_cwd_is_not_in_payload(tmp_path, m
     transcript.write_text(json.dumps({"type": "user", "message": {"role": "user", "content": "from cwd"}}) + "\n", encoding="utf-8")
     monkeypatch.chdir(project)
     try:
-        payload = {"hook_event_name": "Stop", "session_id": "session"}
+        payload = {"hook_event_name": "Stop", "session_id": "session", "runtime": "cli"}
         with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
             assert qoder_event_adapter.main() == 0
         assert post.call_args.args[0]["metadata"]["task_summary"] == "from cwd"
@@ -148,7 +157,7 @@ def test_stop_uses_hook_working_directory_when_cwd_is_not_in_payload(tmp_path, m
 
 
 def test_missing_turn_id_does_not_collapse_consecutive_stops():
-    payload = {"hook_event_name": "Stop", "session_id": "session"}
+    payload = {"hook_event_name": "Stop", "session_id": "session", "runtime": "cli"}
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
         assert qoder_event_adapter.main() == 0
     first = post.call_args.args[0]["event_id"]
@@ -161,6 +170,7 @@ def test_long_prompt_and_answer_preserve_notification_maximums():
     payload = {
         "hook_event_name": "Stop",
         "session_id": "session",
+        "runtime": "cli",
         "user_prompt": "q" * 2_100,
         "assistant_message": "a" * 25_000,
     }

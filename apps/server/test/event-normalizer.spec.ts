@@ -13,4 +13,18 @@ describe('event normalizer', () => {
     expect(normalizeEvent(event).status).toBe('completed');
     expect(normalizeEvent(event).message).toBe('done');
   });
+
+  it('scopes producer event ids by source and runtime', () => {
+    const event = { event_id: 'session:Stop:turn', kind: 'completed' };
+    const claude = normalizeEvent({ ...event, source: 'claude', client: 'claude-cli' });
+    const qoderCli = normalizeEvent({ ...event, source: 'qoder', client: 'qoder-cli' });
+    const qoderDesktop = normalizeEvent({ ...event, source: 'qoder', client: 'qoder-desktop' });
+
+    expect(claude.source_event_id).toBe('v1:claude:claude-cli:session:Stop:turn');
+    expect(new Set([
+      claude.source_event_id,
+      qoderCli.source_event_id,
+      qoderDesktop.source_event_id,
+    ])).toHaveLength(3);
+  });
 });

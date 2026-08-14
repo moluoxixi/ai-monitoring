@@ -18,6 +18,7 @@ interface FileState {
   taskSummary: string;
   answerSource: string;
   isSubagent: boolean;
+  client: 'codex-cli' | 'codex-desktop';
 }
 
 interface ParsedTerminalEvent {
@@ -26,11 +27,33 @@ interface ParsedTerminalEvent {
   sessionId: string;
   taskSummary: string;
   isSubagent: boolean;
+  client: 'codex-cli' | 'codex-desktop';
   timestampMs: number | null;
+  /** A new user turn supersedes a provisional provider failure. */
+  suppressProvisional?: boolean;
 }
 
 const recordValue = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+const sessionIdentity = (payload: Record<string, unknown>, currentClient: 'codex-cli' | 'codex-desktop' = 'codex-desktop'):
+  { isSubagent: boolean; client: 'codex-cli' | 'codex-desktop' } => {
+  const source = payload.source;
+  const sourceObject = recordValue(source);
+  const sourceText = typeof source === 'string' ? source.toLowerCase() : '';
+  const threadSource = String(payload.thread_source || sourceObject.thread_source || '').toLowerCase();
+  const originator = String(payload.originator || '').toLowerCase();
+  const isSubagent = Boolean(sourceObject.subagent)
+    || sourceText === 'subagent'
+    || String(sourceObject.type || '').toLowerCase() === 'subagent'
+    || String(sourceObject.kind || '').toLowerCase() === 'subagent'
+    || threadSource === 'subagent';
+  if (isSubagent) return { isSubagent: true, client: currentClient };
+  const runtimeText = `${sourceText} ${originator}`;
+  if (/\b(cli|command[-_ ]line)\b/.test(runtimeText)) return { isSubagent: false, client: 'codex-cli' };
+  if (/\b(desktop|vscode|ide)\b/.test(runtimeText)) return { isSubagent: false, client: 'codex-desktop' };
+  return { isSubagent: false, client: currentClient };
+};
 
 const safeErrorCode = (error: Record<string, unknown>): string => {
   const info = error.codex_error_info;
@@ -68,22 +91,23 @@ export const parseCodexSessionLine = (
   currentTaskSummary = '',
   currentIsSubagent = false,
   currentAnswerSource = '',
+  currentClient: 'codex-cli' | 'codex-desktop' = 'codex-desktop',
 ): ParsedTerminalEvent => {
   let raw: unknown;
   try {
     raw = JSON.parse(line);
   } catch {
-    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, client: currentClient, timestampMs: null };
   }
   const item = recordValue(raw);
   const payload = recordValue(item.payload);
   if (item.type === 'session_meta') {
     const sessionId = String(payload.session_id || payload.id || currentSessionId);
-    const isSubagent = Boolean(recordValue(payload.source).subagent);
-    return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent, timestampMs: null };
+    const identity = sessionIdentity({ ...item, ...payload }, currentClient);
+    return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: identity.isSubagent, client: identity.client, timestampMs: null };
   }
   if (item.type !== 'event_msg') {
-    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, client: currentClient, timestampMs: null };
   }
   const kind = String(payload.type || '');
   if (kind === 'user_message') {
@@ -92,7 +116,20 @@ export const parseCodexSessionLine = (
       taskSummary: summarizeTask(payload.message) || currentTaskSummary,
       answerSource: '',
       isSubagent: currentIsSubagent,
+      client: currentClient,
       timestampMs: null,
+      suppressProvisional: Boolean(currentSessionId && !currentIsSubagent),
+    };
+  }
+  if (kind === 'task_started') {
+    return {
+      sessionId: currentSessionId,
+      taskSummary: currentTaskSummary,
+      answerSource: currentAnswerSource,
+      isSubagent: currentIsSubagent,
+      client: currentClient,
+      timestampMs: null,
+      suppressProvisional: Boolean(currentSessionId && !currentIsSubagent),
     };
   }
   if (kind === 'agent_message') {
@@ -102,15 +139,16 @@ export const parseCodexSessionLine = (
       taskSummary: currentTaskSummary,
       answerSource: message || currentAnswerSource,
       isSubagent: currentIsSubagent,
+      client: currentClient,
       timestampMs: null,
     };
   }
   if (!['task_complete', 'turn_aborted'].includes(kind)) {
-    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, client: currentClient, timestampMs: null };
   }
   const turnId = String(payload.turn_id || '');
   if (!currentSessionId || !turnId || currentIsSubagent) {
-    return { sessionId: currentSessionId, taskSummary: '', answerSource: '', isSubagent: currentIsSubagent, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: '', answerSource: '', isSubagent: currentIsSubagent, client: currentClient, timestampMs: null };
   }
 
   const error = recordValue(payload.error);
@@ -128,6 +166,7 @@ export const parseCodexSessionLine = (
     sessionId: currentSessionId,
     taskSummary: '',
     isSubagent: currentIsSubagent,
+    client: currentClient,
     timestampMs: terminalTimestamp,
     answerSource: status === 'completed'
       ? (typeof payload.last_agent_message === 'string' ? truncateTail(payload.last_agent_message, 24_000) : currentAnswerSource)
@@ -135,7 +174,7 @@ export const parseCodexSessionLine = (
     event: {
       source_event_id: `${currentSessionId}:${turnId}:${status}`,
       source: 'codex-session',
-      client: 'codex-desktop',
+      client: currentClient,
       kind,
       status,
       title: labels[status].title,
@@ -196,7 +235,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     this.discoveryTimer = setInterval(() => {
       for (const path of this.captureStartupFiles(this.config.codexSessionsPath).keys()) {
         if (this.files.has(path)) continue;
-        this.files.set(path, { identity: '', offset: 0, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false });
+        this.files.set(path, { identity: '', offset: 0, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false, client: 'codex-desktop' });
         this.enqueue(path, true);
       }
     }, 2_000);
@@ -217,7 +256,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     if (!state || state.identity !== identity || readableSize < state.offset) {
       const cutoff = Date.now() - this.config.codexBackfillMinutes * 60_000;
       if (stats.mtimeMs < cutoff) {
-        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false });
+        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false, client: 'codex-desktop' });
         return;
       }
       state = {
@@ -227,12 +266,15 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
         taskSummary: '',
         answerSource: '',
         isSubagent: false,
+        client: 'codex-desktop',
       };
       if (state.offset > 0) {
         const context = await this.readContextBefore(path, state.offset);
         state.sessionId = context.sessionId;
         state.taskSummary = context.taskSummary;
         state.answerSource = context.answerSource;
+        state.isSubagent = context.isSubagent;
+        state.client = context.client;
       }
       this.files.set(path, state);
     }
@@ -250,11 +292,15 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     for (const rawLine of lines) {
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       if (!line) continue;
-      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary, state.isSubagent, state.answerSource);
+      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary, state.isSubagent, state.answerSource, state.client);
       state.sessionId = parsed.sessionId;
       state.taskSummary = parsed.taskSummary;
       state.answerSource = parsed.event ? '' : parsed.answerSource;
       state.isSubagent = parsed.isSubagent;
+      state.client = parsed.client;
+      if (parsed.suppressProvisional && parsed.sessionId) {
+        this.ingestion.suppressProvisionalFailures?.(parsed.client, parsed.sessionId);
+      }
       if (!parsed.event) continue;
       if (initial && parsed.timestampMs !== null && parsed.timestampMs < cutoff) continue;
       const channels = createDeliveries ? this.channels.deliveryChannels() : [];
@@ -287,7 +333,10 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     const stream = createReadStream(path, { encoding: 'utf8' });
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
     try {
-      for await (const line of lines) return parseCodexSessionLine(line).sessionId;
+      for await (const line of lines) {
+        const sessionId = parseCodexSessionLine(line).sessionId;
+        if (sessionId) return sessionId;
+      }
       return '';
     } finally {
       lines.close();
@@ -295,22 +344,24 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     }
   }
 
-  private async readContextBefore(path: string, end: number): Promise<Pick<FileState, 'sessionId' | 'taskSummary' | 'answerSource' | 'isSubagent'>> {
+  private async readContextBefore(path: string, end: number): Promise<Pick<FileState, 'sessionId' | 'taskSummary' | 'answerSource' | 'isSubagent' | 'client'>> {
     let sessionId = '';
     let taskSummary = '';
     let answerSource = '';
     let isSubagent = false;
+    let client: 'codex-cli' | 'codex-desktop' = 'codex-desktop';
     const stream = createReadStream(path, { encoding: 'utf8', end: end - 1 });
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
     try {
       for await (const line of lines) {
-        const parsed = parseCodexSessionLine(line, sessionId, taskSummary, isSubagent, answerSource);
+        const parsed = parseCodexSessionLine(line, sessionId, taskSummary, isSubagent, answerSource, client);
         sessionId = parsed.sessionId;
         taskSummary = parsed.taskSummary;
         answerSource = parsed.event ? '' : parsed.answerSource;
         isSubagent = parsed.isSubagent;
+        client = parsed.client;
       }
-      return { sessionId, taskSummary, answerSource, isSubagent };
+      return { sessionId, taskSummary, answerSource, isSubagent, client };
     } finally {
       lines.close();
       stream.destroy();

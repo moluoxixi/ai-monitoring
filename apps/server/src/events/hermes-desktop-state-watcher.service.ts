@@ -74,7 +74,7 @@ export const parseHermesDesktopRequestDump = (
     source: 'hermes-desktop',
     client: 'hermes-desktop',
     kind: 'api_request_error',
-    status: 'failed',
+    status: 'tool_failed',
     title: 'Hermes Desktop task failed',
     message: failure,
     error_code: code,
@@ -82,6 +82,7 @@ export const parseHermesDesktopRequestDump = (
       session_id: sessionId,
       ...(summary ? { task_summary: summary } : {}),
       failure_message: failure,
+      notification_state: 'diagnostic',
     },
   };
 };

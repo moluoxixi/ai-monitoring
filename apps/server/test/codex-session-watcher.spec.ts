@@ -19,10 +19,11 @@ const terminalLine = (payload: Record<string, unknown>, timestamp = new Date().t
 
 const serviceFor = (directory: string) => {
   const insertEvent = vi.fn();
+  const suppressProvisionalFailures = vi.fn();
   const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
   const channels = { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService;
-  const ingestion = { ingest: insertEvent } as unknown as EventIngestionService;
-  return { service: new CodexSessionWatcherService(config, channels, ingestion), insertEvent };
+  const ingestion = { ingest: insertEvent, suppressProvisionalFailures } as unknown as EventIngestionService;
+  return { service: new CodexSessionWatcherService(config, channels, ingestion), insertEvent, suppressProvisionalFailures };
 };
 
 afterEach(() => {
@@ -49,6 +50,14 @@ describe('Codex session watcher parser', () => {
   it('normalizes and truncates task summaries', () => {
     expect(summarizeTask(`  ${'a'.repeat(2_010)}  `)).toHaveLength(2_000);
     expect(summarizeTask('The following is the Codex agent history whose request action you are assessing.')).toBe('');
+  });
+
+  it('marks a follow-up turn so provisional failures are suppressed', () => {
+    const started = parseCodexSessionLine(terminalLine({ type: 'task_started', turn_id: 'turn-2' }), 'session-1');
+    const prompt = parseCodexSessionLine(terminalLine({ type: 'user_message', message: '继续任务' }), started.sessionId);
+
+    expect(started.suppressProvisional).toBe(true);
+    expect(prompt.suppressProvisional).toBe(true);
   });
 
   it('uses the last agent message for the current terminal event and clears it for the next turn', () => {
@@ -141,6 +150,52 @@ describe('Codex session watcher parser', () => {
 
     expect(meta.isSubagent).toBe(true);
     expect(result.event).toBeUndefined();
+  });
+
+  it('recognizes string and typed subagent metadata variants', () => {
+    for (const source of [
+      'subagent',
+      { type: 'subagent' },
+      { kind: 'subagent' },
+    ]) {
+      const meta = parseCodexSessionLine(JSON.stringify({
+        type: 'session_meta', payload: { session_id: 'variant-session', source },
+      }));
+      expect(meta.isSubagent).toBe(true);
+      expect(parseCodexSessionLine(
+        terminalLine({ type: 'task_complete', turn_id: 'variant-turn' }),
+        meta.sessionId,
+        '',
+        meta.isSubagent,
+      ).event).toBeUndefined();
+    }
+  });
+
+  it('keeps an explicitly CLI session as Codex CLI', () => {
+    const meta = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: { session_id: 'cli-session', source: 'cli', originator: 'Codex CLI', thread_source: 'user' },
+    }));
+    const result = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'cli-turn' }),
+      meta.sessionId,
+      'run from cli',
+      meta.isSubagent,
+      '',
+      meta.client,
+    );
+
+    expect(meta.client).toBe('codex-cli');
+    expect(result.event?.client).toBe('codex-cli');
+  });
+
+  it('reads session metadata when it is not the first JSONL line', () => {
+    const meta = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: { session_id: 'late-session', source: { type: 'subagent' } },
+    }), '');
+    expect(meta.sessionId).toBe('late-session');
+    expect(meta.isSubagent).toBe(true);
   });
 
   it('ignores malformed, non-terminal, and terminal lines without identifiers', () => {
@@ -246,6 +301,43 @@ describe('Codex session file synchronization', () => {
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       source_event_id: 'watched-session:watched-turn:completed',
     }), []);
+  });
+
+  it('suppresses a provisional failure when a follow-up user turn starts', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'follow-up.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'follow-up-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_started', turn_id: 'turn-2' })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'user_message', message: '继续处理' })}\n`);
+    const { service, suppressProvisionalFailures } = serviceFor(directory);
+
+    await service.syncFile(path, true);
+
+    expect(suppressProvisionalFailures).toHaveBeenCalledWith('codex-desktop', 'follow-up-session');
+  });
+
+  it('suppresses a recoverable failure followed by a retry in the same file update', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'retry-after-failure.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'retry-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({
+      type: 'task_complete',
+      turn_id: 'failed-turn',
+      error: { message: 'stream disconnected before completion' },
+    })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_started', turn_id: 'retry-turn' })}\n`);
+    const { service, insertEvent, suppressProvisionalFailures } = serviceFor(directory);
+
+    await service.syncFile(path, true);
+
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'retry-session:failed-turn:failed',
+      metadata: expect.objectContaining({ failure_message: 'stream disconnected before completion' }),
+    }), []);
+    expect(suppressProvisionalFailures).toHaveBeenCalledWith('codex-desktop', 'retry-session');
+    expect(insertEvent.mock.invocationCallOrder[0]).toBeLessThan(suppressProvisionalFailures.mock.invocationCallOrder[0]!);
   });
 
   it('backfills events without creating notification deliveries', async () => {

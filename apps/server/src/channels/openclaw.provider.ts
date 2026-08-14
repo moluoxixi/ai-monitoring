@@ -12,6 +12,7 @@ import type {
   ChannelProvider,
   ChannelStatus,
 } from './channel-provider';
+import { DeliveryOutcomeUnknownError } from './channel-provider';
 import { ProcessExecutionError, ProcessRunnerService } from './process-runner.service';
 
 export const OPENCLAW_QQ = 'openclaw-qq';
@@ -442,10 +443,31 @@ export class OpenClawProvider implements ChannelProvider {
       ], 45_000, [binding.target, binding.account_id]);
       jobId = this.findId(created);
       if (!jobId) throw new Error('OpenClaw did not return a notification job id');
-      await this.run(['cron', 'run', jobId, '--wait', '--wait-timeout', '2m', '--poll-interval', '1s'], 150_000, [binding.target, binding.account_id]);
-      const history = await this.runJson(['cron', 'runs', '--id', jobId, '--limit', '1'], 30_000, [binding.target, binding.account_id]);
+      try {
+        await this.run(['cron', 'run', jobId, '--wait', '--wait-timeout', '2m', '--poll-interval', '1s'], 150_000, [binding.target, binding.account_id]);
+      } catch (error) {
+        throw new DeliveryOutcomeUnknownError(
+          'QQ 消息已提交到 OpenClaw，但执行结果无法确认，已停止自动重试',
+          { cause: error },
+        );
+      }
+      let history: Record<string, unknown>;
+      try {
+        history = await this.runJson(['cron', 'runs', '--id', jobId, '--limit', '1'], 30_000, [binding.target, binding.account_id]);
+      } catch (error) {
+        throw new DeliveryOutcomeUnknownError(
+          'QQ 消息可能已送达，但 OpenClaw 历史记录无法读取，已停止自动重试',
+          { cause: error },
+        );
+      }
       const latest = Array.isArray(history.entries) ? this.objectValue(history.entries[0]) : {};
       if (latest.status !== 'ok' || latest.delivered !== true || latest.deliveryStatus !== 'delivered') {
+        const explicitlyNotDelivered = ['error', 'failed'].includes(String(latest.status).toLowerCase())
+          && latest.delivered === false
+          && ['error', 'failed'].includes(String(latest.deliveryStatus).toLowerCase());
+        if (!explicitlyNotDelivered) {
+          throw new DeliveryOutcomeUnknownError('QQ 消息可能已送达，但 Gateway 未给出明确投递结果');
+        }
         throw new Error('OpenClaw Gateway did not confirm QQ message delivery');
       }
     } finally {

@@ -86,6 +86,13 @@ def _post(event: dict[str, object]) -> int:
     return 0
 
 
+def _runtime_argument() -> str:
+    for index, argument in enumerate(sys.argv):
+        if argument == "--runtime" and index + 1 < len(sys.argv):
+            return sys.argv[index + 1]
+    return ""
+
+
 def main() -> int:
     raw = sys.stdin.read().lstrip("\ufeff").strip()
     if not raw:
@@ -109,10 +116,19 @@ def main() -> int:
     summary = summary or transcript_summary
     answer = answer or transcript_answer
     failure = _first(item, ("error_message", "error", "message"), 24_000)
-    status = "failed" if failed else "completed"
+    requested_client = _runtime_argument().lower() or _first(item, ("client", "platform", "runtime"), 80).lower()
+    if not requested_client:
+        requested_client = os.getenv("CURSOR_RUNTIME", "").strip().lower()
+    if "cli" in requested_client:
+        client = "cursor-cli"
+    elif "desktop" in requested_client:
+        client = "cursor-desktop"
+    else:
+        # A shared hook without a runtime assertion must never be guessed as
+        # Desktop (or CLI). The dedicated runtime watcher/config must assert it.
+        return 0
+    status = "tool_failed" if failed else "completed"
     message = failure if failed else "Cursor task completed"
-    requested_client = _first(item, ("client", "platform", "runtime"), 80).lower()
-    client = "cursor-cli" if "cli" in requested_client else "cursor-desktop"
     event = {
         "source": "cursor",
         "client": client,
@@ -129,6 +145,7 @@ def main() -> int:
             **({"task_summary": summary} if summary else {}),
             **({"answer_source": answer} if answer and not failed else {}),
             **({"failure_message": failure} if failure and failed else {}),
+            **({"notification_state": "diagnostic"} if failed else {}),
         },
     }
     return _post(event)

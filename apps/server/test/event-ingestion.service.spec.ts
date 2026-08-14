@@ -13,7 +13,7 @@ const event = (metadata: Record<string, unknown> = {}): NormalizedEvent => ({
 const serviceFor = (insertEvent = vi.fn(() => [7, true, 1])) => ({
   insertEvent,
   database: { insertEvent } as unknown as DatabaseService,
-  config: { answerCaptureGraceMs: 1_500 } as AppConfigService,
+  config: { answerCaptureGraceMs: 1_500, recoverableFailureGraceMs: 600_000 } as AppConfigService,
   extensions: new ExtensionsService(),
   markMonitorVerified: vi.fn(),
 });
@@ -57,6 +57,32 @@ describe('EventIngestionService', () => {
     service.ingest({ ...event(), status: 'interrupted' }, ['pushplus'], 'ignored answer');
 
     expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({ metadata: {} }), ['pushplus'], 0);
+  });
+
+  it('holds recoverable provider failures until a follow-up can supersede them', () => {
+    const setup = serviceFor(vi.fn(() => [7, true, 1]));
+    const service = new EventIngestionService(setup.database, setup.config, setup.extensions, { markMonitorVerified: setup.markMonitorVerified } as never);
+
+    service.ingest({
+      ...event({ session_id: 'session', failure_message: 'stream disconnected before completion' }),
+      status: 'failed',
+      message: 'stream disconnected before completion',
+    }, ['pushplus']);
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ notification_state: 'provisional' }),
+    }), ['pushplus'], 600_000);
+  });
+
+  it('does not create deliveries for tool-level diagnostics', () => {
+    const setup = serviceFor(vi.fn(() => [7, true, 0]));
+    const service = new EventIngestionService(setup.database, setup.config, setup.extensions, { markMonitorVerified: setup.markMonitorVerified } as never);
+
+    service.ingest({ ...event(), status: 'tool_failed', metadata: { session_id: 'session' } }, ['pushplus']);
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({ notification_state: 'diagnostic' }),
+    }), [], 0);
   });
 
   it('does not verify dashboard events and rejects non-canonical clients', () => {

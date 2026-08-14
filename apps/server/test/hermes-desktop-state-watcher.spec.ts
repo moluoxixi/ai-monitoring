@@ -46,7 +46,7 @@ describe('HermesDesktopStateWatcher', () => {
       source_event_id: 'hermes-desktop:request-dump:1',
       source: 'hermes-desktop',
       client: 'hermes-desktop',
-      status: 'failed',
+      status: 'tool_failed',
       error_code: 'AuthenticationError',
       metadata: { task_summary: '验证桌面端' },
     });
