@@ -6,16 +6,6 @@ __pycache__/
 node_modules/
 apps/server/dist/
 apps/web/dist/
-data/*.db
-data/*.db-*
-data/phoenix/
-data/vendor/
-data/openclaw-channels.json
-data/pushplus-binding.json
-data/apprise-channels.json
-data/answer-summary.json
-data/client-config.json
-data/openclaw-outbound/
 logs/
 .env
 .idea/

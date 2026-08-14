@@ -46,3 +46,7 @@
 ## Compatibility And Rollback
 
 没有配置回答摘要渠道时，事件与通知仍正常工作，详情仍可显示清洗后的完整回答。旧数据库通过可重复执行的 `ALTER TABLE events ADD COLUMN answer_text TEXT` 兼容迁移；旧事件没有回答时按摘要或空态展示。现有 Phoenix 数据、URL、追踪服务和追踪依赖均不属于产品运行时，并在迁移后移除。
+
+## Docker Deployment
+
+生产镜像使用多阶段 Node 构建并由单个 Nest 进程托管 Vue 静态文件。运行层安装 Apprise、OpenClaw 和固定版本的腾讯 QQ/微信插件；Compose 使用独立 Gateway 服务与通知中心共享 OpenClaw 具名卷。`data` 绑定挂载保存 SQLite 和通道配置，宿主 Codex sessions 只读挂载。AI 客户端 hooks 仍安装在宿主机并向 `127.0.0.1:8787` 上报。

@@ -25,6 +25,7 @@
 - R10. 配置文件使用版本化 JSON、受限文件权限和原子替换；配置或解绑后清除该渠道的错误/冷却状态。
 - R11. 消息列表点击后打开任务详情，展示本次提问、完整回答或摘要回退、失败原因和各通知渠道投递状态；不依赖 Phoenix 或其它外部追踪平台。
 - R12. 不接入 Phoenix、Grafana、Prometheus、Loki、Alloy、Tempo 等额外监控栈，当前产品定位为任务与对话记录中心。
+- R13. 提供可选 Docker Compose 部署，镜像内包含通知中心、Apprise、OpenClaw 及固定版本的 QQ/微信插件；运行数据和机器人状态必须持久化且不进入 Git。
 
 ## Acceptance Criteria
 
@@ -39,6 +40,7 @@
 - [ ] AC9. 后端测试、前后端类型检查和生产构建通过。
 - [ ] AC10. 旧 SQLite 数据库启动时自动增加可空的回答列，不重建或丢失历史事件。
 - [ ] AC11. Claude/Qoder 成功 Stop 能转发明确的 assistant 回答字段；失败事件不得保存回答；缺失 turn ID 的连续任务不得相互覆盖。
+- [ ] AC12. Docker 部署可构建通知中心并启动 OpenClaw Gateway，健康检查通过；宿主 Codex session 以只读挂载接入，停止或重建容器不丢失数据库和机器人登录状态。
 
 ## Out Of Scope
 

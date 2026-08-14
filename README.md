@@ -45,6 +45,32 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 `scripts/install.ps1` 会自动安装 workspace 依赖并构建。开发模式使用 `npm run dev`，完整生产构建使用 `npm run build`，类型检查使用 `npm run typecheck`，测试使用 `npm test`。
 
+## Docker 快速部署
+
+Docker 方案包含通知中心、Apprise、OpenClaw Gateway 和已固定版本的 QQ/微信插件。数据库、绑定信息和本地配置统一保存在宿主机 `data` 目录，OpenClaw 运行状态保存在 Compose 具名卷中。容器启动时会校验卷中的插件，只有插件缺失、损坏或版本漂移时才从 npm 恢复固定版本。
+
+前置条件是 Docker Desktop、Linux containers 和 Docker Compose v2：
+
+```powershell
+.\scripts\docker-start.ps1
+```
+
+脚本会创建或补全 `.env`，生成本地 API/Gateway token，挂载当前用户的 Codex session 目录，构建镜像并等待两个服务健康。启动后访问 [http://127.0.0.1:8787](http://127.0.0.1:8787)。AI 客户端仍运行在宿主机，因此首次部署后在宿主机执行一次：
+
+```powershell
+.\scripts\install-hooks.ps1 -ConfigureNotifications
+```
+
+若项目 `.venv` 不存在，该脚本会自动创建仅供 hooks 使用的 Python 3.12+ 环境并安装最小依赖，不会在宿主机重复构建 Vue/Nest 服务。
+
+停止容器但保留数据库和机器人登录状态：
+
+```powershell
+.\scripts\docker-stop.ps1
+```
+
+`data` 下全部内容都是本机运行数据或凭据，默认不提交到 Git。`codex-notify-targets.json` 会由 hooks 安装脚本按需生成，不需要仓库模板。
+
 ## QQ 和微信机器人
 
 OpenClaw Gateway 默认运行在 `http://127.0.0.1:18789`。本项目使用两个腾讯维护的插件：
@@ -63,7 +89,7 @@ QQ 可直接在通知中心绑定：
 
 微信也可在通知中心点击“绑定”。服务调用腾讯插件官方 `openclaw channels login --channel openclaw-weixin` 流程，并把插件生成的二维码显示在页面中；扫码确认后，需要先在微信中给机器人发送任意一条消息，使腾讯协议签发主动回复所需的 context token。页面验证该 token 已由插件落盘后，才会读取当前账号 ID 和扫码用户 ID 作为通知路由并显示绑定成功。本项目自己的绑定文件不保存微信 token，也不会通过“最近私聊”猜测接收目标。
 
-QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，`scripts/patch-openclaw-weixin.ps1` 会在安装和启动时校验并应用兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
+QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，Docker 启动入口会校验固定插件版本并应用跨平台兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
 
 ## 通知通道
 

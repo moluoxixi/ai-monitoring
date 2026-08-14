@@ -10,6 +10,7 @@
 8. 增加 `events.answer_text` 兼容迁移和详情专属投影；将消息点击改为任务详情弹窗，展示提问、完整回答/摘要回退、失败原因和投递状态。
 9. 扩展 Claude/Qoder 成功 Stop 回答字段与缺失 turn ID 回退，保持失败事件回答隔离；验证列表、投递和通知均不携带全文。
 10. 按最新产品决策移除 Phoenix 追踪导出、跳转 API、前端技术详情入口、Phoenix 安装/自启动、专属依赖和运行数据；保留 Codex/Claude/Qoder 的完成与失败通知能力，并将 vendor 本地改动全部纳入可重放补丁。
+11. 将 `data` 统一为忽略提交的运行目录；增加多阶段 Dockerfile、Compose、OpenClaw/Apprise 运行层、持久化卷、健康检查和 Windows 快速启动脚本，并保持宿主 hooks 接入方式。
 
 ## Risk And Rollback Points
 

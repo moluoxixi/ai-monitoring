@@ -1,18 +1,50 @@
 [CmdletBinding()]
 param(
     [switch]$ConfigureNotifications,
+    [string]$Python = "",
     [string]$VenvPath = ".venv"
 )
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$ProjectPython = if ([IO.Path]::IsPathRooted($VenvPath)) {
-    Join-Path $VenvPath "Scripts\python.exe"
+$ResolvedVenvPath = if ([IO.Path]::IsPathRooted($VenvPath)) {
+    $VenvPath
 } else {
-    Join-Path $Root (Join-Path $VenvPath "Scripts\python.exe")
+    Join-Path $Root $VenvPath
 }
+$ResolvedVenvPath = [IO.Path]::GetFullPath($ResolvedVenvPath)
+$ProjectPython = Join-Path $ResolvedVenvPath "Scripts\python.exe"
 $ProjectPython = [IO.Path]::GetFullPath($ProjectPython)
-if (-not (Test-Path $ProjectPython)) { throw "Project virtual environment is missing. Run .\scripts\install.ps1 first." }
+if (-not (Test-Path $ProjectPython)) {
+    if ($Python) {
+        $PythonCommand = $Python
+        $PythonArguments = @()
+    } elseif (Get-Command py -ErrorAction SilentlyContinue) {
+        $PythonCommand = "py"
+        $PythonArguments = @("-3.12")
+    } else {
+        $PythonCommand = "python"
+        $PythonArguments = @()
+    }
+
+    & $PythonCommand @PythonArguments -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python 3.12 or newer is required. Install Python 3.12 or pass -Python with its executable path."
+    }
+    & $PythonCommand @PythonArguments -m venv $ResolvedVenvPath
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ProjectPython)) {
+        throw "Failed to create the hook virtual environment at $ResolvedVenvPath."
+    }
+    Write-Host "Created the hook virtual environment at $ResolvedVenvPath."
+}
+
+& $ProjectPython -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)"
+if ($LASTEXITCODE -ne 0) { throw "The hook virtual environment must use Python 3.12 or newer: $ProjectPython" }
+& $ProjectPython -c "import dotenv, tomlkit" *> $null
+if ($LASTEXITCODE -ne 0) {
+    & $ProjectPython -m pip install --editable $Root
+    if ($LASTEXITCODE -ne 0) { throw "Failed to install the AI Monitor hook dependencies." }
+}
 
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $BackupDir = Join-Path $env:LOCALAPPDATA "AI-Monitor\config-backups\$Timestamp"

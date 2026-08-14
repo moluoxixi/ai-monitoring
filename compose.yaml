@@ -1,0 +1,73 @@
+name: ai-monitoring
+
+services:
+  openclaw:
+    build:
+      context: .
+    image: ai-monitoring:local
+    restart: unless-stopped
+    command:
+      - openclaw
+      - gateway
+      - run
+      - --allow-unconfigured
+      - --bind
+      - lan
+      - --auth
+      - token
+      - --token
+      - ${OPENCLAW_GATEWAY_TOKEN:?Run scripts/docker-start.ps1 to generate OPENCLAW_GATEWAY_TOKEN}
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Run scripts/docker-start.ps1 to generate OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+    ports:
+      - "127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+    volumes:
+      - openclaw-data:/home/node/.openclaw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - openclaw gateway health --url ws://127.0.0.1:18789 --token "$${OPENCLAW_GATEWAY_TOKEN}" --timeout 5000 >/dev/null 2>&1
+      interval: 10s
+      timeout: 8s
+      start_period: 20s
+      retries: 8
+
+  monitor:
+    build:
+      context: .
+    image: ai-monitoring:local
+    restart: unless-stopped
+    depends_on:
+      openclaw:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      AIMONITOR_HOST: 0.0.0.0
+      AIMONITOR_PORT: 8787
+      AIMONITOR_CODEX_SESSIONS_PATH: /codex-sessions
+      OPENCLAW_GATEWAY_URL: ws://openclaw:18789
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Run scripts/docker-start.ps1 to generate OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+    ports:
+      - "127.0.0.1:${AIMONITOR_DOCKER_PORT:-8787}:8787"
+    volumes:
+      - ./data:/app/data
+      - ${CODEX_SESSIONS_PATH:-./data/codex-sessions}:/codex-sessions:ro
+      - openclaw-data:/home/node/.openclaw
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - --fail
+        - --silent
+        - http://127.0.0.1:8787/api/health
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+
+volumes:
+  openclaw-data:

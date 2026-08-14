@@ -257,14 +257,21 @@ export class OpenClawProvider implements ChannelProvider {
     onSuccess: () => void;
     onFailure: (error: Error) => void;
   }): Promise<() => void> {
-    const cliModule = join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs');
-    if (!existsSync(cliModule)) throw new Error('OpenClaw CLI is unavailable');
+    const loginArgs = ['channels', 'login', '--channel', OPENCLAW_WEIXIN];
+    let command = 'openclaw';
+    let args = loginArgs;
+    if (process.platform === 'win32') {
+      const cliModule = join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs');
+      if (!existsSync(cliModule)) throw new Error('OpenClaw CLI is unavailable');
+      command = process.execPath;
+      args = [cliModule, ...loginArgs];
+    }
     const env = { ...process.env };
     if (!env.OPENCLAW_GATEWAY_TOKEN) {
       const token = await this.gatewayToken();
       if (token) env.OPENCLAW_GATEWAY_TOKEN = token;
     }
-    const child = spawn(process.execPath, [cliModule, 'channels', 'login', '--channel', OPENCLAW_WEIXIN], {
+    const child = spawn(command, args, {
       cwd: this.config.projectRoot,
       env,
       windowsHide: true,
