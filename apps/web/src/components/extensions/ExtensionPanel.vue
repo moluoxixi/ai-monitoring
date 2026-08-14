@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Bell, Check, CircleCheck, Link, Message } from '@element-plus/icons-vue'
+import { Bell, Check, CircleCheck, Message } from '@element-plus/icons-vue'
 import type { ChannelStatus, ExtensionCard } from '../../types/monitor'
 
 const props = defineProps<{ extension: ExtensionCard; channels: ChannelStatus[]; saving: boolean }>()
@@ -34,7 +34,6 @@ const capabilities = computed(() => [
         </div>
       </div>
       <div class="extension-actions">
-        <el-button :icon="Link" tag="a" :href="extension.detail_url" target="_blank">监控详情</el-button>
         <el-button
           type="primary"
           :icon="Bell"

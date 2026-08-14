@@ -38,11 +38,11 @@
 ## Security
 
 - 事件生产者使用临时 `answer_source` 字段；只对 completed 事件保留最多 24,000 字符的清洗结果，并写入专用列。失败、中断和工具失败事件删除回答字段。
-- 完整回答不进入列表、delivery、通知正文、Phoenix 生命周期 span 或日志；单任务详情是唯一前端读取入口。
+- 完整回答不进入列表、delivery、通知正文或日志；单任务详情是唯一前端读取入口。任务采集和通知链路不创建或依赖 Phoenix 生命周期 span。
 - API Key 仅存于忽略提交的本地配置文件，写入采用临时文件、`0600` 和原子 rename。
 - 状态 API 永不返回 API Key；错误只返回枚举化类别，不透传上游响应正文。
 - Base URL 只允许 `http:`/`https:` 且必须含 hostname；内置渠道 URL 不可由前端覆盖。
 
 ## Compatibility And Rollback
 
-没有配置回答摘要渠道时，事件与通知仍正常工作，详情仍可显示清洗后的完整回答。旧数据库通过可重复执行的 `ALTER TABLE events ADD COLUMN answer_text TEXT` 兼容迁移；旧事件没有回答时按摘要或空态展示。
+没有配置回答摘要渠道时，事件与通知仍正常工作，详情仍可显示清洗后的完整回答。旧数据库通过可重复执行的 `ALTER TABLE events ADD COLUMN answer_text TEXT` 兼容迁移；旧事件没有回答时按摘要或空态展示。现有 Phoenix 数据、URL、追踪服务和追踪依赖均不属于产品运行时，并在迁移后移除。

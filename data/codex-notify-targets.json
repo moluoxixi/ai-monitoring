@@ -1,11 +1,3 @@
 {
-  "targets": [
-    [
-      "C:\\Users\\wl\\AppData\\Local\\OpenAI\\Codex\\runtimes\\cua_node\\24f14d0f2024b284\\bin\\node_modules\\@oai\\sky\\bin\\windows\\codex-computer-use.exe",
-      "turn-ended"
-    ],
-    [
-      "C:\\Users\\wl\\.arize\\harness\\venv\\Scripts\\arize-hook-codex-notify.exe"
-    ]
-  ]
+  "targets": []
 }

@@ -4,9 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigService } from '../src/config/app-config.service';
 import type { ChannelsService } from '../src/channels/channels.service';
-import type { DatabaseService } from '../src/database/database.service';
 import type { EventIngestionService } from '../src/events/event-ingestion.service';
-import type { PhoenixTaskTraceService } from '../src/events/phoenix-task-trace.service';
 import {
   CodexSessionWatcherService,
   parseCodexSessionLine,
@@ -24,12 +22,7 @@ const serviceFor = (directory: string) => {
   const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
   const channels = { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService;
   const ingestion = { ingest: insertEvent } as unknown as EventIngestionService;
-  const taskTraces = { record: vi.fn(() => ''), flush: vi.fn(async () => true) } as unknown as PhoenixTaskTraceService;
-  const database = {
-    getEventBySourceEventId: vi.fn(() => null),
-    setEventTraceId: vi.fn(() => true),
-  } as unknown as DatabaseService;
-  return { service: new CodexSessionWatcherService(config, channels, ingestion, taskTraces, database), insertEvent, taskTraces, database };
+  return { service: new CodexSessionWatcherService(config, channels, ingestion), insertEvent };
 };
 
 afterEach(() => {
@@ -192,56 +185,6 @@ describe('Codex session file synchronization', () => {
     }), []);
   });
 
-  it('stores the exported lifecycle trace id with the event', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
-    tempDirectories.push(directory);
-    const path = join(directory, 'trace-id.jsonl');
-    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'trace-session' } })}\n`);
-    appendFileSync(path, `${terminalLine({
-      type: 'task_complete', turn_id: 'trace-turn', started_at: 1_786_635_348, completed_at: 1_786_635_370,
-    })}\n`);
-    const { service, taskTraces, database } = serviceFor(directory);
-    vi.mocked(taskTraces.record).mockReturnValue('0123456789abcdef0123456789abcdef');
-    vi.mocked(taskTraces.flush).mockResolvedValue(true);
-
-    await service.syncFile(path);
-
-    expect(taskTraces.record).toHaveBeenCalledWith(
-      expect.objectContaining({ source_event_id: 'trace-session:trace-turn:completed' }),
-      1_786_635_348_000,
-      1_786_635_370_000,
-    );
-    await vi.waitFor(() => expect(database.setEventTraceId).toHaveBeenCalledWith(
-      'trace-session:trace-turn:completed',
-      '0123456789abcdef0123456789abcdef',
-    ));
-  });
-
-  it('waits for pending trace persistence during module shutdown', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
-    tempDirectories.push(directory);
-    const path = join(directory, 'shutdown-trace.jsonl');
-    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'shutdown-session' } })}\n`);
-    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'shutdown-turn' })}\n`);
-    const { service, taskTraces, database } = serviceFor(directory);
-    vi.mocked(taskTraces.record).mockReturnValue('0123456789abcdef0123456789abcdef');
-    let releaseFlush!: () => void;
-    vi.mocked(taskTraces.flush).mockImplementationOnce(() => new Promise<boolean>((resolve) => {
-      releaseFlush = () => resolve(true);
-    }));
-
-    await service.syncFile(path);
-    const shutdown = service.onModuleDestroy();
-    expect(database.setEventTraceId).not.toHaveBeenCalled();
-    releaseFlush();
-    await shutdown;
-
-    expect(database.setEventTraceId).toHaveBeenCalledWith(
-      'shutdown-session:shutdown-turn:completed',
-      '0123456789abcdef0123456789abcdef',
-    );
-  });
-
   it('passes the last agent message to enrichment without storing it in the event', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);
@@ -256,8 +199,6 @@ describe('Codex session file synchronization', () => {
       { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService,
       { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService,
       { ingest } as unknown as EventIngestionService,
-      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
-      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
     );
 
     await service.syncFile(path);
@@ -318,8 +259,6 @@ describe('Codex session file synchronization', () => {
     const channels = { deliveryChannels } as unknown as ChannelsService;
     const service = new CodexSessionWatcherService(
       config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
-      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
-      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
     );
 
     await service.syncFile(path, false);
@@ -343,8 +282,6 @@ describe('Codex session file synchronization', () => {
     const channels = { deliveryChannels } as unknown as ChannelsService;
     const service = new CodexSessionWatcherService(
       config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
-      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
-      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
     );
 
     await service.syncFile(path, false, backfillEnd);
@@ -365,8 +302,6 @@ describe('Codex session file synchronization', () => {
     const channels = { deliveryChannels: vi.fn(() => ['openclaw-qq', 'openclaw-weixin']) } as unknown as ChannelsService;
     const service = new CodexSessionWatcherService(
       config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
-      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
-      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
     );
 
     service.onModuleInit();

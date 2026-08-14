@@ -71,7 +71,6 @@ export interface ExtensionCard {
   label: string
   aliases: string[]
   adapter: ExtensionAdapter
-  detail_url: string
   event_count: number
 }
 

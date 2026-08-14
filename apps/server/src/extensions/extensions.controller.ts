@@ -1,6 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
 import { ChannelsService } from '../channels/channels.service';
-import { AppConfigService } from '../config/app-config.service';
 import { DatabaseService } from '../database/database.service';
 import type { ExtensionDefinition } from './extension.types';
 import { ExtensionsService } from './extensions.service';
@@ -11,7 +10,6 @@ export class ExtensionsController {
     private readonly extensions: ExtensionsService,
     private readonly channels: ChannelsService,
     private readonly database: DatabaseService,
-    private readonly config: AppConfigService,
   ) {}
 
   @Get()
@@ -32,7 +30,6 @@ export class ExtensionsController {
       label: definition.label,
       aliases: definition.aliases,
       adapter: definition.adapter,
-      detail_url: this.config.phoenixUrl,
     };
   }
 

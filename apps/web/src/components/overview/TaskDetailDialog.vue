@@ -24,7 +24,6 @@ const failureMessage = (item: MonitorEvent) => typeof item.metadata.failure_mess
   : item.error_code || item.message
 const iconFor = (status: string) => status === 'completed' ? CircleCheck : status === 'interrupted' ? Clock : status === 'unknown' ? Warning : CircleClose
 const channelLabel = (id: string) => props.channels.find(channel => channel.id === id)?.label || id
-const phoenixUrl = (item: MonitorEvent) => `/api/events/${item.id}/trace`
 </script>
 
 <template>
@@ -70,7 +69,6 @@ const phoenixUrl = (item: MonitorEvent) => `/api/events/${item.id}/trace`
       </section>
     </div>
     <template #footer>
-      <el-button v-if="event" link type="info" tag="a" :href="phoenixUrl(event)" target="_blank" rel="noopener noreferrer">技术详情</el-button>
       <el-button @click="emit('update:modelValue', null)">关闭</el-button>
     </template>
   </el-dialog>

@@ -145,18 +145,6 @@ export class DatabaseService implements OnModuleDestroy {
     return row ? this.eventRow(row) : null;
   }
 
-  setEventTraceId(sourceEventId: string, traceId: string): boolean {
-    const existing = this.db.prepare('SELECT id, metadata_json FROM events WHERE source_event_id = ?').get(sourceEventId) as
-      { id: number; metadata_json: string } | undefined;
-    if (!existing) return false;
-    const metadata = parseMetadata(existing.metadata_json);
-    this.db.prepare('UPDATE events SET metadata_json = ? WHERE id = ?').run(
-      JSON.stringify({ ...metadata, trace_id: traceId }),
-      existing.id,
-    );
-    return true;
-  }
-
   countEvents(client: string): number {
     const resolved = this.extensions.resolve(client);
     const predicate = resolved === 'other' ? 'lower(client) = lower(?)' : 'ai_client_key(client) = ?';

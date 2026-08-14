@@ -8,7 +8,8 @@
 6. 添加后端 provider/config/fallback、watcher、数据库和通知正文回归测试；更新 Python notify 测试。
 7. 运行 `python -m pytest`、`npm test`、`npm run typecheck`、`npm run build`，并用浏览器检查桌面与移动设置页。
 8. 增加 `events.answer_text` 兼容迁移和详情专属投影；将消息点击改为任务详情弹窗，展示提问、完整回答/摘要回退、失败原因和投递状态。
-9. 扩展 Claude/Qoder 成功 Stop 回答字段与缺失 turn ID 回退，保持失败事件回答隔离；验证列表、投递、通知和 trace 路由均不携带全文。
+9. 扩展 Claude/Qoder 成功 Stop 回答字段与缺失 turn ID 回退，保持失败事件回答隔离；验证列表、投递和通知均不携带全文。
+10. 按最新产品决策移除 Phoenix 追踪导出、跳转 API、前端技术详情入口、Phoenix 安装/自启动、专属依赖和运行数据；保留 Codex/Claude/Qoder 的完成与失败通知能力，并将 vendor 本地改动全部纳入可重放补丁。
 
 ## Risk And Rollback Points
 

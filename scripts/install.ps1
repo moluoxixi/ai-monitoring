@@ -25,7 +25,12 @@ if ($LASTEXITCODE -ne 0) { throw "Python 3.12 or newer is required. Install Pyth
 
 & $PythonCommand @PythonArguments -m venv $VenvPath
 if ($LASTEXITCODE -ne 0) { throw "Failed to create virtual environment at $VenvPath." }
-$VenvPython = Join-Path $Root (Join-Path $VenvPath "Scripts\python.exe")
+$VenvPython = if ([IO.Path]::IsPathRooted($VenvPath)) {
+    Join-Path $VenvPath "Scripts\python.exe"
+} else {
+    Join-Path $Root (Join-Path $VenvPath "Scripts\python.exe")
+}
+$VenvPython = [IO.Path]::GetFullPath($VenvPython)
 if (-not (Test-Path $VenvPython)) { throw "Virtual environment was not created: $VenvPython" }
 & $VenvPython -m pip install --upgrade pip
 if ($LASTEXITCODE -ne 0) { throw "Failed to upgrade pip in $VenvPath." }
@@ -58,9 +63,9 @@ if (-not (Test-Path $EnvFile)) {
 }
 
 if ($ConfigureHooks) {
-    & (Join-Path $Root "scripts\install-tracing.ps1") -ConfigureNotifications
-    if ($LASTEXITCODE -ne 0) { throw "Tracing integration installation failed with exit code $LASTEXITCODE." }
+    & (Join-Path $Root "scripts\install-hooks.ps1") -ConfigureNotifications -VenvPath $VenvPath
+    if ($LASTEXITCODE -ne 0) { throw "Hook integration installation failed with exit code $LASTEXITCODE." }
 }
 
-Write-Host "Install complete. Run .\scripts\run-phoenix.ps1 and .\scripts\run-relay.ps1."
+Write-Host "Install complete. Run .\scripts\run-relay.ps1."
 Write-Host "Open http://127.0.0.1:8787 for the notification center."

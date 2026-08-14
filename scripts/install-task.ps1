@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-    [string]$PhoenixTaskName = "AI Monitor - Phoenix",
     [string]$RelayTaskName = "AI Monitor - Relay",
     [switch]$Remove
 )
@@ -8,7 +7,6 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $StartupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
 $Entries = @(
-    @{ Name = $PhoenixTaskName; Script = (Join-Path $Root "scripts\run-phoenix.ps1") },
     @{ Name = $RelayTaskName; Script = (Join-Path $Root "scripts\run-relay.ps1") }
 )
 

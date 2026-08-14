@@ -55,24 +55,6 @@ describe('DatabaseService idempotent event enrichment', () => {
     database.onModuleDestroy();
   });
 
-  it('adds a missing trace id and supports lookup by source event id', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
-    directories.push(directory);
-    const database = new DatabaseService(
-      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
-      new ExtensionsService(),
-    );
-
-    const [id] = database.insertEvent(event({}, 'Codex turn failed'), []);
-    expect(database.setEventTraceId('session:turn:failed', 'abc123')).toBe(true);
-
-    expect(database.getEvent(id)?.metadata.trace_id).toBe('abc123');
-    expect(database.getEventBySourceEventId('session:turn:failed')?.id).toBe(id);
-    expect(database.setEventTraceId('session:turn:failed', 'replacement')).toBe(true);
-    expect(database.getEvent(id)?.metadata.trace_id).toBe('replacement');
-    database.onModuleDestroy();
-  });
-
   it('returns a cleaned answer only from the explicit detail projection', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);

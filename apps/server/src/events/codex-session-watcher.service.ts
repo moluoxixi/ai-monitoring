@@ -6,9 +6,7 @@ import { createInterface } from 'node:readline';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import type { NormalizedEvent } from '../database/database.types';
-import { DatabaseService } from '../database/database.service';
 import { EventIngestionService } from './event-ingestion.service';
-import { PhoenixTaskTraceService } from './phoenix-task-trace.service';
 
 const INITIAL_TAIL_BYTES = 1024 * 1024;
 
@@ -28,18 +26,10 @@ interface ParsedTerminalEvent {
   taskSummary: string;
   isSubagent: boolean;
   timestampMs: number | null;
-  startedAtMs?: number | null;
-  completedAtMs?: number | null;
 }
 
 const recordValue = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
-const epochMs = (value: unknown): number | null => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return null;
-  return numeric < 10_000_000_000 ? numeric * 1_000 : numeric;
-};
 
 const safeErrorCode = (error: Record<string, unknown>): string => {
   const info = error.codex_error_info;
@@ -138,8 +128,6 @@ export const parseCodexSessionLine = (
     taskSummary: '',
     isSubagent: currentIsSubagent,
     timestampMs: terminalTimestamp,
-    startedAtMs: epochMs(payload.started_at) || terminalTimestamp,
-    completedAtMs: epochMs(payload.completed_at) || terminalTimestamp,
     answerSource: status === 'completed'
       ? (typeof payload.last_agent_message === 'string' ? payload.last_agent_message.slice(-24_000) : currentAnswerSource)
       : '',
@@ -168,7 +156,6 @@ const fileIdentity = (stats: Stats): string => `${stats.dev}:${stats.ino}:${stat
 export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CodexSessionWatcherService.name);
   private readonly files = new Map<string, FileState>();
-  private readonly traceWrites = new Set<Promise<void>>();
   private watcher: FSWatcher | null = null;
   private queue = Promise.resolve();
 
@@ -176,8 +163,6 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     private readonly config: AppConfigService,
     private readonly channels: ChannelsService,
     private readonly ingestion: EventIngestionService,
-    private readonly taskTraces: PhoenixTaskTraceService,
-    private readonly database: DatabaseService,
   ) {}
 
   onModuleInit(): void {
@@ -211,7 +196,6 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
   async onModuleDestroy(): Promise<void> {
     await this.watcher?.close();
     await this.queue;
-    await Promise.allSettled([...this.traceWrites]);
   }
 
   async syncFile(path: string, createDeliveries = true, readLimit?: number): Promise<void> {
@@ -263,29 +247,6 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
       state.isSubagent = parsed.isSubagent;
       if (!parsed.event) continue;
       if (initial && parsed.timestampMs !== null && parsed.timestampMs < cutoff) continue;
-      const existing = this.database.getEventBySourceEventId(parsed.event.source_event_id);
-      const existingTraceId = typeof existing?.metadata.trace_id === 'string' ? existing.metadata.trace_id : '';
-      if (existingTraceId) {
-        parsed.event.metadata.trace_id = existingTraceId;
-      } else {
-        const traceId = this.taskTraces.record(
-          parsed.event,
-          parsed.startedAtMs || null,
-          parsed.completedAtMs || parsed.timestampMs,
-        );
-        if (traceId) {
-          const sourceEventId = parsed.event.source_event_id;
-          const traceWrite = this.taskTraces.flush()
-            .then((exported) => {
-              if (exported) this.database.setEventTraceId(sourceEventId, traceId);
-            })
-            .catch((error: unknown) => {
-              this.logger.warn(`Unable to persist Codex task trace: ${error instanceof Error ? error.message : String(error)}`);
-            });
-          this.traceWrites.add(traceWrite);
-          void traceWrite.then(() => this.traceWrites.delete(traceWrite));
-        }
-      }
       const channels = createDeliveries ? this.channels.deliveryChannels() : [];
       if (parsed.answerSource) this.ingestion.ingest(parsed.event, channels, parsed.answerSource);
       else this.ingestion.ingest(parsed.event, channels);

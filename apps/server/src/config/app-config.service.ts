@@ -27,8 +27,6 @@ export class AppConfigService {
   );
   readonly answerSummaryTimeoutMs = Math.max(1_000, numberValue(process.env.AIMONITOR_ANSWER_SUMMARY_TIMEOUT_MS, 8_000));
   readonly answerSummaryGraceMs = Math.max(0, numberValue(process.env.AIMONITOR_ANSWER_SUMMARY_GRACE_MS, 1_500));
-  readonly phoenixUrl = process.env.AIMONITOR_PHOENIX_URL?.trim() || 'http://127.0.0.1:6006';
-  readonly phoenixProject = process.env.PHOENIX_PROJECT?.trim() || 'ai-coding-agents';
   readonly codexSessionsPath = resolve(process.env.AIMONITOR_CODEX_SESSIONS_PATH?.trim() || resolve(homedir(), '.codex', 'sessions'));
   readonly codexBackfillMinutes = numberValue(process.env.AIMONITOR_CODEX_BACKFILL_MINUTES, 120);
   readonly ingestToken = process.env.AIMONITOR_INGEST_TOKEN || '';

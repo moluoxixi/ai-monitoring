@@ -13,7 +13,6 @@ def configure(
     targets_path: Path,
     python_path: Path,
     wrapper_path: Path,
-    arize_hook: Path,
 ) -> None:
     document = tomlkit.parse(config_path.read_text(encoding="utf-8")) if config_path.exists() else tomlkit.document()
     wrapper_command = [str(python_path.resolve()), str(wrapper_path.resolve())]
@@ -24,13 +23,17 @@ def configure(
         loaded = json.loads(targets_path.read_text(encoding="utf-8"))
         saved_targets = [[str(arg) for arg in target] for target in loaded.get("targets", [])]
 
-    resolved_arize_hook = str(arize_hook.resolve())
     if current != wrapper_command and not any("codex_notify_multiplexer.py" in arg for arg in current):
-        original_targets = [current] if current and current != [resolved_arize_hook] else []
+        original_targets = [current] if current else []
     else:
-        original_targets = [target for target in saved_targets if resolved_arize_hook not in target]
+        original_targets = saved_targets
 
-    targets = original_targets + [[resolved_arize_hook]]
+    targets: list[list[str]] = []
+    for target in original_targets:
+        if not target or any(any(marker in argument.lower() for marker in ("arize", "phoenix")) for argument in target):
+            continue
+        if target not in targets:
+            targets.append(target)
     targets_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = targets_path.with_suffix(".tmp")
     temporary.write_text(json.dumps({"targets": targets}, indent=2) + "\n", encoding="utf-8")
@@ -47,9 +50,8 @@ def main() -> int:
     parser.add_argument("--targets", type=Path, required=True)
     parser.add_argument("--python", type=Path, required=True)
     parser.add_argument("--wrapper", type=Path, required=True)
-    parser.add_argument("--arize-hook", type=Path, required=True)
     args = parser.parse_args()
-    configure(args.config, args.targets, args.python, args.wrapper, args.arize_hook)
+    configure(args.config, args.targets, args.python, args.wrapper)
     return 0
 
 

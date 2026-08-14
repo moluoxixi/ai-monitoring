@@ -11,18 +11,13 @@ def test_configure_preserves_existing_notify_and_toml(tmp_path):
     targets = tmp_path / "targets.json"
     python = tmp_path / "python.exe"
     wrapper = tmp_path / "codex_notify_multiplexer.py"
-    arize = tmp_path / "arize-hook.exe"
-
-    configure(config, targets, python, wrapper, arize)
+    configure(config, targets, python, wrapper)
 
     parsed = tomlkit.parse(config.read_text())
     assert parsed["model"] == "gpt-test"
     assert list(parsed["notify"]) == [str(python.resolve()), str(wrapper.resolve())]
     assert "# keep this comment" in config.read_text()
-    assert json.loads(targets.read_text())["targets"] == [
-        ["existing.exe", "turn-ended"],
-        [str(arize.resolve())],
-    ]
+    assert json.loads(targets.read_text())["targets"] == [["existing.exe", "turn-ended"]]
 
 
 def test_configure_is_idempotent(tmp_path):
@@ -31,9 +26,7 @@ def test_configure_is_idempotent(tmp_path):
     targets = tmp_path / "targets.json"
     python = tmp_path / "python.exe"
     wrapper = tmp_path / "codex_notify_multiplexer.py"
-    arize = tmp_path / "arize-hook.exe"
+    configure(config, targets, python, wrapper)
+    configure(config, targets, python, wrapper)
 
-    configure(config, targets, python, wrapper, arize)
-    configure(config, targets, python, wrapper, arize)
-
-    assert json.loads(targets.read_text())["targets"] == [["existing.exe"], [str(arize.resolve())]]
+    assert json.loads(targets.read_text())["targets"] == [["existing.exe"]]

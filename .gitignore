@@ -2,11 +2,14 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+*.egg-info/
 node_modules/
 apps/server/dist/
 apps/web/dist/
 data/*.db
 data/*.db-*
+data/phoenix/
+data/vendor/
 data/openclaw-channels.json
 data/pushplus-binding.json
 data/apprise-channels.json

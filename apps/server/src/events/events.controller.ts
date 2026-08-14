@@ -1,12 +1,10 @@
-import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { ChannelsService } from '../channels/channels.service';
 import { DatabaseService } from '../database/database.service';
 import { ExtensionsService } from '../extensions/extensions.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { normalizeEvent } from './event-normalizer';
 import { EventIngestionService } from './event-ingestion.service';
-import { PhoenixTraceLinkService } from './phoenix-trace-link.service';
 
 @Controller('api')
 export class EventsController {
@@ -14,7 +12,6 @@ export class EventsController {
     private readonly database: DatabaseService,
     private readonly channels: ChannelsService,
     private readonly extensions: ExtensionsService,
-    private readonly traceLinks: PhoenixTraceLinkService,
     private readonly ingestion: EventIngestionService,
   ) {}
 
@@ -26,13 +23,6 @@ export class EventsController {
   @Get('events')
   events(@Query('limit') limit?: string, @Query('client') client?: string) {
     return this.database.listEvents(Number(limit || 100), client);
-  }
-
-  @Get('events/:id/trace')
-  async trace(@Param('id', ParseIntPipe) id: number, @Res() response: Response): Promise<void> {
-    const event = this.database.getEvent(id);
-    if (!event) throw new NotFoundException('event not found');
-    response.redirect(302, await this.traceLinks.resolve(event));
   }
 
   @Get('events/:id')

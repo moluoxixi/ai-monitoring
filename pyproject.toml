@@ -5,16 +5,18 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ai-monitoring"
 version = "0.1.0"
-description = "Windows deployment and notification bridge for Arize Phoenix AI observability"
+description = "Windows deployment and reliable notification bridge for AI coding tasks"
 requires-python = ">=3.12"
 dependencies = [
-  "arize-phoenix==20.1.0",
   "python-dotenv>=1.0,<2",
   "tomlkit>=0.13,<1",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9"]
+
+[tool.setuptools]
+py-modules = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
