@@ -28,3 +28,21 @@ def test_qoder_stop_is_completed():
     with patch("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "Stop", "session_id": "s"}))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
         assert qoder_event_adapter.main() == 0
     assert post.call_args.args[0]["status"] == "completed"
+
+
+def test_prompt_summary_is_forwarded():
+    payload = {"hook_event_name": "Stop", "session_id": "s", "user_prompt": "update the dashboard", "assistant_message": {"content": "dashboard updated"}}
+    with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
+        assert qoder_event_adapter.main() == 0
+    assert post.call_args.args[0]["metadata"]["task_summary"] == "update the dashboard"
+    assert post.call_args.args[0]["metadata"]["answer_source"] == "dashboard updated"
+
+
+def test_missing_turn_id_does_not_collapse_consecutive_stops():
+    payload = {"hook_event_name": "Stop", "session_id": "session"}
+    with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
+        assert qoder_event_adapter.main() == 0
+    first = post.call_args.args[0]["event_id"]
+    with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(qoder_event_adapter, "post", return_value=0) as post:
+        assert qoder_event_adapter.main() == 0
+    assert post.call_args.args[0]["event_id"] != first

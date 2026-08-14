@@ -4,11 +4,16 @@ import { ElMessage } from 'element-plus'
 import { monitorApi } from './api/monitor'
 import AppHeader from './components/layout/AppHeader.vue'
 import ChannelBindingDialog from './components/channels/ChannelBindingDialog.vue'
+import CredentialBindingDialog from './components/channels/CredentialBindingDialog.vue'
 import { useMonitor } from './composables/useMonitor'
+import { useTheme } from './composables/useTheme'
+import type { ChannelFormSchema } from './types/monitor'
 import ExtensionsView from './views/ExtensionsView.vue'
 import OverviewView from './views/OverviewView.vue'
+import SettingsView from './views/SettingsView.vue'
 
 const { stats, events, extensions, channels, loading, refreshing, error, refresh } = useMonitor()
+const { theme, toggleTheme } = useTheme()
 const activeView = ref('overview')
 const selectedExtension = ref('codex')
 const saving = ref(false)
@@ -16,7 +21,13 @@ const bindingDialogOpen = ref(false)
 const bindingChannel = ref('')
 const bindingQrUrl = ref('')
 const bindingMessage = ref('')
+const credentialDialogOpen = ref(false)
+const credentialChannel = ref('')
+const credentialMessage = ref('')
+const credentialHelpUrl = ref('')
+const credentialForm = ref<ChannelFormSchema | undefined>()
 const bindingLabel = computed(() => channels.value.find(item => item.id === bindingChannel.value)?.label || '消息通道')
+const credentialLabel = computed(() => channels.value.find(item => item.id === credentialChannel.value)?.label || '消息通道')
 
 const run = async (action: () => Promise<unknown>, success: string) => {
   saving.value = true
@@ -52,6 +63,14 @@ const bindChannel = async (channel: string) => {
       ElMessage.warning(result.message)
       return
     }
+    if (result.mode === 'credential') {
+      credentialChannel.value = channel
+      credentialMessage.value = result.message
+      credentialHelpUrl.value = result.helpUrl || ''
+      credentialForm.value = result.form
+      credentialDialogOpen.value = true
+      return
+    }
     bindingChannel.value = channel
     bindingQrUrl.value = result.qrUrl
     bindingMessage.value = result.message
@@ -59,6 +78,11 @@ const bindChannel = async (channel: string) => {
   } catch (reason) {
     ElMessage.error(reason instanceof Error ? reason.message : '无法启动绑定')
   }
+}
+
+const credentialCompleted = async () => {
+  ElMessage.success(`${credentialLabel.value}已绑定`)
+  await refresh(true)
 }
 
 const bindingCompleted = async () => {
@@ -75,7 +99,9 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
       :active-view="activeView"
       :event-count="stats.events"
       :refreshing="refreshing"
+      :theme="theme"
       @refresh="refresh()"
+      @toggle-theme="toggleTheme"
       @view="activeView = $event"
     />
     <main class="page-shell">
@@ -90,7 +116,7 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
           :event-count="stats.events"
         />
         <ExtensionsView
-          v-else
+          v-else-if="activeView === 'extensions'"
           :extensions="extensions"
           :channels="channels"
           :selected-key="selectedExtension"
@@ -100,6 +126,7 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
           @bind="bindChannel"
           @unbind="unbindChannel"
         />
+        <SettingsView v-else />
       </div>
     </main>
     <ChannelBindingDialog
@@ -109,6 +136,16 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
       :qr-url="bindingQrUrl"
       :message="bindingMessage"
       @bound="bindingCompleted"
+      @failed="ElMessage.error($event)"
+    />
+    <CredentialBindingDialog
+      v-model="credentialDialogOpen"
+      :channel="credentialChannel"
+      :label="credentialLabel"
+      :message="credentialMessage"
+      :help-url="credentialHelpUrl"
+      :form="credentialForm"
+      @bound="credentialCompleted"
       @failed="ElMessage.error($event)"
     />
   </div>

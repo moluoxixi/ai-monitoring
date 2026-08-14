@@ -3,12 +3,13 @@ export interface ChannelStatus {
   label: string;
   bound: boolean;
   error: boolean;
-  bindingMode: 'qr' | 'external' | 'none';
+  bindingMode: 'qr' | 'credential' | 'external' | 'none';
   message?: string;
 }
 
 export type BindingStartResult =
   | { mode: 'qr'; qrUrl: string; message: string }
+  | { mode: 'credential'; message: string; helpUrl?: string; form?: ChannelFormSchema }
   | { mode: 'external'; message: string };
 
 export interface BindingWaitResult {
@@ -24,7 +25,9 @@ export interface ChannelProvider {
   status(): Promise<ChannelStatus[]>;
   send(channel: string, title: string, body: string): Promise<void>;
   startBinding?(channel: string): Promise<BindingStartResult>;
+  bindCredential?(channel: string, credential: string | Record<string, unknown>): Promise<BindingWaitResult>;
   waitBinding?(channel: string): Promise<BindingWaitResult>;
   cancelBinding?(channel: string): Promise<void>;
   unbind?(channel: string): Promise<boolean>;
 }
+import type { ChannelFormSchema } from './apprise-platforms';

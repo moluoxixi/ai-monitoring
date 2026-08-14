@@ -24,7 +24,7 @@ Qoder CLI
   -> 通知中心 :8787 -> OpenClaw / Apprise
 ```
 
-Phoenix 负责 Projects、Sessions、Traces、Spans、模型/工具调用、延迟、Token、错误状态与筛选。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”和“扩展”两个视图：消息支持搜索、按 AI 扩展和状态筛选；扩展用于查看 Codex、Claude、Qoder 采集能力和绑定全局通知通道。点击消息统一打开本机 Phoenix。
+Phoenix 负责 Projects、Sessions、Traces、Spans、模型/工具调用、延迟、Token、错误状态与筛选。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”“扩展”和“设置”三个视图：消息支持搜索、按 AI 扩展和状态筛选；扩展用于查看 Codex、Claude、Qoder 采集能力和绑定全局通知通道；设置用于配置回答摘要的在线模型渠道。点击消息统一打开本机 Phoenix。
 
 通知中心采用标准 npm workspace：`apps/web` 是 Vue 3 + Vite + Element Plus，`apps/server` 是 NestJS。扩展、事件、数据库、通道 provider、投递 worker 和页面组件均为独立模块。Codex、Claude、Qoder 都是内置采集扩展；新 AI 软件需在代码中提供 hook、插件或协议适配器后才会出现在界面中。
 
@@ -68,16 +68,22 @@ QQ 可直接在通知中心绑定：
 
 QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，`scripts/patch-openclaw-weixin.ps1` 会在安装和启动时校验并应用兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
 
-## 其它通知通道
+## 通知通道
 
-在 `.env` 中设置 Apprise URL：
+通知中心内置 QQ、微信和 PushPlus，并通过已安装的 Apprise v1.12.0 支持企业微信机器人、钉钉机器人、飞书机器人、邮件 SMTP、Bark、Gotify、ntfy、通用 JSON Webhook、Telegram 和 Discord。打开 `8787` 的“扩展”视图即可按平台绑定；每个平台由后端 schema 下发所需字段，前端不会拼接或回显凭据。
+
+PushPlus Token 单独保存在 `data/pushplus-binding.json`，其它 Apprise 平台配置保存在 `data/apprise-channels.json`。文件只落在本机并使用受限权限与原子替换写入；通道状态、日志和 API 错误不会返回 Token、密码或完整通知 URL。绑定阶段使用 Apprise `--dry-run` 校验配置格式，不会发送测试消息；需要验证真实可达性时，使用扩展页的“测试通知”。
+
+所有已绑定通道同时生效：新事件会为每个通道创建独立 outbox 投递，一个平台失败不会阻塞其它平台。推荐在中国大陆使用企业微信、钉钉或飞书作为第二出口，并用邮件兜底；Telegram 和 Discord 需要可稳定访问对应服务的网络环境。
+
+`AIMONITOR_APPRISE_URLS` 只作为高级兼容入口，可继续挂载注册表之外的 Apprise URL：
 
 ```env
 # 企业微信群机器人
 AIMONITOR_APPRISE_URLS=wecombot://YOUR_WEBHOOK_KEY
 
-# PushPlus 微信消息
-AIMONITOR_APPRISE_URLS=pushplus://YOUR_TOKEN
+# 多个 URL 用英文逗号分隔
+AIMONITOR_APPRISE_URLS=SERVICE_URL_1,SERVICE_URL_2
 ```
 
 配置后可手工启动通知 relay：
@@ -86,7 +92,21 @@ AIMONITOR_APPRISE_URLS=pushplus://YOUR_TOKEN
 .\scripts\run-relay.ps1
 ```
 
-可配置多个 URL，以英文逗号分隔。PushPlus、企业微信群机器人以及 Apprise 的其它成熟通道可作为 OpenClaw 机器人之外的并行或备用出口。
+环境变量通道以只读兼容项运行，不能在页面解绑；新配置应优先使用页面绑定。
+
+## 回答摘要
+
+Codex 完成通知可同时显示任务摘要与回答摘要。打开 `8787` 的“设置”视图，按优先级配置 Groq、OpenRouter、Google Gemini，或一个 OpenAI-compatible 自定义渠道。内置渠道的配置弹窗提供官方 API Key 页面：
+
+- Groq: [https://console.groq.com/keys](https://console.groq.com/keys)
+- OpenRouter: [https://openrouter.ai/keys](https://openrouter.ai/keys)
+- Google Gemini: [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
+
+系统按页面顺序调用已启用渠道。某渠道返回 HTTP 429 后，本次请求立即尝试下一渠道，并将该渠道冷却到服务器本地次日零点；当天后续任务直接跳过它。鉴权、余额、容量、网络、超时和上游错误也会回退，但不会阻塞事件入库。事件先写入 SQLite，回答摘要在后台生成，完成后才释放投递；进程异常时，持久化的延迟投递会在到期后以任务摘要兜底发送。
+
+自定义渠道必须使用解析到公网地址的 HTTPS OpenAI-compatible Base URL；本机、局域网、链路本地地址和 HTTP 明文端点会被拒绝，请求也不跟随重定向。服务监听非本机地址时必须设置 `AIMONITOR_INGEST_TOKEN`，否则不能在页面写入模型凭据。
+
+API Key 存在 `data/answer-summary.json`，使用受限权限和原子替换写入，页面与状态 API 不回显。完整回答只在服务端内存中短暂用于摘要，输入限制为最后 24,000 字符；原文不会写入事件数据库或通知。免费模型和额度会随服务商变化，预填模型可在页面修改，本项目不承诺永久免费或不限量。
 
 若设置 `AIMONITOR_INGEST_TOKEN`，relay 的事件、查询、测试和重试 API 都要求同一个 Bearer token。已安装的 Claude/Codex 生产者会直接读取仓库 `.env`，不需要把 token 写进用户级 Claude/Codex 配置。
 

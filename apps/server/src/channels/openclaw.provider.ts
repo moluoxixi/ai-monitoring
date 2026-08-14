@@ -390,14 +390,22 @@ export class OpenClawProvider implements ChannelProvider {
   }
 
   private async sendDirectMessage(binding: Binding, message: string): Promise<void> {
-    const result = await this.runJson([
-      'message', 'send',
-      '--channel', binding.provider,
-      '--account', binding.account_id,
-      '--target', binding.target,
-      '--message', message,
-      '--json',
-    ], 60_000, [binding.target, binding.account_id]);
+    let result: Record<string, unknown>;
+    try {
+      result = await this.runJson([
+        'message', 'send',
+        '--channel', binding.provider,
+        '--account', binding.account_id,
+        '--target', binding.target,
+        '--message', message,
+        '--json',
+      ], 60_000, [binding.target, binding.account_id]);
+    } catch (error) {
+      if (error instanceof ProcessExecutionError && /sendMessage ret=-2 errmsg=prepare failed/i.test(error.message)) {
+        throw new Error('微信会话不可用，请在微信中给机器人发送任意一条消息后重试');
+      }
+      throw error;
+    }
     if (result.action !== 'send' || result.dryRun === true || typeof result.messageId !== 'string' || !result.messageId) {
       throw new Error('OpenClaw did not confirm direct message delivery');
     }

@@ -31,6 +31,10 @@ def summarize_task(value: Any) -> str:
     return summary
 
 
+def answer_source(value: Any) -> str:
+    return value[-24_000:] if isinstance(value, str) else ""
+
+
 def load_targets() -> list[list[str]]:
     if not TARGETS_PATH.exists():
         return []
@@ -38,10 +42,12 @@ def load_targets() -> list[list[str]]:
     return [[str(argument) for argument in target] for target in document.get("targets", []) if target]
 
 
-def relay_completion(payload: dict[str, Any]) -> None:
+def relay_completion(payload: dict[str, Any]) -> bool:
     thread_id = str(payload.get("thread-id") or payload.get("thread_id") or payload.get("threadId") or "unknown-thread")
     turn_id = str(payload.get("turn-id") or payload.get("turn_id") or payload.get("turnId") or "unknown-turn")
     task_summary = summarize_task(payload.get("input-messages") or payload.get("input_messages"))
+    if not task_summary:
+        return False
     event = {
         "source": "codex",
         "client": "codex-notify",
@@ -54,6 +60,11 @@ def relay_completion(payload: dict[str, Any]) -> None:
             "thread_id": thread_id,
             "turn_id": turn_id,
             **({"task_summary": task_summary} if task_summary else {}),
+            **(
+                {"answer_source": answer_source(payload.get("last-assistant-message"))}
+                if answer_source(payload.get("last-assistant-message"))
+                else {}
+            ),
         },
     }
     headers = {"Content-Type": "application/json"}
@@ -68,6 +79,7 @@ def relay_completion(payload: dict[str, Any]) -> None:
     )
     with urllib.request.urlopen(request, timeout=5):
         pass
+    return True
 
 
 def main() -> int:

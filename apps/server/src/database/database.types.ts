@@ -22,6 +22,8 @@ export interface EventRow {
   error_code: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
+  /** Only returned by the single-event detail projection. */
+  answer_text?: string;
 }
 
 export interface DeliveryRow {
@@ -33,6 +35,8 @@ export interface DeliveryRow {
   next_attempt_at: string;
   last_error: string | null;
   sent_at: string | null;
+  lease_token: string | null;
+  lease_expires_at: string | null;
   source: string;
   client: string;
   kind: string;

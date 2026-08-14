@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AnswerSummaryModule } from './answer-summary/answer-summary.module';
 import { AuthModule } from './auth/auth.module';
 import { ChannelsModule } from './channels/channels.module';
 import { ConfigModule } from './config/config.module';
@@ -14,6 +15,7 @@ import { ExtensionsModule } from './extensions/extensions.module';
   imports: [
     ConfigModule,
     AuthModule,
+    AnswerSummaryModule,
     ScheduleModule.forRoot(),
     ExtensionsModule,
     DatabaseModule,

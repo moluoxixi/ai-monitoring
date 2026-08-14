@@ -5,7 +5,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigService } from '../src/config/app-config.service';
 import type { ChannelsService } from '../src/channels/channels.service';
 import type { DatabaseService } from '../src/database/database.service';
-import { CodexSessionWatcherService, parseCodexSessionLine, summarizeTask } from '../src/events/codex-session-watcher.service';
+import type { EventIngestionService } from '../src/events/event-ingestion.service';
+import type { PhoenixTaskTraceService } from '../src/events/phoenix-task-trace.service';
+import {
+  CodexSessionWatcherService,
+  parseCodexSessionLine,
+  sanitizeFailureMessage,
+  summarizeTask,
+} from '../src/events/codex-session-watcher.service';
 
 const tempDirectories: string[] = [];
 
@@ -15,9 +22,14 @@ const terminalLine = (payload: Record<string, unknown>, timestamp = new Date().t
 const serviceFor = (directory: string) => {
   const insertEvent = vi.fn();
   const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
-  const database = { insertEvent } as unknown as DatabaseService;
   const channels = { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService;
-  return { service: new CodexSessionWatcherService(config, database, channels), insertEvent };
+  const ingestion = { ingest: insertEvent } as unknown as EventIngestionService;
+  const taskTraces = { record: vi.fn(() => ''), flush: vi.fn(async () => true) } as unknown as PhoenixTaskTraceService;
+  const database = {
+    getEventBySourceEventId: vi.fn(() => null),
+    setEventTraceId: vi.fn(() => true),
+  } as unknown as DatabaseService;
+  return { service: new CodexSessionWatcherService(config, channels, ingestion, taskTraces, database), insertEvent, taskTraces, database };
 };
 
 afterEach(() => {
@@ -38,11 +50,37 @@ describe('Codex session watcher parser', () => {
       metadata: { task_summary: '修复登录失败' },
     });
     expect(result.taskSummary).toBe('');
+    expect(result.answerSource).toBe('private response');
   });
 
   it('normalizes and truncates task summaries', () => {
     expect(summarizeTask(`  ${'a'.repeat(170)}  `)).toHaveLength(160);
     expect(summarizeTask('The following is the Codex agent history whose request action you are assessing.')).toBe('');
+  });
+
+  it('uses the last agent message for the current terminal event and clears it for the next turn', () => {
+    const answer = parseCodexSessionLine(
+      terminalLine({ type: 'agent_message', message: 'first final answer' }),
+      'session-1',
+      'first task',
+    );
+    const completed = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'turn-1' }),
+      answer.sessionId,
+      answer.taskSummary,
+      answer.isSubagent,
+      answer.answerSource,
+    );
+    const nextPrompt = parseCodexSessionLine(
+      terminalLine({ type: 'user_message', message: 'second task' }),
+      completed.sessionId,
+      completed.taskSummary,
+      completed.isSubagent,
+      '',
+    );
+
+    expect(completed.answerSource).toBe('first final answer');
+    expect(nextPrompt.answerSource).toBe('');
   });
 
   it('maps task_complete without retaining conversation content', () => {
@@ -60,18 +98,30 @@ describe('Codex session watcher parser', () => {
     expect(JSON.stringify(result.event)).not.toContain('private');
   });
 
-  it('maps task_complete errors without retaining the error message', () => {
+  it('maps task_complete errors with a redacted failure message', () => {
     const result = parseCodexSessionLine(terminalLine({
       type: 'task_complete', turn_id: 'turn-failed',
-      error: { message: 'private failure details', codex_error_info: 'server_overloaded' },
+      error: {
+        message: 'unexpected status 502; Authorization: Bearer private-token; token=private-query; path C:\\Users\\alice\\project',
+        codex_error_info: 'server_overloaded',
+      },
     }), 'session-failed');
 
     expect(result.event).toMatchObject({
       source_event_id: 'session-failed:turn-failed:failed',
       status: 'failed',
       error_code: 'server_overloaded',
+      metadata: {
+        failure_message: 'unexpected status 502; Authorization: <redacted>; token=<redacted>; path C:\\Users\\<user>\\project',
+      },
     });
-    expect(JSON.stringify(result.event)).not.toContain('private failure details');
+    expect(JSON.stringify(result.event)).not.toContain('private-token');
+    expect(JSON.stringify(result.event)).not.toContain('private-query');
+    expect(JSON.stringify(result.event)).not.toContain('alice');
+  });
+
+  it('limits stored failure details', () => {
+    expect(sanitizeFailureMessage('x'.repeat(3_000))).toHaveLength(2_000);
   });
 
   it('maps turn_aborted to interrupted', () => {
@@ -81,6 +131,22 @@ describe('Codex session watcher parser', () => {
     expect(result.event).toMatchObject({
       source_event_id: 'session-2:turn-2:interrupted', status: 'interrupted', kind: 'turn_aborted',
     });
+  });
+
+  it('ignores terminal events from internal subagent sessions', () => {
+    const meta = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: { session_id: 'subagent-session', source: { subagent: { thread_spawn: {} } } },
+    }));
+    const result = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'subagent-turn' }),
+      meta.sessionId,
+      meta.taskSummary,
+      meta.isSubagent,
+    );
+
+    expect(meta.isSubagent).toBe(true);
+    expect(result.event).toBeUndefined();
   });
 
   it('ignores malformed, non-terminal, and terminal lines without identifiers', () => {
@@ -105,6 +171,100 @@ describe('Codex session file synchronization', () => {
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       source_event_id: 'large-session:large-turn:completed',
     }), []);
+  });
+
+  it('recovers the active task summary before scanning the tail of a large file', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'large-summary.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'large-summary-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'user_message', message: '优化主题并发送消息摘要' })}\n`);
+    appendFileSync(path, `${'x'.repeat(1024)}\n`.repeat(1100));
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'large-summary-turn' })}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+
+    await service.syncFile(path);
+
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'large-summary-session:large-summary-turn:completed',
+      message: '提问：优化主题并发送消息摘要',
+      metadata: expect.objectContaining({ task_summary: '优化主题并发送消息摘要' }),
+    }), []);
+  });
+
+  it('stores the exported lifecycle trace id with the event', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'trace-id.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'trace-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({
+      type: 'task_complete', turn_id: 'trace-turn', started_at: 1_786_635_348, completed_at: 1_786_635_370,
+    })}\n`);
+    const { service, taskTraces, database } = serviceFor(directory);
+    vi.mocked(taskTraces.record).mockReturnValue('0123456789abcdef0123456789abcdef');
+    vi.mocked(taskTraces.flush).mockResolvedValue(true);
+
+    await service.syncFile(path);
+
+    expect(taskTraces.record).toHaveBeenCalledWith(
+      expect.objectContaining({ source_event_id: 'trace-session:trace-turn:completed' }),
+      1_786_635_348_000,
+      1_786_635_370_000,
+    );
+    await vi.waitFor(() => expect(database.setEventTraceId).toHaveBeenCalledWith(
+      'trace-session:trace-turn:completed',
+      '0123456789abcdef0123456789abcdef',
+    ));
+  });
+
+  it('waits for pending trace persistence during module shutdown', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'shutdown-trace.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'shutdown-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'shutdown-turn' })}\n`);
+    const { service, taskTraces, database } = serviceFor(directory);
+    vi.mocked(taskTraces.record).mockReturnValue('0123456789abcdef0123456789abcdef');
+    let releaseFlush!: () => void;
+    vi.mocked(taskTraces.flush).mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+      releaseFlush = () => resolve(true);
+    }));
+
+    await service.syncFile(path);
+    const shutdown = service.onModuleDestroy();
+    expect(database.setEventTraceId).not.toHaveBeenCalled();
+    releaseFlush();
+    await shutdown;
+
+    expect(database.setEventTraceId).toHaveBeenCalledWith(
+      'shutdown-session:shutdown-turn:completed',
+      '0123456789abcdef0123456789abcdef',
+    );
+  });
+
+  it('passes the last agent message to enrichment without storing it in the event', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'answer.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'answer-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'user_message', message: 'summarize this' })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'agent_message', message: 'private final answer' })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'answer-turn' })}\n`);
+    const insertEvent = vi.fn();
+    const ingest = vi.fn();
+    const service = new CodexSessionWatcherService(
+      { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService,
+      { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService,
+      { ingest } as unknown as EventIngestionService,
+      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
+      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
+    );
+
+    await service.syncFile(path);
+
+    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.not.objectContaining({ answer_source: expect.anything() }),
+    }), [], 'private final answer');
   });
 
   it('waits for a complete trailing JSON line before advancing the offset', async () => {
@@ -154,10 +314,13 @@ describe('Codex session file synchronization', () => {
     appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'backfill-turn' })}\n`);
     const insertEvent = vi.fn();
     const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
-    const database = { insertEvent } as unknown as DatabaseService;
     const deliveryChannels = vi.fn(() => ['openclaw-qq']);
     const channels = { deliveryChannels } as unknown as ChannelsService;
-    const service = new CodexSessionWatcherService(config, database, channels);
+    const service = new CodexSessionWatcherService(
+      config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
+      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
+      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
+    );
 
     await service.syncFile(path, false);
 
@@ -176,10 +339,13 @@ describe('Codex session file synchronization', () => {
     appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'live-turn' })}\n`);
     const insertEvent = vi.fn();
     const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
-    const database = { insertEvent } as unknown as DatabaseService;
     const deliveryChannels = vi.fn(() => ['openclaw-qq']);
     const channels = { deliveryChannels } as unknown as ChannelsService;
-    const service = new CodexSessionWatcherService(config, database, channels);
+    const service = new CodexSessionWatcherService(
+      config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
+      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
+      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
+    );
 
     await service.syncFile(path, false, backfillEnd);
     await service.syncFile(path, true);
@@ -196,9 +362,12 @@ describe('Codex session file synchronization', () => {
     writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'startup-session' } })}\n`);
     const insertEvent = vi.fn();
     const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
-    const database = { insertEvent } as unknown as DatabaseService;
     const channels = { deliveryChannels: vi.fn(() => ['openclaw-qq', 'openclaw-weixin']) } as unknown as ChannelsService;
-    const service = new CodexSessionWatcherService(config, database, channels);
+    const service = new CodexSessionWatcherService(
+      config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
+      { record: vi.fn(() => '') } as unknown as PhoenixTaskTraceService,
+      { getEventBySourceEventId: vi.fn(() => null) } as unknown as DatabaseService,
+    );
 
     service.onModuleInit();
     appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'startup-live-turn' })}\n`);

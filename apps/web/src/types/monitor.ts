@@ -1,5 +1,5 @@
 export type EventStatus = 'completed' | 'failed' | 'interrupted' | 'tool_failed' | 'unknown' | string
-export type DeliveryState = 'pending' | 'retrying' | 'sent' | 'dead' | 'not_configured' | string
+export type DeliveryState = 'pending' | 'claimed' | 'retrying' | 'sent' | 'dead' | 'not_configured' | string
 
 export interface MonitorEvent {
   id: number
@@ -13,6 +13,7 @@ export interface MonitorEvent {
   error_code: string | null
   metadata: Record<string, unknown>
   created_at: string
+  answer_text?: string
   deliveries?: Delivery[]
   delivery_state?: DeliveryState
   delivery_time?: string | null
@@ -23,12 +24,27 @@ export interface ChannelStatus {
   label: string
   bound: boolean
   error: boolean
-  bindingMode: 'qr' | 'external' | 'none'
+  bindingMode: 'qr' | 'credential' | 'external' | 'none'
   message?: string
+}
+
+export interface ChannelFormField {
+  key: string
+  label: string
+  type: 'text' | 'password' | 'url' | 'number' | 'select'
+  required: boolean
+  placeholder?: string
+  defaultValue?: string
+  options?: Array<{ label: string; value: string }>
+}
+
+export interface ChannelFormSchema {
+  fields: ChannelFormField[]
 }
 
 export type BindingStartResult =
   | { mode: 'qr'; qrUrl: string; message: string }
+  | { mode: 'credential'; message: string; helpUrl?: string; form?: ChannelFormSchema }
   | { mode: 'external'; message: string }
 
 export interface BindingWaitResult {
@@ -72,10 +88,39 @@ export interface MonitorStats {
   tool_failed: number
   unknown: number
   pending: number
+  claimed: number
   retrying: number
   sent: number
   dead: number
   [key: string]: number
+}
+
+export type AnswerSummaryProviderId = 'groq' | 'openrouter' | 'gemini' | 'custom'
+
+export interface AnswerSummaryProviderStatus {
+  id: AnswerSummaryProviderId
+  label: string
+  configured: boolean
+  enabled: boolean
+  model: string
+  baseUrl: string
+  apiKeyUrl?: string
+  custom: boolean
+  cooldownUntil?: string
+  lastError?: string
+}
+
+export interface AnswerSummaryStatus {
+  order: AnswerSummaryProviderId[]
+  providers: AnswerSummaryProviderStatus[]
+  configurationError?: string
+}
+
+export interface AnswerSummaryProviderUpdate {
+  apiKey?: string
+  model: string
+  baseUrl?: string
+  enabled: boolean
 }
 
 export interface Delivery {

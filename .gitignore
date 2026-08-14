@@ -8,6 +8,9 @@ apps/web/dist/
 data/*.db
 data/*.db-*
 data/openclaw-channels.json
+data/pushplus-binding.json
+data/apprise-channels.json
+data/answer-summary.json
 data/client-config.json
 data/openclaw-outbound/
 logs/

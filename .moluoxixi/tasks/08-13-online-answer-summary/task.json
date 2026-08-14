@@ -1,0 +1,38 @@
+{
+  "id": "online-answer-summary",
+  "name": "online-answer-summary",
+  "title": "在线模型回答摘要与渠道回退",
+  "description": "",
+  "status": "in_progress",
+  "complexity": {
+    "level": "complex",
+    "signals": [],
+    "reason": ""
+  },
+  "executionApproval": {
+    "mode": "auto",
+    "granted": true,
+    "source": "explicit_user",
+    "grantedAt": "2026-08-13T15:42:29.344126Z",
+    "reason": "用户明确要求开始实现"
+  },
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "wl",
+  "assignee": "wl",
+  "createdAt": "2026-08-13",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

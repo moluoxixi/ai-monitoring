@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { CircleCheck, CircleClose, Clock, Link, Warning } from '@element-plus/icons-vue'
+import { CircleCheck, CircleClose, Clock, Document, Warning } from '@element-plus/icons-vue'
 import type { ChannelStatus, ExtensionCard, MonitorEvent } from '../../types/monitor'
 import { deliveryLabel, formatTime, statusLabel, statusTone } from '../../utils/presentation'
 
 const props = defineProps<{ events: MonitorEvent[]; extensions: ExtensionCard[]; channels: ChannelStatus[] }>()
+const emit = defineEmits<{ select: [event: MonitorEvent] }>()
 
 const extensionFor = (client: string) => props.extensions.find((item) => item.key === client || item.aliases.includes(client.toLowerCase()))
-const phoenixUrl = (event: MonitorEvent) => extensionFor(event.client)?.detail_url || '#'
 const clientLabel = (event: MonitorEvent) => extensionFor(event.client)?.label || event.client
 const taskSummary = (event: MonitorEvent) => typeof event.metadata.task_summary === 'string'
   ? event.metadata.task_summary
@@ -23,13 +23,12 @@ const iconFor = (status: string) => status === 'completed' ? CircleCheck : statu
 
 <template>
   <div v-if="events.length" class="message-feed">
-    <a
+    <button
       v-for="event in events"
       :key="event.id"
       class="message-row"
-      :href="phoenixUrl(event)"
-      target="_blank"
-      rel="noopener noreferrer"
+      type="button"
+      @click="emit('select', event)"
     >
       <span class="event-icon" :class="statusTone(event.status)"><el-icon><component :is="iconFor(event.status)" /></el-icon></span>
       <span class="message-main">
@@ -42,8 +41,8 @@ const iconFor = (status: string) => status === 'completed' ? CircleCheck : statu
           <span v-if="event.error_code">{{ event.error_code }}</span>
         </span>
       </span>
-      <el-icon class="row-link"><Link /></el-icon>
-    </a>
+      <el-icon class="row-link"><Document /></el-icon>
+    </button>
   </div>
   <el-empty v-else description="还没有收到 AI 任务消息" :image-size="72" />
 </template>

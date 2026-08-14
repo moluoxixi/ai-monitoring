@@ -11,6 +11,11 @@ const safeEqual = (left: string, right: string): boolean => {
   return a.length === b.length && timingSafeEqual(a, b);
 };
 
+export const isLoopbackAddress = (value: string | undefined): boolean => {
+  const address = (value || '').toLowerCase().replace(/^::ffff:/, '');
+  return address === '127.0.0.1' || address === '::1';
+};
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -27,7 +32,8 @@ export class AuthGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const bearerOk = safeEqual(request.headers.authorization || '', `Bearer ${this.config.ingestToken}`);
     const cookie = this.readCookie(request.headers.cookie || '', 'ai_monitor_session');
-    const cookieOk = safeEqual(cookie, this.dashboardCookie());
+    const cookieOk = isLoopbackAddress(request.socket.remoteAddress)
+      && safeEqual(cookie, this.dashboardCookie());
     if (!bearerOk && !cookieOk) throw new UnauthorizedException('invalid ingest token');
 
     if (cookieOk && !['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {

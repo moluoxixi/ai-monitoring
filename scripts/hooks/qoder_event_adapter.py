@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import urllib.request
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,6 +19,22 @@ def _text(value: object, limit: int = 2_000) -> str:
     if isinstance(value, dict):
         value = value.get("message") or value.get("error") or value.get("type") or ""
     return str(value or "")[:limit]
+
+def _summary(item: dict) -> str:
+    return _text(item.get("task_summary") or item.get("user_prompt") or item.get("prompt"), 160)
+
+def _assistant_answer(item: dict) -> str:
+    for key in ("last_assistant_message", "last-assistant-message", "lastAssistantMessage", "assistant_message", "assistantMessage"):
+        value = item.get(key)
+        if isinstance(value, dict):
+            value = value.get("content") or value.get("text") or value.get("message")
+        if isinstance(value, str) and value.strip():
+            return value[-24_000:]
+    return ""
+
+def _turn_id(item: dict) -> str:
+    value = item.get("turn_id") or item.get("turnId") or item.get("tool_use_id") or item.get("timestamp")
+    return str(value) if value else f"hook-{uuid.uuid4().hex}"
 
 
 def main() -> int:
@@ -35,10 +52,12 @@ def main() -> int:
         return 0
     status = "completed" if name == "Stop" else "failed"
     session_id = str(item.get("session_id") or item.get("sessionId") or "unknown-session")
-    turn_id = str(item.get("turn_id") or item.get("turnId") or item.get("tool_use_id") or "unknown-turn")
+    turn_id = _turn_id(item)
     event_id = str(item.get("event_id") or item.get("eventId") or f"{session_id}:{name}:{turn_id}")
     error = _text(item.get("error") or item.get("error_details") or item.get("error_type"))
     message = _text(item.get("message") or error or item.get("stop_reason") or name)
+    task_summary = _summary(item)
+    assistant_answer = _assistant_answer(item) if status == "completed" else ""
     event = {
         "source": "qoder",
         "client": "qoder",
@@ -48,7 +67,12 @@ def main() -> int:
         "title": f"Qoder {name}",
         "message": message,
         "error_code": _text(item.get("error_type") or (error if status == "failed" else ""), 200) or None,
-        "metadata": {"session_id": session_id, "turn_id": turn_id},
+        "metadata": {
+            "session_id": session_id,
+            "turn_id": turn_id,
+            **({"task_summary": task_summary} if task_summary else {}),
+            **({"answer_source": assistant_answer} if assistant_answer else {}),
+        },
     }
     return post(event)
 

@@ -5,8 +5,10 @@ import { extname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
-import { DatabaseService } from '../database/database.service';
 import type { NormalizedEvent } from '../database/database.types';
+import { DatabaseService } from '../database/database.service';
+import { EventIngestionService } from './event-ingestion.service';
+import { PhoenixTaskTraceService } from './phoenix-task-trace.service';
 
 const INITIAL_TAIL_BYTES = 1024 * 1024;
 
@@ -15,22 +17,47 @@ interface FileState {
   offset: number;
   sessionId: string;
   taskSummary: string;
+  answerSource: string;
+  isSubagent: boolean;
 }
 
 interface ParsedTerminalEvent {
   event?: NormalizedEvent;
+  answerSource: string;
   sessionId: string;
   taskSummary: string;
+  isSubagent: boolean;
   timestampMs: number | null;
+  startedAtMs?: number | null;
+  completedAtMs?: number | null;
 }
 
 const recordValue = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
+const epochMs = (value: unknown): number | null => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return numeric < 10_000_000_000 ? numeric * 1_000 : numeric;
+};
+
 const safeErrorCode = (error: Record<string, unknown>): string => {
   const info = error.codex_error_info;
   const candidate = typeof info === 'string' ? info : Object.keys(recordValue(info))[0];
   return candidate && /^[a-z0-9_.:-]{1,100}$/i.test(candidate) ? candidate : 'codex_task_failed';
+};
+
+export const sanitizeFailureMessage = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return value
+    .replace(/\b(Authorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, '$1<redacted>')
+    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1<redacted>')
+    .replace(/\b((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,;]+/gi, '$1<redacted>')
+    .replace(/([?&](?:api[_-]?key|token|secret|password|access_token)=)[^&#\s]+/gi, '$1<redacted>')
+    .replace(/\bC:\\Users\\[^\\\s]+/gi, 'C:\\Users\\<user>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 2_000);
 };
 
 export const summarizeTask = (value: unknown): string => {
@@ -44,36 +71,60 @@ export const summarizeTask = (value: unknown): string => {
   return cleaned.length > 160 ? `${cleaned.slice(0, 157).trimEnd()}...` : cleaned;
 };
 
-export const parseCodexSessionLine = (line: string, currentSessionId = '', currentTaskSummary = ''): ParsedTerminalEvent => {
+export const parseCodexSessionLine = (
+  line: string,
+  currentSessionId = '',
+  currentTaskSummary = '',
+  currentIsSubagent = false,
+  currentAnswerSource = '',
+): ParsedTerminalEvent => {
   let raw: unknown;
   try {
     raw = JSON.parse(line);
   } catch {
-    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, timestampMs: null };
   }
   const item = recordValue(raw);
   const payload = recordValue(item.payload);
   if (item.type === 'session_meta') {
     const sessionId = String(payload.session_id || payload.id || currentSessionId);
-    return { sessionId, taskSummary: currentTaskSummary, timestampMs: null };
+    const isSubagent = Boolean(recordValue(payload.source).subagent);
+    return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent, timestampMs: null };
   }
-  if (item.type !== 'event_msg') return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
+  if (item.type !== 'event_msg') {
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, timestampMs: null };
+  }
   const kind = String(payload.type || '');
   if (kind === 'user_message') {
     return {
       sessionId: currentSessionId,
       taskSummary: summarizeTask(payload.message) || currentTaskSummary,
+      answerSource: '',
+      isSubagent: currentIsSubagent,
+      timestampMs: null,
+    };
+  }
+  if (kind === 'agent_message') {
+    const message = typeof payload.message === 'string' ? payload.message.slice(-24_000) : '';
+    return {
+      sessionId: currentSessionId,
+      taskSummary: currentTaskSummary,
+      answerSource: message || currentAnswerSource,
+      isSubagent: currentIsSubagent,
       timestampMs: null,
     };
   }
   if (!['task_complete', 'turn_aborted'].includes(kind)) {
-    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
+    return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, timestampMs: null };
   }
   const turnId = String(payload.turn_id || '');
-  if (!currentSessionId || !turnId) return { sessionId: currentSessionId, taskSummary: currentTaskSummary, timestampMs: null };
+  if (!currentSessionId || !turnId || currentIsSubagent) {
+    return { sessionId: currentSessionId, taskSummary: '', answerSource: '', isSubagent: currentIsSubagent, timestampMs: null };
+  }
 
   const error = recordValue(payload.error);
   const failed = kind === 'task_complete' && Object.keys(error).length > 0;
+  const failureMessage = failed ? sanitizeFailureMessage(error.message) : '';
   const status = failed ? 'failed' : kind === 'task_complete' ? 'completed' : 'interrupted';
   const labels = {
     completed: { title: 'Codex task completed', message: 'Codex turn completed' },
@@ -81,10 +132,17 @@ export const parseCodexSessionLine = (line: string, currentSessionId = '', curre
     interrupted: { title: 'Codex task interrupted', message: 'Codex turn was interrupted' },
   } as const;
   const timestamp = typeof item.timestamp === 'string' ? Date.parse(item.timestamp) : Number.NaN;
+  const terminalTimestamp = Number.isFinite(timestamp) ? timestamp : null;
   return {
     sessionId: currentSessionId,
     taskSummary: '',
-    timestampMs: Number.isFinite(timestamp) ? timestamp : null,
+    isSubagent: currentIsSubagent,
+    timestampMs: terminalTimestamp,
+    startedAtMs: epochMs(payload.started_at) || terminalTimestamp,
+    completedAtMs: epochMs(payload.completed_at) || terminalTimestamp,
+    answerSource: status === 'completed'
+      ? (typeof payload.last_agent_message === 'string' ? payload.last_agent_message.slice(-24_000) : currentAnswerSource)
+      : '',
     event: {
       source_event_id: `${currentSessionId}:${turnId}:${status}`,
       source: 'codex-session',
@@ -98,6 +156,7 @@ export const parseCodexSessionLine = (line: string, currentSessionId = '', curre
         thread_id: currentSessionId,
         turn_id: turnId,
         ...(currentTaskSummary ? { task_summary: currentTaskSummary } : {}),
+        ...(failureMessage ? { failure_message: failureMessage } : {}),
       },
     },
   };
@@ -109,13 +168,16 @@ const fileIdentity = (stats: Stats): string => `${stats.dev}:${stats.ino}:${stat
 export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(CodexSessionWatcherService.name);
   private readonly files = new Map<string, FileState>();
+  private readonly traceWrites = new Set<Promise<void>>();
   private watcher: FSWatcher | null = null;
   private queue = Promise.resolve();
 
   constructor(
     private readonly config: AppConfigService,
-    private readonly database: DatabaseService,
     private readonly channels: ChannelsService,
+    private readonly ingestion: EventIngestionService,
+    private readonly taskTraces: PhoenixTaskTraceService,
+    private readonly database: DatabaseService,
   ) {}
 
   onModuleInit(): void {
@@ -149,6 +211,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
   async onModuleDestroy(): Promise<void> {
     await this.watcher?.close();
     await this.queue;
+    await Promise.allSettled([...this.traceWrites]);
   }
 
   async syncFile(path: string, createDeliveries = true, readLimit?: number): Promise<void> {
@@ -160,15 +223,23 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     if (!state || state.identity !== identity || readableSize < state.offset) {
       const cutoff = Date.now() - this.config.codexBackfillMinutes * 60_000;
       if (stats.mtimeMs < cutoff) {
-        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '' });
+        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false });
         return;
       }
       state = {
         identity,
         offset: Math.max(0, readableSize - INITIAL_TAIL_BYTES),
-        sessionId: await this.readSessionId(path),
+        sessionId: '',
         taskSummary: '',
+        answerSource: '',
+        isSubagent: false,
       };
+      if (state.offset > 0) {
+        const context = await this.readContextBefore(path, state.offset);
+        state.sessionId = context.sessionId;
+        state.taskSummary = context.taskSummary;
+        state.answerSource = context.answerSource;
+      }
       this.files.set(path, state);
     }
     if (readableSize === state.offset) return;
@@ -185,13 +256,39 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     for (const rawLine of lines) {
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       if (!line) continue;
-      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary);
+      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary, state.isSubagent, state.answerSource);
       state.sessionId = parsed.sessionId;
       state.taskSummary = parsed.taskSummary;
+      state.answerSource = parsed.event ? '' : parsed.answerSource;
+      state.isSubagent = parsed.isSubagent;
       if (!parsed.event) continue;
       if (initial && parsed.timestampMs !== null && parsed.timestampMs < cutoff) continue;
+      const existing = this.database.getEventBySourceEventId(parsed.event.source_event_id);
+      const existingTraceId = typeof existing?.metadata.trace_id === 'string' ? existing.metadata.trace_id : '';
+      if (existingTraceId) {
+        parsed.event.metadata.trace_id = existingTraceId;
+      } else {
+        const traceId = this.taskTraces.record(
+          parsed.event,
+          parsed.startedAtMs || null,
+          parsed.completedAtMs || parsed.timestampMs,
+        );
+        if (traceId) {
+          const sourceEventId = parsed.event.source_event_id;
+          const traceWrite = this.taskTraces.flush()
+            .then((exported) => {
+              if (exported) this.database.setEventTraceId(sourceEventId, traceId);
+            })
+            .catch((error: unknown) => {
+              this.logger.warn(`Unable to persist Codex task trace: ${error instanceof Error ? error.message : String(error)}`);
+            });
+          this.traceWrites.add(traceWrite);
+          void traceWrite.then(() => this.traceWrites.delete(traceWrite));
+        }
+      }
       const channels = createDeliveries ? this.channels.deliveryChannels() : [];
-      this.database.insertEvent(parsed.event, channels);
+      if (parsed.answerSource) this.ingestion.ingest(parsed.event, channels, parsed.answerSource);
+      else this.ingestion.ingest(parsed.event, channels);
     }
     state.offset = start + lastNewline + 1;
   }
@@ -221,6 +318,28 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     try {
       for await (const line of lines) return parseCodexSessionLine(line).sessionId;
       return '';
+    } finally {
+      lines.close();
+      stream.destroy();
+    }
+  }
+
+  private async readContextBefore(path: string, end: number): Promise<Pick<FileState, 'sessionId' | 'taskSummary' | 'answerSource' | 'isSubagent'>> {
+    let sessionId = '';
+    let taskSummary = '';
+    let answerSource = '';
+    let isSubagent = false;
+    const stream = createReadStream(path, { encoding: 'utf8', end: end - 1 });
+    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    try {
+      for await (const line of lines) {
+        const parsed = parseCodexSessionLine(line, sessionId, taskSummary, isSubagent, answerSource);
+        sessionId = parsed.sessionId;
+        taskSummary = parsed.taskSummary;
+        answerSource = parsed.event ? '' : parsed.answerSource;
+        isSubagent = parsed.isSubagent;
+      }
+      return { sessionId, taskSummary, answerSource, isSubagent };
     } finally {
       lines.close();
       stream.destroy();

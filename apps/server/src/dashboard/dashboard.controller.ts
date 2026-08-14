@@ -1,9 +1,9 @@
-import { Controller, Get, Res } from '@nestjs/common';
-import type { Response } from 'express';
+import { Controller, Get, Req, Res } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Public } from '../auth/public.decorator';
-import { AuthGuard } from '../auth/auth.guard';
+import { AuthGuard, isLoopbackAddress } from '../auth/auth.guard';
 import { ChannelsService } from '../channels/channels.service';
 import { AppConfigService } from '../config/app-config.service';
 import { DatabaseService } from '../database/database.service';
@@ -19,13 +19,13 @@ export class DashboardController {
 
   @Get()
   @Public()
-  index(@Res() response: Response): void {
+  index(@Req() request: Request, @Res() response: Response): void {
     const indexPath = join(this.config.webDistPath, 'index.html');
     if (!existsSync(indexPath)) {
       response.status(503).type('text/plain').send('Dashboard is not built. Run npm run build.');
       return;
     }
-    if (this.config.ingestToken) {
+    if (this.config.ingestToken && isLoopbackAddress(request.socket.remoteAddress)) {
       response.cookie('ai_monitor_session', this.auth.dashboardCookie(), {
         httpOnly: true,
         sameSite: 'strict',

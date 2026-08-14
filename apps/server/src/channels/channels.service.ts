@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { AppriseProvider } from './apprise.provider';
 import type { BindingStartResult, BindingWaitResult, ChannelProvider, ChannelStatus } from './channel-provider';
 import { OpenClawProvider } from './openclaw.provider';
+import { PushPlusProvider } from './pushplus.provider';
 
 @Injectable()
 export class ChannelsService {
@@ -10,9 +11,10 @@ export class ChannelsService {
 
   constructor(
     apprise: AppriseProvider,
+    pushPlus: PushPlusProvider,
     openClaw: OpenClawProvider,
   ) {
-    this.providers = [apprise, openClaw];
+    this.providers = [pushPlus, openClaw, apprise];
   }
 
   availableChannels(): string[] {
@@ -48,6 +50,14 @@ export class ChannelsService {
     const provider = this.provider(channel);
     if (!provider.waitBinding) throw new BadRequestException('notification channel does not support account binding');
     const result = await provider.waitBinding(channel);
+    this.cache = null;
+    return result;
+  }
+
+  async bindCredential(channel: string, credential: string | Record<string, unknown>): Promise<BindingWaitResult> {
+    const provider = this.provider(channel);
+    if (!provider.bindCredential) throw new BadRequestException('notification channel does not support credential binding');
+    const result = await provider.bindCredential(channel, credential);
     this.cache = null;
     return result;
   }

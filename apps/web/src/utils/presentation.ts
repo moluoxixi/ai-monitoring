@@ -5,7 +5,7 @@ export const statusLabel = (status: EventStatus): string => ({
 }[status] || status)
 
 export const deliveryLabel = (state?: DeliveryState): string => ({
-  pending: '待发送', retrying: '重试中', sent: '已发送', dead: '发送失败', not_configured: '未配置通知',
+  pending: '待发送', claimed: '发送中', retrying: '重试中', sent: '已发送', dead: '发送失败', not_configured: '未配置通知',
 }[state || 'not_configured'] || state || '未配置通知')
 
 export const statusTone = (status: EventStatus): 'success' | 'danger' | 'warning' | 'info' => {

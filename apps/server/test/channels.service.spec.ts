@@ -3,6 +3,7 @@ import { ChannelsService } from '../src/channels/channels.service';
 import type { ChannelProvider } from '../src/channels/channel-provider';
 import type { AppriseProvider } from '../src/channels/apprise.provider';
 import type { OpenClawProvider } from '../src/channels/openclaw.provider';
+import type { PushPlusProvider } from '../src/channels/pushplus.provider';
 
 const provider = (ids: string[], available = ids): ChannelProvider => ({
   ids,
@@ -14,7 +15,8 @@ const provider = (ids: string[], available = ids): ChannelProvider => ({
 describe('ChannelsService', () => {
   it('routes every AI client to all currently available channels', () => {
     const service = new ChannelsService(
-      provider(['pushplus']) as unknown as AppriseProvider,
+      provider([]) as unknown as AppriseProvider,
+      provider(['pushplus']) as unknown as PushPlusProvider,
       provider(['openclaw-qq', 'openclaw-weixin'], ['openclaw-qq', 'openclaw-weixin']) as unknown as OpenClawProvider,
     );
 

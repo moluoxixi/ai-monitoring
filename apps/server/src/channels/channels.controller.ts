@@ -1,5 +1,6 @@
-import { Controller, Delete, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put } from '@nestjs/common';
 import { ChannelsService } from './channels.service';
+import { BindChannelDto } from './dto/bind-channel.dto';
 
 @Controller('api/channels')
 export class ChannelsController {
@@ -18,6 +19,11 @@ export class ChannelsController {
   @Post(':channel/binding/wait')
   async waitBinding(@Param('channel') channel: string) {
     return this.channels.waitBinding(channel);
+  }
+
+  @Put(':channel/binding')
+  async bindCredential(@Param('channel') channel: string, @Body() body: BindChannelDto) {
+    return this.channels.bindCredential(channel, body.values || body.credential || '');
   }
 
   @Delete(':channel/binding/session')

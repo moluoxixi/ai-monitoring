@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Search } from '@element-plus/icons-vue'
+import { monitorApi } from '../api/monitor'
 import type { ChannelStatus, ExtensionCard, MonitorEvent } from '../types/monitor'
 import MessageFeed from '../components/overview/MessageFeed.vue'
+import TaskDetailDialog from '../components/overview/TaskDetailDialog.vue'
 
 const props = defineProps<{ events: MonitorEvent[]; extensions: ExtensionCard[]; channels: ChannelStatus[]; eventCount: number }>()
 const query = ref('')
 const extension = ref('all')
 const status = ref('all')
+const selectedEvent = ref<MonitorEvent | null>(null)
+const selectEvent = async (event: MonitorEvent) => {
+  selectedEvent.value = event
+  try {
+    selectedEvent.value = await monitorApi.event(event.id)
+  } catch {
+    // The list item remains usable when the detail refresh races a server restart.
+  }
+}
 const statusOptions = [
   { value: 'all', label: '全部状态' },
   { value: 'completed', label: '已完成' },
@@ -53,6 +64,11 @@ const visibleEvents = computed(() => {
         {{ item.label }} <span>{{ extensionCount(item.key) }}</span>
       </button>
     </div>
-    <MessageFeed :events="visibleEvents" :extensions="extensions" :channels="channels" />
+    <MessageFeed :events="visibleEvents" :extensions="extensions" :channels="channels" @select="selectEvent" />
   </section>
+  <TaskDetailDialog
+    v-model="selectedEvent"
+    :extensions="extensions"
+    :channels="channels"
+  />
 </template>

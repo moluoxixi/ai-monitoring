@@ -4,7 +4,7 @@ import type { Delivery, ExtensionPayload, MonitorEvent, MonitorStats } from '../
 
 const emptyStats = (): MonitorStats => ({
   events: 0, completed: 0, failed: 0, interrupted: 0, tool_failed: 0,
-  unknown: 0, pending: 0, retrying: 0, sent: 0, dead: 0,
+  unknown: 0, pending: 0, claimed: 0, retrying: 0, sent: 0, dead: 0,
 })
 
 export const useMonitor = () => {
@@ -34,6 +34,7 @@ export const useMonitor = () => {
         const deliveries = deliveryByEvent.get(event.id) || []
         const deliveryState = deliveries.some(item => item.state === 'dead') ? 'dead'
           : deliveries.some(item => item.state === 'retrying') ? 'retrying'
+            : deliveries.some(item => item.state === 'claimed') ? 'claimed'
             : deliveries.some(item => item.state === 'pending') ? 'pending'
               : deliveries.length && deliveries.every(item => item.state === 'sent') ? 'sent' : 'not_configured'
         const deliveryTime = deliveries

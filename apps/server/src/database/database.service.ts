@@ -1,5 +1,6 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Database from 'better-sqlite3';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
@@ -40,32 +41,48 @@ export class DatabaseService implements OnModuleDestroy {
     this.db.close();
   }
 
-  insertEvent(event: NormalizedEvent, channels: string[]): [number, boolean] {
-    return this.db.transaction((): [number, boolean] => {
-      const existing = this.db.prepare('SELECT id, metadata_json FROM events WHERE source_event_id = ?').get(event.source_event_id) as { id: number; metadata_json: string } | undefined;
+  insertEvent(event: NormalizedEvent, channels: string[], deliveryDelayMs = 0): [number, boolean, number] {
+    return this.db.transaction((): [number, boolean, number] => {
+      const existing = this.db.prepare('SELECT id, message, metadata_json, answer_text FROM events WHERE source_event_id = ?').get(event.source_event_id) as { id: number; message: string; metadata_json: string; answer_text: string | null } | undefined;
       if (existing) {
         const currentMetadata = parseMetadata(existing.metadata_json);
-        const taskSummary = typeof event.metadata.task_summary === 'string' ? event.metadata.task_summary : '';
-        if (taskSummary && typeof currentMetadata.task_summary !== 'string') {
-          this.db.prepare('UPDATE events SET message = ?, metadata_json = ? WHERE id = ?').run(
-            event.message,
-            JSON.stringify({ ...currentMetadata, task_summary: taskSummary }),
+        const additions = ['task_summary', 'answer_summary', 'failure_message'].reduce<Record<string, string>>((result, key) => {
+          const value = event.metadata[key];
+          if (typeof value === 'string' && value && typeof currentMetadata[key] !== 'string') result[key] = value;
+          return result;
+        }, {});
+        const answerText = event.status === 'completed' && typeof event.metadata.answer_text === 'string'
+          ? event.metadata.answer_text.slice(-24_000)
+          : '';
+        const shouldAddAnswer = Boolean(answerText) && !existing.answer_text;
+        if (Object.keys(additions).length || shouldAddAnswer) {
+          const message = additions.task_summary ? event.message : undefined;
+          this.db.prepare(`
+            UPDATE events
+            SET message = ?, metadata_json = ?,
+                answer_text = CASE WHEN answer_text IS NULL OR answer_text = '' THEN ? ELSE answer_text END
+            WHERE id = ?
+          `).run(
+            message ?? existing.message,
+            JSON.stringify({ ...currentMetadata, ...additions }),
+            shouldAddAnswer ? answerText : null,
             existing.id,
           );
         }
         const delivery = this.db.prepare(
           'INSERT OR IGNORE INTO deliveries (event_id, channel, next_attempt_at) VALUES (?, ?, ?)',
         );
-        const createdAt = utcNow();
-        for (const channel of channels) delivery.run(existing.id, channel, createdAt);
-        return [existing.id, false];
+        const deliveryAt = new Date(Date.now() + Math.max(0, deliveryDelayMs)).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+        let deliveriesAdded = 0;
+        for (const channel of channels) deliveriesAdded += delivery.run(existing.id, channel, deliveryAt).changes;
+        return [existing.id, false, deliveriesAdded];
       }
 
       const createdAt = utcNow();
       const result = this.db.prepare(`
         INSERT INTO events
-          (source_event_id, source, client, kind, status, title, message, error_code, metadata_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (source_event_id, source, client, kind, status, title, message, error_code, metadata_json, answer_text, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         event.source_event_id,
         event.source,
@@ -75,16 +92,33 @@ export class DatabaseService implements OnModuleDestroy {
         event.title,
         event.message,
         event.error_code,
-        JSON.stringify(event.metadata),
+        JSON.stringify(Object.fromEntries(Object.entries(event.metadata).filter(([key]) => !['answer_source', 'answer_text'].includes(key)))),
+        event.status === 'completed' && typeof event.metadata.answer_text === 'string'
+          ? event.metadata.answer_text.slice(-24_000)
+          : null,
         createdAt,
       );
       const eventId = Number(result.lastInsertRowid);
       const delivery = this.db.prepare(
         'INSERT OR IGNORE INTO deliveries (event_id, channel, next_attempt_at) VALUES (?, ?, ?)',
       );
-      for (const channel of channels) delivery.run(eventId, channel, createdAt);
-      return [eventId, true];
+      const deliveryAt = new Date(Date.now() + Math.max(0, deliveryDelayMs)).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+      let deliveriesAdded = 0;
+      for (const channel of channels) deliveriesAdded += delivery.run(eventId, channel, deliveryAt).changes;
+      return [eventId, true, deliveriesAdded];
     })();
+  }
+
+  hasDeliveriesForEvent(eventId: number): boolean {
+    const row = this.db.prepare('SELECT 1 AS found FROM deliveries WHERE event_id = ? LIMIT 1').get(eventId) as
+      { found: number } | undefined;
+    return row?.found === 1;
+  }
+
+  releaseDeliveries(eventId: number): void {
+    this.db.prepare(`
+      UPDATE deliveries SET next_attempt_at = ? WHERE event_id = ? AND state = 'pending'
+    `).run(utcNow(), eventId);
   }
 
   listEvents(limit = 100, client?: string): EventRow[] {
@@ -99,6 +133,28 @@ export class DatabaseService implements OnModuleDestroy {
       rows = this.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT ?').all(safeLimit) as Record<string, unknown>[];
     }
     return rows.map((row) => this.eventRow(row));
+  }
+
+  getEvent(id: number, includeAnswerText = false): EventRow | null {
+    const row = this.db.prepare('SELECT * FROM events WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    return row ? this.eventRow(row, includeAnswerText) : null;
+  }
+
+  getEventBySourceEventId(sourceEventId: string): EventRow | null {
+    const row = this.db.prepare('SELECT * FROM events WHERE source_event_id = ?').get(sourceEventId) as Record<string, unknown> | undefined;
+    return row ? this.eventRow(row) : null;
+  }
+
+  setEventTraceId(sourceEventId: string, traceId: string): boolean {
+    const existing = this.db.prepare('SELECT id, metadata_json FROM events WHERE source_event_id = ?').get(sourceEventId) as
+      { id: number; metadata_json: string } | undefined;
+    if (!existing) return false;
+    const metadata = parseMetadata(existing.metadata_json);
+    this.db.prepare('UPDATE events SET metadata_json = ? WHERE id = ?').run(
+      JSON.stringify({ ...metadata, trace_id: traceId }),
+      existing.id,
+    );
+    return true;
   }
 
   countEvents(client: string): number {
@@ -126,6 +182,16 @@ export class DatabaseService implements OnModuleDestroy {
     return rows.map((row) => this.deliveryRow(row));
   }
 
+  getDeliveriesForEvent(eventId: number): DeliveryRow[] {
+    const rows = this.db.prepare(`
+      SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code, e.metadata_json
+      FROM deliveries d JOIN events e ON e.id = d.event_id
+      WHERE d.event_id = ?
+      ORDER BY d.id
+    `).all(eventId) as Record<string, unknown>[];
+    return rows.map((row) => this.deliveryRow(row));
+  }
+
   stats(): Record<string, number> {
     const result: Record<string, number> = {
       events: 0,
@@ -135,6 +201,7 @@ export class DatabaseService implements OnModuleDestroy {
       tool_failed: 0,
       unknown: 0,
       pending: 0,
+      claimed: 0,
       retrying: 0,
       sent: 0,
       dead: 0,
@@ -149,29 +216,77 @@ export class DatabaseService implements OnModuleDestroy {
     return result;
   }
 
-  dueDeliveries(now: string, limit = 20): DeliveryRow[] {
-    const rows = this.db.prepare(`
-      SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code, e.metadata_json
-      FROM deliveries d JOIN events e ON e.id = d.event_id
-      WHERE d.state IN ('pending', 'retrying') AND d.next_attempt_at <= ?
-      ORDER BY d.id LIMIT ?
-    `).all(now, this.limit(limit)) as Record<string, unknown>[];
-    return rows.map((row) => this.deliveryRow(row));
+  claimDueDeliveries(now: string, limit = 20, leaseMs = 60_000): DeliveryRow[] {
+    return this.db.transaction(() => {
+      const safeLimit = this.limit(limit);
+      const token = randomUUID();
+      const leaseExpiresAt = new Date(Date.parse(now) + Math.max(1_000, leaseMs))
+        .toISOString().replace(/\.\d{3}Z$/, '+00:00');
+      this.db.prepare(`
+        UPDATE deliveries
+        SET state = 'claimed', lease_token = ?, lease_expires_at = ?
+        WHERE id IN (
+          SELECT id FROM deliveries
+          WHERE ((state IN ('pending', 'retrying') AND next_attempt_at <= ?)
+             OR (state = 'claimed' AND lease_expires_at <= ?))
+          AND event_id = (
+            SELECT event_id FROM deliveries
+            WHERE (state IN ('pending', 'retrying') AND next_attempt_at <= ?)
+               OR (state = 'claimed' AND lease_expires_at <= ?)
+            ORDER BY id LIMIT 1
+          )
+          ORDER BY id LIMIT ?
+        )
+        AND ((state IN ('pending', 'retrying') AND next_attempt_at <= ?)
+          OR (state = 'claimed' AND lease_expires_at <= ?))
+      `).run(token, leaseExpiresAt, now, now, now, now, safeLimit, now, now);
+      const rows = this.db.prepare(`
+        SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code, e.metadata_json
+        FROM deliveries d JOIN events e ON e.id = d.event_id
+        WHERE d.state = 'claimed' AND d.lease_token = ?
+        ORDER BY d.id
+      `).all(token) as Record<string, unknown>[];
+      return rows.map((row) => this.deliveryRow(row));
+    })();
   }
 
-  markDelivery(
+  renewClaimedDelivery(id: number, leaseToken: string, now: string, leaseMs = 60_000): boolean {
+    const leaseExpiresAt = new Date(Date.parse(now) + Math.max(1_000, leaseMs))
+      .toISOString().replace(/\.\d{3}Z$/, '+00:00');
+    const result = this.db.prepare(`
+      UPDATE deliveries SET lease_expires_at = ?
+      WHERE id = ? AND state = 'claimed' AND lease_token = ?
+    `).run(leaseExpiresAt, id, leaseToken);
+    return result.changes > 0;
+  }
+
+  markClaimedDelivery(
     id: number,
+    leaseToken: string,
     update: { state: string; attempts: number; nextAttemptAt: string; lastError?: string | null; sentAt?: string | null },
-  ): void {
-    this.db.prepare(`
-      UPDATE deliveries SET state = ?, attempts = ?, next_attempt_at = ?, last_error = ?, sent_at = ? WHERE id = ?
-    `).run(update.state, update.attempts, update.nextAttemptAt, update.lastError ?? null, update.sentAt ?? null, id);
+  ): boolean {
+    const result = this.db.prepare(`
+      UPDATE deliveries
+      SET state = ?, attempts = ?, next_attempt_at = ?, last_error = ?, sent_at = ?,
+          lease_token = NULL, lease_expires_at = NULL
+      WHERE id = ? AND state = 'claimed' AND lease_token = ?
+    `).run(
+      update.state,
+      update.attempts,
+      update.nextAttemptAt,
+      update.lastError ?? null,
+      update.sentAt ?? null,
+      id,
+      leaseToken,
+    );
+    return result.changes > 0;
   }
 
   retryDelivery(id: number): boolean {
     const result = this.db.prepare(`
-      UPDATE deliveries SET state = 'pending', attempts = 0, next_attempt_at = ?, last_error = NULL, sent_at = NULL
-      WHERE id = ?
+      UPDATE deliveries SET state = 'pending', attempts = 0, next_attempt_at = ?, last_error = NULL, sent_at = NULL,
+        lease_token = NULL, lease_expires_at = NULL
+      WHERE id = ? AND state != 'claimed'
     `).run(utcNow(), id);
     return result.changes > 0;
   }
@@ -189,6 +304,7 @@ export class DatabaseService implements OnModuleDestroy {
         message TEXT NOT NULL,
         error_code TEXT,
         metadata_json TEXT NOT NULL DEFAULT '{}',
+        answer_text TEXT,
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
@@ -202,15 +318,31 @@ export class DatabaseService implements OnModuleDestroy {
         next_attempt_at TEXT NOT NULL,
         last_error TEXT,
         sent_at TEXT,
+        lease_token TEXT,
+        lease_expires_at TEXT,
         UNIQUE(event_id, channel)
       );
       CREATE INDEX IF NOT EXISTS idx_deliveries_due ON deliveries(state, next_attempt_at);
     `);
+    const eventColumns = new Set(
+      (this.db.pragma('table_info(events)') as Array<{ name: string }>).map((column) => column.name),
+    );
+    if (!eventColumns.has('answer_text')) this.db.exec('ALTER TABLE events ADD COLUMN answer_text TEXT');
+    const deliveryColumns = new Set(
+      (this.db.pragma('table_info(deliveries)') as Array<{ name: string }>).map((column) => column.name),
+    );
+    if (!deliveryColumns.has('lease_token')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_token TEXT');
+    if (!deliveryColumns.has('lease_expires_at')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_expires_at TEXT');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_deliveries_lease ON deliveries(state, lease_expires_at)');
   }
 
-  private eventRow(row: Record<string, unknown>): EventRow {
-    const { metadata_json, ...rest } = row;
-    return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as EventRow;
+  private eventRow(row: Record<string, unknown>, includeAnswerText = false): EventRow {
+    const { metadata_json, answer_text, ...rest } = row;
+    return {
+      ...rest,
+      ...(includeAnswerText && typeof answer_text === 'string' && answer_text ? { answer_text } : {}),
+      metadata: parseMetadata(metadata_json),
+    } as unknown as EventRow;
   }
 
   private deliveryRow(row: Record<string, unknown>): DeliveryRow {

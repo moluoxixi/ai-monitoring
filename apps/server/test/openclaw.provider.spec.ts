@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { OPENCLAW_QQ, OPENCLAW_WEIXIN, OpenClawProvider } from '../src/channels/openclaw.provider';
+import { ProcessExecutionError } from '../src/channels/process-runner.service';
 import type { ProcessRunnerService } from '../src/channels/process-runner.service';
 
 let connectorCallbacks: {
@@ -192,5 +193,16 @@ describe('OpenClawProvider binding', () => {
     run.mockResolvedValueOnce(JSON.stringify({ action: 'send', channel: OPENCLAW_WEIXIN, dryRun: false }));
 
     await expect(provider.send(OPENCLAW_WEIXIN, 'title', 'body')).rejects.toThrow('did not confirm');
+  });
+
+  it('explains when Weixin rejects an expired conversation context', async () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_WEIXIN]: { provider: OPENCLAW_WEIXIN, target: 'self@im.wechat', account_id: 'weixin-account' } },
+    }));
+    run.mockRejectedValueOnce(new ProcessExecutionError('OutboundDeliveryError: sendMessage ret=-2 errmsg=prepare failed'));
+
+    await expect(provider.send(OPENCLAW_WEIXIN, 'title', 'body'))
+      .rejects.toThrow('微信会话不可用，请在微信中给机器人发送任意一条消息后重试');
   });
 });
