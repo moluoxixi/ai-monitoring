@@ -38,17 +38,17 @@ const safeErrorCode = (error: Record<string, unknown>): string => {
   return candidate && /^[a-z0-9_.:-]{1,100}$/i.test(candidate) ? candidate : 'codex_task_failed';
 };
 
-export const sanitizeFailureMessage = (value: unknown): string => {
+export const sanitizeFailureMessage = (value: unknown, preserveAuthorizationScheme = false): string => {
   if (typeof value !== 'string') return '';
   const cleaned = value
-    .replace(/\b(Authorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, '$1<redacted>')
+    .replace(/\b(Authorization\s*[:=]\s*)(Bearer\s+)?[^\s,;]+/gi, (_match, prefix: string, scheme: string | undefined) => `${prefix}${preserveAuthorizationScheme ? (scheme || '') : ''}<redacted>`)
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1<redacted>')
     .replace(/\b((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,;]+/gi, '$1<redacted>')
     .replace(/([?&](?:api[_-]?key|token|secret|password|access_token)=)[^&#\s]+/gi, '$1<redacted>')
     .replace(/\bC:\\Users\\[^\\\s]+/gi, 'C:\\Users\\<user>')
     .replace(/\s+/g, ' ')
     .trim();
-  return truncateText(cleaned, 2_000);
+  return truncateText(cleaned, 24_000);
 };
 
 export const summarizeTask = (value: unknown): string => {
@@ -59,7 +59,7 @@ export const summarizeTask = (value: unknown): string => {
     .replace(/\s+/g, ' ')
     .trim();
   if (/^The following is the Codex agent history whose request action you are assessing\./i.test(cleaned)) return '';
-  return truncateText(cleaned, 160);
+  return truncateText(cleaned, 2_000);
 };
 
 export const parseCodexSessionLine = (
@@ -135,7 +135,7 @@ export const parseCodexSessionLine = (
     event: {
       source_event_id: `${currentSessionId}:${turnId}:${status}`,
       source: 'codex-session',
-      client: 'codex',
+      client: 'codex-desktop',
       kind,
       status,
       title: labels[status].title,
@@ -159,6 +159,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
   private readonly files = new Map<string, FileState>();
   private watcher: FSWatcher | null = null;
   private queue = Promise.resolve();
+  private discoveryTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly config: AppConfigService,
@@ -192,9 +193,17 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     this.watcher.on('error', (error) => {
       this.logger.error(`Codex session watcher failed: ${error instanceof Error ? error.message : String(error)}`);
     });
+    this.discoveryTimer = setInterval(() => {
+      for (const path of this.captureStartupFiles(this.config.codexSessionsPath).keys()) {
+        if (this.files.has(path)) continue;
+        this.files.set(path, { identity: '', offset: 0, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false });
+        this.enqueue(path, true);
+      }
+    }, 2_000);
   }
 
   async onModuleDestroy(): Promise<void> {
+    if (this.discoveryTimer) clearInterval(this.discoveryTimer);
     await this.watcher?.close();
     await this.queue;
   }

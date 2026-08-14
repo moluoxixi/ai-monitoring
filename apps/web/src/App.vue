@@ -11,10 +11,10 @@ import type { ChannelFormSchema } from './types/monitor'
 import ExtensionsView from './views/ExtensionsView.vue'
 import OverviewView from './views/OverviewView.vue'
 
-const { stats, events, extensions, channels, loading, refreshing, error, refresh } = useMonitor()
+const { stats, events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh } = useMonitor()
 const { theme, toggleTheme } = useTheme()
 const activeView = ref('overview')
-const selectedExtension = ref('codex')
+const selectedExtension = ref('codex-cli')
 const saving = ref(false)
 const bindingDialogOpen = ref(false)
 const bindingChannel = ref('')
@@ -90,6 +90,11 @@ const bindingCompleted = async () => {
 }
 
 const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel), '通道已解绑')
+const scanExtensions = () => run(() => monitorApi.scanExtensions(), '平台扫描完成')
+const saveExtensionPreferences = (keys: string[]) => run(() => monitorApi.saveExtensionPreferences(keys), '显示平台已保存')
+const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: number }) => run(
+  () => monitorApi.saveNotificationSettings(settings), '通知长度已保存',
+)
 </script>
 
 <template>
@@ -120,10 +125,17 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
           :channels="channels"
           :selected-key="selectedExtension"
           :saving="saving"
+          :scan-scope="extensionPayload.scanScope"
+          :scanned-at="extensionPayload.scannedAt"
+          :visible-extensions="extensionPayload.visibleExtensions"
+          :notification-settings="notificationSettings"
           @select="selectedExtension = $event"
           @test="testNotification"
           @bind="bindChannel"
           @unbind="unbindChannel"
+          @scan="scanExtensions"
+          @save-preferences="saveExtensionPreferences"
+          @save-notification-settings="saveNotificationSettings"
         />
       </div>
     </main>

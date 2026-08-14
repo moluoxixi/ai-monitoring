@@ -1,13 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import { DatabaseService, utcNow } from '../database/database.service';
 import type { DeliveryRow } from '../database/database.types';
 import { cleanAnswerText, truncateText } from '../events/event-text';
-
-const TASK_LIMIT = 100;
-const RESULT_LIMIT = 2_000;
+import { UserSettingsService } from '../settings/user-settings.service';
+import { DEFAULT_RESULT_LIMIT, DEFAULT_TASK_LIMIT, type NotificationSettings } from '../settings/user-settings.types';
 const LEASE_MS = 5 * 60_000;
 const LEASE_RENEWAL_MS = 60_000;
 
@@ -24,12 +23,21 @@ const cleanText = (value: unknown): string => {
   return cleaned;
 };
 
-const clientLabel = (client: string): string => ({ codex: 'Codex', claude: 'Claude', qoder: 'Qoder' })[client] || client;
+const clientLabel = (client: string): string => ({
+  'codex-cli': 'Codex CLI', 'codex-desktop': 'Codex Desktop',
+  'claude-cli': 'Claude CLI', 'claude-desktop': 'Claude Desktop',
+  'qoder-cli': 'Qoder CLI', 'qoder-desktop': 'Qoder Desktop', 'qoder-quest': 'Qoder Quest',
+  'hermes-cli': 'Hermes CLI', 'hermes-desktop': 'Hermes Desktop',
+  'cursor-cli': 'Cursor CLI', 'cursor-desktop': 'Cursor Desktop',
+}[client] || client);
 const statusLabel = (status: string): string => ({
   completed: '任务已完成', failed: '任务失败', interrupted: '任务已中断', tool_failed: '调用失败', unknown: '任务状态未知',
 })[status] || status;
 
-export const notificationContent = (row: DeliveryRow): { title: string; body: string } => {
+export const notificationContent = (
+  row: DeliveryRow,
+  limits: NotificationSettings = { taskLimit: DEFAULT_TASK_LIMIT, resultLimit: DEFAULT_RESULT_LIMIT },
+): { title: string; body: string } => {
   const taskSummary = cleanText(row.metadata?.task_summary);
   const answer = typeof row.answer_text === 'string'
     ? cleanAnswerText(row.answer_text).replace(/\n{3,}/g, '\n\n')
@@ -45,8 +53,8 @@ export const notificationContent = (row: DeliveryRow): { title: string; body: st
   return {
     title: `(${clientLabel(row.client)}) ${statusLabel(row.status)}`,
     body: failed
-      ? `提问：${truncateText(summary || '未提供', TASK_LIMIT)}\n失败消息：${truncateText(failureMessage, RESULT_LIMIT)}`
-      : `提问：${truncateText(summary || '未提供', TASK_LIMIT)}\n任务结果：${truncateText(answer || '未采集到最终回答', RESULT_LIMIT)}`,
+      ? `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n失败消息：${truncateText(failureMessage, limits.resultLimit)}`
+      : `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n任务结果：${truncateText(answer || '未采集到最终回答', limits.resultLimit)}`,
   };
 };
 
@@ -59,6 +67,7 @@ export class DeliveryWorkerService {
     private readonly database: DatabaseService,
     private readonly channels: ChannelsService,
     private readonly config: AppConfigService,
+    @Optional() private readonly settings?: UserSettingsService,
   ) {}
 
   @Interval(1500)
@@ -95,7 +104,7 @@ export class DeliveryWorkerService {
     }, LEASE_RENEWAL_MS);
     renewal.unref();
     try {
-      const notification = notificationContent(row);
+      const notification = notificationContent(row, this.settings?.notification());
       await this.channels.send(row.channel, notification.title, notification.body);
       const now = utcNow();
       this.database.markClaimedDelivery(row.id, row.lease_token, {

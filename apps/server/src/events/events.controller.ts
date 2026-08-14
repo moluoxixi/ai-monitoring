@@ -1,4 +1,4 @@
-import { Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query } from '@nestjs/common';
 import { ChannelsService } from '../channels/channels.service';
 import { DatabaseService } from '../database/database.service';
 import { ExtensionsService } from '../extensions/extensions.service';
@@ -40,15 +40,23 @@ export class EventsController {
   @Post('events')
   ingest(@Body() body: CreateEventDto) {
     const event = normalizeEvent(body);
-    const resolved = this.extensions.resolve(event.client);
-    if (resolved !== 'other') event.client = resolved;
+    const metadataRuntime = typeof event.metadata.runtime === 'string' ? event.metadata.runtime : undefined;
+    const resolved = this.extensions.resolve(event.client, body.runtime || metadataRuntime);
+    if (resolved === 'other') {
+      const migrated = this.extensions.legacyMigration(event.client);
+      if (migrated) {
+        throw new BadRequestException(`client key "${event.client}" was migrated to "${migrated}"; send the canonical key`);
+      }
+    } else {
+      event.client = resolved;
+    }
     const [eventId, inserted] = this.ingestion.ingest(event, this.channels.deliveryChannels());
     return { ok: true, event_id: eventId, inserted };
   }
 
   @Post('test-notification')
   testNotification(@Body() body: { client?: string }) {
-    const client = body.client && this.extensions.resolve(body.client) !== 'other' ? this.extensions.resolve(body.client) : 'codex';
+    const client = body.client && this.extensions.resolve(body.client) !== 'other' ? this.extensions.resolve(body.client) : 'codex-cli';
     const event = normalizeEvent({
       source: 'dashboard',
       client,

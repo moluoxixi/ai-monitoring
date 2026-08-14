@@ -17,7 +17,7 @@ const delivery = (id: number, channel: string, eventId = 42): DeliveryRow => ({
   lease_token: `lease-${id}`,
   lease_expires_at: '2026-08-13T00:01:00+00:00',
   source: 'dashboard',
-  client: 'codex',
+  client: 'codex-cli',
   kind: 'test_notification',
   status: 'completed',
   title: 'Test notification',
@@ -27,6 +27,7 @@ const delivery = (id: number, channel: string, eventId = 42): DeliveryRow => ({
 const serviceFor = (
   send: ChannelsService['send'],
   rows = [delivery(1, 'openclaw-qq'), delivery(2, 'openclaw-weixin')],
+  settings?: { notification: () => { taskLimit: number; resultLimit: number } },
 ) => {
   const markDelivery = vi.fn();
   const database = {
@@ -36,7 +37,7 @@ const serviceFor = (
   } as unknown as DatabaseService;
   const channels = { send } as unknown as ChannelsService;
   const config = { retryBaseSeconds: 5, retryMaxSeconds: 300 } as AppConfigService;
-  return { service: new DeliveryWorkerService(database, channels, config), markDelivery };
+  return { service: new DeliveryWorkerService(database, channels, config, settings as never), markDelivery };
 };
 
 describe('DeliveryWorkerService', () => {
@@ -47,7 +48,7 @@ describe('DeliveryWorkerService', () => {
       answer_text: 'final result ' + 'y'.repeat(2_100),
     });
 
-    expect(content.title).toBe('(Codex) 任务已完成');
+    expect(content.title).toBe('(Codex CLI) 任务已完成');
     const [question, result] = content.body.split('\n');
     expect(question).toMatch(/^提问：fix the failing build/);
     expect(Array.from(question!.replace('提问：', ''))).toHaveLength(100);
@@ -68,6 +69,35 @@ describe('DeliveryWorkerService', () => {
     expect(Array.from(result!.replace('任务结果：', ''))).toHaveLength(2_000);
   });
 
+  it('uses user-configured notification limits immediately', () => {
+    const content = notificationContent({
+      ...delivery(1, 'openclaw-qq'),
+      metadata: { task_summary: '😀'.repeat(12) },
+      answer_text: '🚀'.repeat(32),
+    }, { taskLimit: 10, resultLimit: 24 });
+
+    const [question, result] = content.body.split('\n');
+    expect(Array.from(question!.replace('提问：', ''))).toHaveLength(10);
+    expect(Array.from(result!.replace('任务结果：', ''))).toHaveLength(24);
+  });
+
+  it('reads the current settings when a delivery starts', async () => {
+    const sent: string[] = [];
+    const send = vi.fn((_channel: string, _title: string, body: string) => {
+      sent.push(body);
+      return Promise.resolve();
+    });
+    const settings = { notification: vi.fn(() => ({ taskLimit: 4, resultLimit: 8 })) };
+    const { service } = serviceFor(send, [
+      { ...delivery(1, 'openclaw-qq'), metadata: { task_summary: 'abcdefgh' }, answer_text: '1234567890' },
+    ], settings);
+
+    await service.processOnce();
+
+    expect(settings.notification).toHaveBeenCalled();
+    expect(sent[0]).toBe('提问：a...\n任务结果：12345...');
+  });
+
   it('includes the question and failure message for failed tasks', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
@@ -77,7 +107,7 @@ describe('DeliveryWorkerService', () => {
       metadata: { task_summary: 'fix the failing build' },
     });
 
-    expect(content.title).toBe('(Codex) 任务失败');
+    expect(content.title).toBe('(Codex CLI) 任务失败');
     expect(content.body).toMatch(/^提问：fix the failing build\n失败消息：API request failed/);
     expect(Array.from(content.body.split('\n')[0]!.replace('提问：', '')).length).toBeLessThanOrEqual(100);
     expect(Array.from(content.body.split('\n')[1]!.replace('失败消息：', '')).length).toBeLessThanOrEqual(2_000);
@@ -92,7 +122,7 @@ describe('DeliveryWorkerService', () => {
     });
 
     expect(content).toEqual({
-      title: '(Codex) 任务已完成',
+      title: '(Codex CLI) 任务已完成',
       body: '提问：优化通知内容\n任务结果：已加入在线通知。\n保留换行和代码：`npm test`',
     });
   });
@@ -110,7 +140,7 @@ describe('DeliveryWorkerService', () => {
     });
 
     expect(content).toEqual({
-      title: '(Codex) 任务失败',
+      title: '(Codex CLI) 任务失败',
       body: '提问：fix the failing build\n失败消息：unexpected status 502 Bad Gateway: local proxy failed',
     });
   });
@@ -124,7 +154,7 @@ describe('DeliveryWorkerService', () => {
       metadata: { task_summary: 'fix the failing build' },
     });
 
-    expect(content).toEqual({ title: '(Codex) 任务失败', body: '提问：fix the failing build\n失败消息：server_overloaded' });
+    expect(content).toEqual({ title: '(Codex CLI) 任务失败', body: '提问：fix the failing build\n失败消息：server_overloaded' });
   });
 
   it('filters internal Codex review prompts from notification summaries', () => {
@@ -133,7 +163,7 @@ describe('DeliveryWorkerService', () => {
       message: 'The following is the Codex agent history whose request action you are assessing.',
     });
 
-    expect(content.title).toBe('(Codex) 任务已完成');
+    expect(content.title).toBe('(Codex CLI) 任务已完成');
     expect(content.body).toBe('提问：Test notification\n任务结果：未采集到最终回答');
     expect(content.body).not.toContain('Codex agent history');
   });
@@ -146,7 +176,7 @@ describe('DeliveryWorkerService', () => {
     });
 
     expect(content).toEqual({
-      title: '(Codex) 任务已完成',
+      title: '(Codex CLI) 任务已完成',
       body: '提问：未提供\n任务结果：未采集到最终回答',
     });
   });

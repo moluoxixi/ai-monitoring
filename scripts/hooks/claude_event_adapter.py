@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.request
 import uuid
 from pathlib import Path
@@ -14,13 +15,13 @@ RELAY_EVENTS = {"Stop", "StopFailure", "PostToolUseFailure"}
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
 
 
-def _text(value: object, limit: int = 2_000) -> str:
+def _text(value: object, limit: int = 24_000) -> str:
     if isinstance(value, dict):
         value = value.get("message") or value.get("type") or ""
     return str(value or "")[:limit]
 
 def _summary(item: dict) -> str:
-    return _text(item.get("task_summary") or item.get("user_prompt") or item.get("prompt"), 160)
+    return _text(item.get("task_summary") or item.get("user_prompt") or item.get("prompt"), 2_000)
 
 def _content_text(value: object) -> str:
     if isinstance(value, str):
@@ -36,12 +37,33 @@ def _content_text(value: object) -> str:
                 return text
     return ""
 
-def _transcript_answer(value: object) -> str:
+
+def _transcript_path(item: dict) -> Path | None:
+    value = item.get("transcript_path") or item.get("transcriptPath")
+    if isinstance(value, str):
+        path = Path(value)
+        if path.suffix.lower() == ".jsonl" and path.is_file():
+            return path
+    session_id = str(item.get("session_id") or item.get("agent_id") or "").strip()
+    if not session_id or any(character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_." for character in session_id):
+        return None
+    projects_root = Path.home() / ".claude" / "projects"
+    try:
+        for project in projects_root.iterdir():
+            candidate = project / f"{session_id}.jsonl"
+            if project.is_dir() and candidate.is_file():
+                return candidate
+    except OSError:
+        return None
+    return None
+
+def _transcript_context(value: object) -> tuple[str, str]:
     if not isinstance(value, str):
-        return ""
+        return "", ""
     path = Path(value)
     if path.suffix.lower() != ".jsonl" or not path.is_file():
-        return ""
+        return "", ""
+    summary = ""
     answer = ""
     try:
         with path.open("r", encoding="utf-8") as transcript:
@@ -50,7 +72,22 @@ def _transcript_answer(value: object) -> str:
                     record = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if not isinstance(record, dict) or record.get("type") != "assistant":
+                if not isinstance(record, dict):
+                    continue
+                if record.get("type") == "user":
+                    # Claude Code writes tool results as user-shaped records. They
+                    # are not prompts and must never replace the task summary.
+                    if any(record.get(key) is True for key in ("isReplay", "is_replay", "isSynthetic", "is_synthetic")):
+                        continue
+                    if record.get("tool_use_result") is not None or record.get("parent_tool_use_id"):
+                        continue
+                    message = record.get("message")
+                    if isinstance(message, dict) and message.get("role") == "user":
+                        text = _content_text(message.get("content")).strip()
+                        if text:
+                            summary = text[-2_000:]
+                    continue
+                if record.get("type") != "assistant":
                     continue
                 message = record.get("message")
                 if not isinstance(message, dict) or message.get("role") != "assistant":
@@ -59,16 +96,31 @@ def _transcript_answer(value: object) -> str:
                 if text:
                     answer = text[-24_000:]
     except OSError:
-        return ""
-    return answer
+        return "", ""
+    return summary, answer
 
-def _assistant_answer(item: dict) -> str:
+
+def _transcript_answer(value: object) -> str:
+    return _transcript_context(value)[1]
+
+
+def _transcript_context_retry(value: object) -> tuple[str, str]:
+    if not isinstance(value, str) or not Path(value).is_file():
+        return _transcript_context(value)
+    for attempt in range(5):
+        summary, answer = _transcript_context(value)
+        if summary and answer or attempt == 4:
+            return summary, answer
+        time.sleep(0.1)
+    return "", ""
+
+def _assistant_answer(item: dict, transcript_path: Path | None = None) -> str:
     for key in ("last_assistant_message", "last-assistant-message", "lastAssistantMessage", "assistant_message", "assistantMessage"):
         value = item.get(key)
         text = _content_text(value).strip()
         if text:
             return text[-24_000:]
-    return _transcript_answer(item.get("transcript_path"))
+    return _transcript_answer(str(transcript_path)) if transcript_path else ""
 
 def _turn_id(item: dict) -> str:
     value = item.get("turn_id") or item.get("tool_use_id") or item.get("uuid") or item.get("timestamp")
@@ -94,10 +146,15 @@ def main() -> int:
     error = _text(item.get("error") or item.get("error_details"))
     message = _text(item.get("message") or error or item.get("stop_reason") or name)
     task_summary = _summary(item)
-    assistant_answer = _assistant_answer(item) if status == "completed" else ""
+    transcript_path = _transcript_path(item)
+    transcript_summary, transcript_answer = _transcript_context_retry(str(transcript_path) if transcript_path else None)
+    if not task_summary:
+        task_summary = transcript_summary
+    assistant_answer = _assistant_answer(item, transcript_path) if status == "completed" else ""
+    assistant_answer = assistant_answer or transcript_answer
     event = {
         "source": "claude",
-        "client": "claude-code",
+        "client": "claude-cli",
         "event_id": event_id,
         "kind": name,
         "status": status,

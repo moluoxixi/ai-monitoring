@@ -5,12 +5,20 @@
 ## 架构
 
 ```text
-Claude Code
+Claude CLI
   -> 官方 Claude hooks
   -> 通知中心 :8787 -> OpenClaw / Apprise
 
-Codex CLI / Desktop
-  -> notify multiplexer（完成事件）
+Claude Desktop
+  -> Desktop audit watcher
+  -> 通知中心 :8787 -> OpenClaw / Apprise
+
+Codex CLI
+  -> notify multiplexer / App Server proxy
+  -> 通知中心 :8787
+
+Codex Desktop
+  -> Codex session watcher
   -> 通知中心 :8787
 
 Codex App Server 客户端
@@ -18,13 +26,37 @@ Codex App Server 客户端
   -> turn/item/error 正式终态 -> 通知中心 :8787
 
 Qoder CLI
-  -> 官方 Stop / StopFailure / PostToolUseFailure hooks
+  -> 官方 Stop / PostToolUseFailure hooks
   -> 通知中心 :8787 -> OpenClaw / Apprise
+
+Qoder Desktop
+  -> 官方 Stop / PostToolUseFailure hooks + Windows 运行端识别
+  -> 通知中心 :8787 -> OpenClaw / Apprise
+
+Qoder Quest
+  -> Qoder Desktop Quest session 的官方 Stop / PostToolUseFailure hooks
+  -> 通知中心 :8787 -> OpenClaw / Apprise
+
+Hermes CLI
+  -> 官方 on_session_end / api_request_error shell hooks
+  -> 通知中心 :8787
+
+Hermes Desktop
+  -> 官方 on_session_end / api_request_error shell hooks
+  -> 通知中心 :8787
+
+Cursor CLI
+  -> 官方 stop / postToolUseFailure hooks
+  -> 通知中心 :8787
+
+Cursor Desktop
+  -> 官方 stop / postToolUseFailure hooks
+  -> 通知中心 :8787
 ```
 
-通知中心负责任务详情、失败原因、消息概览、重试和通道状态。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”“扩展”两个视图：消息支持搜索、按 AI 扩展和状态筛选；扩展用于查看 Codex、Claude、Qoder 采集能力和绑定全局通知通道。点击消息直接打开本地任务详情。
+通知中心负责任务详情、失败原因、消息概览、重试和通道状态。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”“扩展”两个视图：消息支持搜索、按独立的 CLI/Desktop/Quest 平台和状态筛选；扩展页会分别展示 Codex、Claude、Qoder（含 CLI、Desktop、Quest）、Hermes、Cursor 的独立条目，可切换“已检测/已展示”、重新扫描、选择显示平台并配置通知长度。点击消息直接打开本地任务详情。
 
-通知中心采用标准 npm workspace：`apps/web` 是 Vue 3 + Vite + Element Plus，`apps/server` 是 NestJS。扩展、事件、数据库、通道 provider、投递 worker 和页面组件均为独立模块。Codex、Claude、Qoder 都是内置采集扩展；新 AI 软件需在代码中提供 hook、插件或协议适配器后才会出现在界面中。
+通知中心采用标准 npm workspace：`apps/web` 是 Vue 3 + Vite + Element Plus，`apps/server` 是 NestJS。扩展、事件、数据库、通道 provider、投递 worker 和页面组件均为独立模块。Codex、Claude、Qoder、Hermes、Cursor 都有独立适配器；只有本项目命令实际写入官方 hook 且通过真实事件验收后，平台才会报告“已验证可用”。新 AI 软件需在代码中提供 hook、插件或协议适配器后才会产生事件。
 
 ## Windows 快速部署
 
@@ -39,9 +71,9 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 主界面：[http://127.0.0.1:8787](http://127.0.0.1:8787)。任务详情和通知记录使用 `data/monitor.db` 下的本地 SQLite，单机部署不需要 Docker、PostgreSQL、ClickHouse、Redis 或 MinIO。
 
-安装脚本直接注册本仓库的 Claude、Codex 和 Qoder hooks/notify 适配器。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，不进入仓库。默认关闭提示词/回复正文与工具输出内容记录，仅保留工具详情。
+安装脚本直接注册本仓库的 Claude、Codex、Qoder、Hermes 和 Cursor hooks/notify 适配器。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，不进入仓库。默认关闭提示词/回复正文与工具输出内容记录，仅保留工具详情。Hermes 首次运行还需要用 `hermes --accept-hooks` 启动一次实际任务，或在交互终端确认本项目 hook；未获 Hermes 安全同意前不会报告已配置。
 
-首页默认按 Codex、Claude、Qoder 三个扩展分组。消息平台绑定后全局生效：绑定多少个，所有 AI 软件的新事件就向多少个通道分别创建 outbox 投递，其中一个失败不会阻断其它通道。不绑定通道时事件仍保留在本地，但不会产生外发消息。
+扩展页首次启动会按当前环境的进程、PATH 命令和 canonical 配置目录做隔离扫描；Windows 主机显示检测结果，容器或不支持的平台扫描会回退到全部支持目录。用户可在扩展设置中保存要展示的平台集合，这只影响界面，不会停止事件采集、数据库归类或通知投递。消息平台绑定后全局生效：绑定多少个，所有 AI 软件的新事件就向多少个通道分别创建 outbox 投递，其中一个失败不会阻断其它通道。不绑定通道时事件仍保留在本地，但不会产生外发消息。
 
 `scripts/install.ps1` 会自动安装 workspace 依赖并构建。开发模式使用 `npm run dev`，完整生产构建使用 `npm run build`，类型检查使用 `npm run typecheck`，测试使用 `npm test`。
 
@@ -119,7 +151,7 @@ AIMONITOR_APPRISE_URLS=SERVICE_URL_1,SERVICE_URL_2
 
 ## 任务结果与长度限制
 
-通知正文直接使用采集到的最终回答，不调用在线模型改写或摘要。完成通知包含“提问”和“任务结果”，失败通知包含“提问”和“失败消息”。外发正文限制为：提问最多 100 字，任务结果或失败消息最多 2,000 字；超出部分以省略号截断，并保留换行和 Markdown。完整回答经过敏感信息清洗后保存到本地 SQLite，仅在单条任务详情中查看，不出现在消息列表、投递列表或日志中。
+通知正文直接使用采集到的最终回答，不调用在线模型改写或摘要。完成通知包含“提问”和“任务结果”，失败通知包含“提问”和“失败消息”。扩展设置可在线配置外发正文上限：提问范围为 1-2,000 字，任务结果或失败消息范围为 1-24,000 字，默认仍为 100/2,000；超出部分以省略号截断，并保留换行和 Markdown。上游适配器会保留不低于上述范围的安全上限，避免配置较大值时数据已在采集阶段丢失。回答会先经过敏感信息清洗，最多保存末尾 24,000 字到本地 SQLite，仅在单条任务详情中查看，不出现在消息列表、投递列表或日志中。
 
 若设置 `AIMONITOR_INGEST_TOKEN`，relay 的事件、查询、测试和重试 API 都要求同一个 Bearer token。已安装的 Claude/Codex 生产者会直接读取仓库 `.env`，不需要把 token 写进用户级 Claude/Codex 配置。
 
@@ -127,12 +159,21 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 
 ## 错误检测边界
 
-- **Claude Code**：官方 hook 覆盖 `Stop`、`StopFailure`、`PostToolUseFailure`，可监测任务完成、API/轮次失败和工具失败。
-- **Qoder CLI**：官方 hook 覆盖 `Stop`、`StopFailure`、`PostToolUseFailure`。本仓库只接 CLI hooks；`Stop` 代表当前响应结束，不等价于业务目标成功。
-- **Codex 完成事件**：本仓库 multiplexer 接收 Codex CLI/Desktop 的 notify 完成事件并转发到通知中心。通知中心同时监听 Codex 的结构化 session JSONL，补齐 Desktop 未触发 notify 的完成、中断和带错误的终态；启动回扫只补消息概览，不补发历史通知，实时新增终态才创建投递。
+- **Claude CLI**：官方 hook 覆盖 `Stop`、`StopFailure`、`PostToolUseFailure`，可监测任务完成、API/轮次失败和工具失败。
+- **Claude Desktop**：独立读取 Desktop 的 `audit.jsonl`，不把 Desktop 事件归入 Claude CLI。
+- **Qoder CLI**：官方 hook 覆盖完成终态 `Stop` 和工具失败 `PostToolUseFailure`；当前版本未公开任务失败终态 hook，不能把工具失败等同于整轮失败。
+- **Qoder Desktop**：独立平台条目；适配器优先使用官方 payload/环境中的运行端，缺失时在 Windows 沿进程祖先识别 `Qoder.exe`，不会静默归入 CLI。
+- **Qoder Quest**：独立平台条目；通过 Quest session id 的 `.session.execution` 后缀归类，复用 Qoder 官方 hook。当前已实测完成事件；官方失败终态 schema 尚未公开，因此失败能力不宣称已验证。
+- **QoderWork**：已检测到独立应用，但 GUI 当前没有稳定、公开且可由本项目订阅的完成/失败 hook；保持“已安装，未接入”，不会从日志猜测任务结果。
+- **Hermes CLI**：官方 shell hook 覆盖 `on_session_end` 和 `api_request_error`；首次 hook consent 未完成时不会运行。
+- **Hermes Desktop**：Desktop 的 `tui_gateway` 不加载 CLI shell hooks，因此服务只读监听官方 `state.db` 的终态回答和新生成的 `request_dump` 失败记录；不会读取请求 headers/body、thinking 或工具内容，验证状态和事件计数不与 CLI 合并。
+- **Cursor CLI**：官方 `stop` 可监测响应完成，`postToolUseFailure` 只代表工具失败，不等价于整个任务/API 失败。
+- **Cursor Desktop**：独立平台条目；同样只报告官方能证明的“完成 + 工具失败”能力，不伪造完整错误覆盖。
+- **Codex CLI**：notify multiplexer 与 App Server proxy 归入 Codex CLI，负责 CLI 的完成和严格协议错误。
+- **Codex Desktop**：结构化 session JSONL watcher 独立归入 Codex Desktop，补齐 Desktop 的完成、中断和带错误终态；Desktop 没有公开内部 App Server 事件订阅，不能承诺捕获每一次 API 失败。
 - **Codex 严格错误终态**：只有通过 [Codex App Server 正式协议](https://learn.chatgpt.com/docs/app-server) 的客户端，才能可靠获得 `error`、`turn/completed` 的 `completed/interrupted/failed` 以及 `item/completed`。使用 `.\scripts\run-codex-app-server-proxy.ps1` 作为该客户端的 stdio server command。
 - **Codex Desktop 限制**：Desktop 当前没有向第三方公开其内部 App Server 事件订阅，因此无法承诺外部监控能捕获每一次 Desktop API 失败。仅靠 `notify` 或猜测私有日志不能满足“错误必检”。
-- **Claude Desktop 限制**：当前接入的是 Claude Code hooks，不是 Claude Desktop；不能把 Claude Code 的配置推断为 Desktop 已接入。
+- **Claude Desktop**：新版 Desktop 生成的 `audit.jsonl` 由本地 watcher 读取，只接受真正的 `audit.jsonl` 终态并忽略工具回写；Claude Code hooks 与 Desktop audit 的验证来源在界面中分开记录。
 
 ## 服务
 

@@ -68,15 +68,32 @@ export interface ExtensionAdapter {
 
 export interface ExtensionCard {
   key: string
+  product: string
+  runtime: 'cli' | 'desktop' | 'quest'
   label: string
-  aliases: string[]
   adapter: ExtensionAdapter
   event_count: number
+  detected: boolean
+  cliAvailable: boolean
+  running: boolean
+  monitorConfigured: boolean
+  monitorVerified: boolean
+  lastVerifiedAt: string | null
+  verificationSource: string | null
+  detectionSignals: string[]
 }
 
 export interface ExtensionPayload {
   channels: ChannelStatus[]
   extensions: ExtensionCard[]
+  visibleExtensions: string[]
+  scanScope: 'host' | 'unsupported' | string
+  scannedAt: string | null
+}
+
+export interface NotificationSettings {
+  taskLimit: number
+  resultLimit: number
 }
 
 export interface MonitorStats {

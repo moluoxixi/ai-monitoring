@@ -6,6 +6,7 @@ import type {
   ExtensionPayload,
   MonitorEvent,
   MonitorStats,
+  NotificationSettings,
 } from '../types/monitor'
 
 export const monitorApi = {
@@ -14,6 +15,12 @@ export const monitorApi = {
   event: (id: number) => http.get<MonitorEvent>(`/api/events/${id}`),
   deliveries: (limit = 200) => http.get<Delivery[]>(`/api/deliveries?limit=${limit}`),
   extensions: () => http.get<ExtensionPayload>('/api/extensions'),
+  scanExtensions: () => http.post<ExtensionPayload>('/api/extensions/scan'),
+  saveExtensionPreferences: (visibleExtensions: string[]) => http.put<{ visibleExtensions: string[] }>(
+    '/api/extensions/preferences', { visibleExtensions },
+  ),
+  notificationSettings: () => http.get<NotificationSettings>('/api/notification-settings'),
+  saveNotificationSettings: (settings: NotificationSettings) => http.put<NotificationSettings>('/api/notification-settings', settings),
   startBinding: (channel: string) => http.post<BindingStartResult>(`/api/channels/${encodeURIComponent(channel)}/binding/start`),
   waitBinding: (channel: string) => http.post<BindingWaitResult>(`/api/channels/${encodeURIComponent(channel)}/binding/wait`),
   bindCredential: (channel: string, credential: string | Record<string, string>) => http.put<BindingWaitResult>(

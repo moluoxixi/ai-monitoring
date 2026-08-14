@@ -54,6 +54,11 @@ $CodexConfig = Join-Path $env:USERPROFILE ".codex\config.toml"
 $ClaudeConfig = Join-Path $env:USERPROFILE ".claude\settings.json"
 if (Test-Path $CodexConfig) { Copy-Item -LiteralPath $CodexConfig -Destination (Join-Path $BackupDir "codex-config.toml") }
 if (Test-Path $ClaudeConfig) { Copy-Item -LiteralPath $ClaudeConfig -Destination (Join-Path $BackupDir "claude-settings.json") }
+$HermesConfig = Join-Path $env:LOCALAPPDATA "hermes\config.yaml"
+if (-not (Test-Path $HermesConfig)) { $HermesConfig = Join-Path $env:USERPROFILE ".hermes\config.yaml" }
+$CursorConfig = Join-Path $env:USERPROFILE ".cursor\hooks.json"
+if (Test-Path $HermesConfig) { Copy-Item -LiteralPath $HermesConfig -Destination (Join-Path $BackupDir "hermes-config.yaml") }
+if (Test-Path $CursorConfig) { Copy-Item -LiteralPath $CursorConfig -Destination (Join-Path $BackupDir "cursor-hooks.json") }
 
 $ConfigureCodex = Join-Path $PSScriptRoot "configure_codex_notify.py"
 $CodexWrapper = Join-Path $PSScriptRoot "codex_notify_multiplexer.py"
@@ -62,39 +67,42 @@ $CodexTargets = Join-Path $Root "data\codex-notify-targets.json"
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the Codex notify multiplexer." }
 
 if ($ConfigureNotifications) {
-    $ClaudeSettings = if (Test-Path $ClaudeConfig) {
-        Get-Content -Raw -LiteralPath $ClaudeConfig | ConvertFrom-Json
-    } else {
-        [pscustomobject]@{}
-    }
-    if (-not $ClaudeSettings.PSObject.Properties["hooks"]) {
-        $ClaudeSettings | Add-Member -MemberType NoteProperty -Name hooks -Value ([pscustomobject]@{})
-    }
-
-    $RequiredClaudeHooks = @("Stop", "StopFailure", "PostToolUseFailure")
     $RelayAdapter = Join-Path $PSScriptRoot "hooks\claude_event_adapter.py"
-    $RelayCommand = "`"$ProjectPython`" `"$RelayAdapter`""
-    foreach ($EventName in $RequiredClaudeHooks) {
-        $EventProperty = $ClaudeSettings.hooks.PSObject.Properties[$EventName]
-        $Entries = if ($EventProperty) { @($EventProperty.Value) } else { @() }
-        $Commands = @($Entries | ForEach-Object { $_.hooks } | ForEach-Object { $_.command })
-        if ($Commands -notcontains $RelayCommand) {
-            $Entry = [pscustomobject]@{ hooks = @([pscustomobject]@{ type = "command"; command = $RelayCommand }) }
-            if ($EventProperty) { $ClaudeSettings.hooks.$EventName = @($Entries) + @($Entry) }
-            else { $ClaudeSettings.hooks | Add-Member -MemberType NoteProperty -Name $EventName -Value @($Entry) }
-        }
-    }
-    $Json = ($ClaudeSettings | ConvertTo-Json -Depth 100) + [Environment]::NewLine
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ClaudeConfig) | Out-Null
-    [IO.File]::WriteAllText($ClaudeConfig, $Json, (New-Object Text.UTF8Encoding($false)))
+    # Claude executes hooks through Bash on Windows. Backslashes would be
+    # consumed as escapes before Python starts, so keep both paths POSIX-safe.
+    $ClaudePythonPosix = $ProjectPython.Replace('\', '/')
+    $ClaudeAdapterPosix = $RelayAdapter.Replace('\', '/')
+    $RelayCommand = "`"$ClaudePythonPosix`" `"$ClaudeAdapterPosix`""
+    & $ProjectPython (Join-Path $PSScriptRoot "configure_claude_hooks.py") --config $ClaudeConfig --command $RelayCommand
+    if ($LASTEXITCODE -ne 0) { throw "Failed to configure Claude lifecycle hooks." }
     Write-Host "Claude completion and failure notification hooks registered."
 
     $QoderConfig = Join-Path $env:USERPROFILE ".qoder\settings.json"
     $QoderAdapter = Join-Path $PSScriptRoot "hooks\qoder_event_adapter.py"
-    $QoderCommand = "`"$ProjectPython`" `"$QoderAdapter`""
+    $QoderPythonPosix = $ProjectPython.Replace('\', '/')
+    $QoderAdapterPosix = $QoderAdapter.Replace('\', '/')
+    $QoderCommand = "`"$QoderPythonPosix`" `"$QoderAdapterPosix`""
     & $ProjectPython (Join-Path $PSScriptRoot "configure_qoder_hooks.py") --config $QoderConfig --command $QoderCommand
     if ($LASTEXITCODE -ne 0) { throw "Failed to configure Qoder lifecycle hooks." }
     Write-Host "Qoder completion and failure notification hooks registered."
+
+    $HermesAdapter = Join-Path $PSScriptRoot "hooks\hermes_event_adapter.py"
+    # Hermes parses commands with POSIX shlex even on Windows; forward slashes
+    # keep absolute Windows paths intact for its executable/readability checks.
+    $HermesPythonPosix = $ProjectPython.Replace('\', '/')
+    $HermesAdapterPosix = $HermesAdapter.Replace('\', '/')
+    $HermesCommand = "`"$HermesPythonPosix`" `"$HermesAdapterPosix`""
+    & $ProjectPython (Join-Path $PSScriptRoot "configure_hermes_hooks.py") --config $HermesConfig --command $HermesCommand
+    if ($LASTEXITCODE -ne 0) { throw "Failed to configure Hermes lifecycle hooks." }
+    Write-Host "Hermes completion and API failure hooks registered."
+
+    $CursorAdapter = Join-Path $PSScriptRoot "hooks\cursor_event_adapter.py"
+    $CursorPythonPosix = $ProjectPython.Replace('\', '/')
+    $CursorAdapterPosix = $CursorAdapter.Replace('\', '/')
+    $CursorCommand = "`"$CursorPythonPosix`" `"$CursorAdapterPosix`""
+    & $ProjectPython (Join-Path $PSScriptRoot "configure_cursor_hooks.py") --config $CursorConfig --command $CursorCommand
+    if ($LASTEXITCODE -ne 0) { throw "Failed to configure Cursor lifecycle hooks." }
+    Write-Host "Cursor completion and tool failure hooks registered."
 }
 
 Write-Host "AI Monitor completion and failure hooks installed. Configuration backups: $BackupDir"

@@ -47,7 +47,7 @@ describe('Codex session watcher parser', () => {
   });
 
   it('normalizes and truncates task summaries', () => {
-    expect(summarizeTask(`  ${'a'.repeat(170)}  `)).toHaveLength(160);
+    expect(summarizeTask(`  ${'a'.repeat(2_010)}  `)).toHaveLength(2_000);
     expect(summarizeTask('The following is the Codex agent history whose request action you are assessing.')).toBe('');
   });
 
@@ -86,6 +86,7 @@ describe('Codex session watcher parser', () => {
 
     expect(result.event).toMatchObject({
       source_event_id: 'session-1:turn-1:completed', status: 'completed', kind: 'task_complete',
+      client: 'codex-desktop',
       metadata: { thread_id: 'session-1', turn_id: 'turn-1' },
     });
     expect(JSON.stringify(result.event)).not.toContain('private');
@@ -114,7 +115,7 @@ describe('Codex session watcher parser', () => {
   });
 
   it('limits stored failure details', () => {
-    expect(sanitizeFailureMessage('x'.repeat(3_000))).toHaveLength(2_000);
+    expect(sanitizeFailureMessage('x'.repeat(25_000))).toHaveLength(24_000);
   });
 
   it('maps turn_aborted to interrupted', () => {

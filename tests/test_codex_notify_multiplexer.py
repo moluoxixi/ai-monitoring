@@ -40,7 +40,7 @@ def test_completion_without_a_task_summary_is_left_to_the_session_watcher():
 
 
 def test_task_summary_has_a_strict_length_limit():
-    assert len(codex_notify_multiplexer.summarize_task("a" * 200)) == 160
+    assert len(codex_notify_multiplexer.summarize_task("a" * 2_100)) == 2_000
     assert codex_notify_multiplexer.summarize_task(
         "The following is the Codex agent history whose request action you are assessing."
     ) == ""

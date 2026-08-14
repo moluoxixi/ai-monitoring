@@ -83,10 +83,10 @@ class ProtocolMonitor:
         url = os.getenv("AIMONITOR_URL", "http://127.0.0.1:8787/api/events")
         thread_id, turn_id = key
         event = {
-            "source": "codex", "client": "codex-app-server",
+            "source": "codex", "client": "codex-cli",
             "event_id": f"{thread_id}:{turn_id}:{suffix}:{kind}", "kind": kind,
             "status": "tool_failed" if kind == "tool_failed" else "failed" if kind == "api_failed" else kind,
-            "title": f"Codex {kind}", "message": message[:2_000],
+            "title": f"Codex {kind}", "message": message[:24_000],
             "metadata": {"thread_id": thread_id, "turn_id": turn_id},
         }
         headers = {"Content-Type": "application/json"}

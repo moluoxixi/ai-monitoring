@@ -1,8 +1,17 @@
 export interface ExtensionDefinition {
   key: string;
+  product: string;
+  runtime: 'cli' | 'desktop' | 'quest';
   label: string;
-  aliases: string[];
   adapter: ExtensionAdapter;
+}
+
+export interface ExtensionRuntimeState {
+  detected: boolean;
+  cliAvailable: boolean;
+  running: boolean;
+  monitorConfigured: boolean;
+  detectionSignals: string[];
 }
 
 export interface ExtensionAdapter {

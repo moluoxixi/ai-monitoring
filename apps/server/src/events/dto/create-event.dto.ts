@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateEventDto {
   @IsString()
@@ -16,6 +16,14 @@ export class CreateEventDto {
   @IsString()
   @MaxLength(40)
   client?: string;
+
+  /**
+   * Optional runtime assertion for a canonical client key. CLI, Desktop and
+   * Quest are separate keys; this field never converts a legacy or short name.
+   */
+  @IsOptional()
+  @IsIn(['cli', 'desktop', 'quest'])
+  runtime?: 'cli' | 'desktop' | 'quest';
 
   @IsOptional()
   @IsString()
@@ -34,7 +42,7 @@ export class CreateEventDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(20_000)
+  @MaxLength(24_000)
   message?: string;
 
   @IsOptional()

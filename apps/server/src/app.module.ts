@@ -9,10 +9,12 @@ import { DeliveriesModule } from './deliveries/deliveries.module';
 import { EventsModule } from './events/events.module';
 import { ExtensionsController } from './extensions/extensions.controller';
 import { ExtensionsModule } from './extensions/extensions.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
     ConfigModule,
+    SettingsModule,
     AuthModule,
     ScheduleModule.forRoot(),
     ExtensionsModule,

@@ -323,12 +323,21 @@ export class DatabaseService implements OnModuleDestroy {
     if (!deliveryColumns.has('lease_token')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_token TEXT');
     if (!deliveryColumns.has('lease_expires_at')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_expires_at TEXT');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_deliveries_lease ON deliveries(state, lease_expires_at)');
+    this.migrateLegacyClients();
+  }
+
+  private migrateLegacyClients(): void {
+    const update = this.db.prepare('UPDATE events SET client = ? WHERE lower(client) = ?');
+    this.db.transaction(() => {
+      for (const [legacy, canonical] of this.extensions.legacyMigrations()) update.run(canonical, legacy);
+    })();
   }
 
   private eventRow(row: Record<string, unknown>, includeAnswerText = false): EventRow {
     const { metadata_json, answer_text, ...rest } = row;
     return {
       ...rest,
+      client: typeof rest.client === 'string' ? this.extensions.resolve(rest.client) : rest.client,
       ...(includeAnswerText && typeof answer_text === 'string' && answer_text ? { answer_text } : {}),
       metadata: parseMetadata(metadata_json),
     } as unknown as EventRow;
@@ -338,6 +347,7 @@ export class DatabaseService implements OnModuleDestroy {
     const { metadata_json, answer_text, ...rest } = row;
     return {
       ...rest,
+      client: typeof rest.client === 'string' ? this.extensions.resolve(rest.client) : rest.client,
       ...(includeAnswerText && typeof answer_text === 'string' && answer_text ? { answer_text } : {}),
       metadata: parseMetadata(metadata_json),
     } as unknown as DeliveryRow;

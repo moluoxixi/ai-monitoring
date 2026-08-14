@@ -26,8 +26,8 @@ def summarize_task(value: Any) -> str:
     summary = " ".join(text.split()).strip()
     if re.match(r"^The following is the Codex agent history whose request action you are assessing\.", summary, flags=re.IGNORECASE):
         return ""
-    if len(summary) > 160:
-        summary = summary[:157].rstrip() + "..."
+    if len(summary) > 2_000:
+        summary = summary[:1_997].rstrip() + "..."
     return summary
 
 
@@ -50,7 +50,7 @@ def relay_completion(payload: dict[str, Any]) -> bool:
         return False
     event = {
         "source": "codex",
-        "client": "codex-notify",
+        "client": "codex-cli",
         "event_id": f"{thread_id}:{turn_id}:completed",
         "kind": "agent-turn-complete",
         "status": "completed",

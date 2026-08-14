@@ -6,7 +6,7 @@ import { deliveryLabel, formatTime, statusLabel, statusTone } from '../../utils/
 const props = defineProps<{ events: MonitorEvent[]; extensions: ExtensionCard[]; channels: ChannelStatus[] }>()
 const emit = defineEmits<{ select: [event: MonitorEvent] }>()
 
-const extensionFor = (client: string) => props.extensions.find((item) => item.key === client || item.aliases.includes(client.toLowerCase()))
+const extensionFor = (client: string) => props.extensions.find((item) => item.key === client)
 const clientLabel = (event: MonitorEvent) => extensionFor(event.client)?.label || event.client
 const taskSummary = (event: MonitorEvent) => typeof event.metadata.task_summary === 'string'
   ? event.metadata.task_summary

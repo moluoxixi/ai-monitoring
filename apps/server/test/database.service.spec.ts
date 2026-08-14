@@ -13,7 +13,7 @@ const directories: string[] = [];
 const event = (metadata: Record<string, unknown>, message: string): NormalizedEvent => ({
   source_event_id: 'session:turn:failed',
   source: 'codex-session',
-  client: 'codex',
+  client: 'codex-cli',
   kind: 'task_complete',
   status: 'failed',
   title: 'Codex task failed',
@@ -111,6 +111,38 @@ describe('DatabaseService idempotent event enrichment', () => {
 
     expect(database.getEvent(id, true)?.answer_text).toBe('迁移后的回答');
     database.onModuleDestroy();
+  });
+
+  it('migrates legacy client values to canonical runtime keys on startup', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const dbPath = join(directory, 'monitor.db');
+    const legacy = new Sqlite(dbPath);
+    legacy.exec(`
+      CREATE TABLE events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_event_id TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        client TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        error_code TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO events (source_event_id, source, client, kind, status, title, message, created_at)
+      VALUES ('legacy:1', 'codex', 'codex', 'complete', 'completed', 'legacy', 'legacy', '2026-08-14T00:00:00+00:00');
+    `);
+    legacy.close();
+
+    const database = new DatabaseService({ dbPath } as AppConfigService, new ExtensionsService());
+    expect(database.listEvents(10)[0]?.client).toBe('codex-cli');
+    database.onModuleDestroy();
+    const reopened = new Sqlite(dbPath, { readonly: true });
+    expect(reopened.prepare('SELECT client FROM events WHERE source_event_id = ?').get('legacy:1')).toEqual({ client: 'codex-cli' });
+    reopened.close();
   });
 
   it('returns only the deliveries belonging to one event', () => {

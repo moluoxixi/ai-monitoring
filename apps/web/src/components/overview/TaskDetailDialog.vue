@@ -12,7 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [event: MonitorEvent | null] }>()
 
 const event = computed(() => props.modelValue)
-const extensionFor = (client: string) => props.extensions.find((item) => item.key === client || item.aliases.includes(client.toLowerCase()))
+const extensionFor = (client: string) => props.extensions.find((item) => item.key === client)
 const clientLabel = (client: string) => extensionFor(client)?.label || client
 const taskSummary = (item: MonitorEvent) => typeof item.metadata.task_summary === 'string'
   ? item.metadata.task_summary

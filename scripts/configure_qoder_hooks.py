@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-EVENTS = ("Stop", "StopFailure", "PostToolUseFailure")
+EVENTS = ("Stop", "PostToolUseFailure")
 
 
 def configure(config_path: Path, command: str) -> None:
@@ -17,10 +17,36 @@ def configure(config_path: Path, command: str) -> None:
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid Qoder settings JSON: {config_path}") from exc
     hooks = document.setdefault("hooks", {})
+    stale_entries = hooks.get("StopFailure")
+    if isinstance(stale_entries, list):
+        stale_entries[:] = [
+            entry
+            for entry in stale_entries
+            if not (
+                isinstance(entry, dict)
+                and any(
+                    isinstance(item, dict) and "qoder_event_adapter.py" in str(item.get("command", ""))
+                    for item in (entry.get("hooks") or [])
+                )
+            )
+        ]
+        if not stale_entries:
+            hooks.pop("StopFailure", None)
     for event in EVENTS:
         entries = hooks.setdefault(event, [])
         if not isinstance(entries, list):
             raise ValueError(f"Qoder hook section must be an array: {event}")
+        entries[:] = [
+            entry
+            for entry in entries
+            if not (
+                isinstance(entry, dict)
+                and any(
+                    isinstance(item, dict) and "qoder_event_adapter.py" in str(item.get("command", ""))
+                    for item in (entry.get("hooks") or [])
+                )
+            )
+        ]
         commands = {
             str(item.get("command"))
             for entry in entries

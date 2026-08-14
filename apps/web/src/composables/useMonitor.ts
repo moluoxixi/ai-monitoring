@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { monitorApi } from '../api/monitor'
-import type { Delivery, ExtensionPayload, MonitorEvent, MonitorStats } from '../types/monitor'
+import type { Delivery, ExtensionPayload, MonitorEvent, MonitorStats, NotificationSettings } from '../types/monitor'
 
 const emptyStats = (): MonitorStats => ({
   events: 0, completed: 0, failed: 0, interrupted: 0, tool_failed: 0,
@@ -10,7 +10,8 @@ const emptyStats = (): MonitorStats => ({
 export const useMonitor = () => {
   const stats = ref<MonitorStats>(emptyStats())
   const events = ref<MonitorEvent[]>([])
-  const extensionPayload = ref<ExtensionPayload>({ channels: [], extensions: [] })
+  const extensionPayload = ref<ExtensionPayload>({ channels: [], extensions: [], visibleExtensions: [], scanScope: 'unsupported', scannedAt: null })
+  const notificationSettings = ref<NotificationSettings>({ taskLimit: 100, resultLimit: 2000 })
   const loading = ref(true)
   const refreshing = ref(false)
   const error = ref('')
@@ -22,8 +23,9 @@ export const useMonitor = () => {
   const refresh = async (quiet = false) => {
     if (!quiet) refreshing.value = true
     try {
-      const [nextStats, nextEvents, nextDeliveries, nextExtensions] = await Promise.all([
+      const [nextStats, nextEvents, nextDeliveries, nextExtensions, nextNotificationSettings] = await Promise.all([
         monitorApi.stats(), monitorApi.events(100), monitorApi.deliveries(200), monitorApi.extensions(),
+        monitorApi.notificationSettings().catch(() => notificationSettings.value),
       ])
       stats.value = nextStats
       const deliveryByEvent = new Map<number, Delivery[]>()
@@ -49,6 +51,7 @@ export const useMonitor = () => {
         }
       })
       extensionPayload.value = nextExtensions
+      notificationSettings.value = nextNotificationSettings
       error.value = ''
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : '数据加载失败'
@@ -64,5 +67,5 @@ export const useMonitor = () => {
   })
   onBeforeUnmount(() => window.clearInterval(timer))
 
-  return { stats, events, extensions, channels, loading, refreshing, error, refresh }
+  return { stats, events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh }
 }

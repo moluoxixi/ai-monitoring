@@ -36,7 +36,7 @@ export const normalizeEvent = (item: CreateEventDto): NormalizedEvent => {
   const client = String(item.client || source);
   const kind = String(item.kind || 'unknown');
   const status = item.status && item.status !== 'unknown' ? String(item.status) : statusForKind(kind);
-  const message = truncateText(String(item.message || messageFromMetadata(metadata) || kind), 20_000);
+  const message = truncateText(String(item.message || messageFromMetadata(metadata) || kind), 24_000);
   const digest = createHash('sha256').update(stableStringify(item)).digest('hex').slice(0, 24);
   const eventId = String(item.event_id || metadata.event_id || `${source}:${kind}:${digest}`);
   const labels: Record<string, string> = {
