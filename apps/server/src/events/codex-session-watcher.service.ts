@@ -7,6 +7,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import type { NormalizedEvent } from '../database/database.types';
 import { EventIngestionService } from './event-ingestion.service';
+import { truncateTail, truncateText } from './event-text';
 
 const INITIAL_TAIL_BYTES = 1024 * 1024;
 
@@ -39,15 +40,15 @@ const safeErrorCode = (error: Record<string, unknown>): string => {
 
 export const sanitizeFailureMessage = (value: unknown): string => {
   if (typeof value !== 'string') return '';
-  return value
+  const cleaned = value
     .replace(/\b(Authorization\s*[:=]\s*)(?:Bearer\s+)?[^\s,;]+/gi, '$1<redacted>')
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1<redacted>')
     .replace(/\b((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,;]+/gi, '$1<redacted>')
     .replace(/([?&](?:api[_-]?key|token|secret|password|access_token)=)[^&#\s]+/gi, '$1<redacted>')
     .replace(/\bC:\\Users\\[^\\\s]+/gi, 'C:\\Users\\<user>')
     .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 2_000);
+    .trim();
+  return truncateText(cleaned, 2_000);
 };
 
 export const summarizeTask = (value: unknown): string => {
@@ -58,7 +59,7 @@ export const summarizeTask = (value: unknown): string => {
     .replace(/\s+/g, ' ')
     .trim();
   if (/^The following is the Codex agent history whose request action you are assessing\./i.test(cleaned)) return '';
-  return cleaned.length > 160 ? `${cleaned.slice(0, 157).trimEnd()}...` : cleaned;
+  return truncateText(cleaned, 160);
 };
 
 export const parseCodexSessionLine = (
@@ -95,7 +96,7 @@ export const parseCodexSessionLine = (
     };
   }
   if (kind === 'agent_message') {
-    const message = typeof payload.message === 'string' ? payload.message.slice(-24_000) : '';
+    const message = typeof payload.message === 'string' ? truncateTail(payload.message, 24_000) : '';
     return {
       sessionId: currentSessionId,
       taskSummary: currentTaskSummary,
@@ -129,7 +130,7 @@ export const parseCodexSessionLine = (
     isSubagent: currentIsSubagent,
     timestampMs: terminalTimestamp,
     answerSource: status === 'completed'
-      ? (typeof payload.last_agent_message === 'string' ? payload.last_agent_message.slice(-24_000) : currentAnswerSource)
+      ? (typeof payload.last_agent_message === 'string' ? truncateTail(payload.last_agent_message, 24_000) : currentAnswerSource)
       : '',
     event: {
       source_event_id: `${currentSessionId}:${turnId}:${status}`,

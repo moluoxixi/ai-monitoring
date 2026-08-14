@@ -1,4 +1,6 @@
-# 在线模型回答摘要与渠道回退 - Implementation Plan
+# （已废弃）在线模型回答摘要与渠道回退 - Implementation Plan
+
+> 历史实施计划。在线摘要模块已删除，当前通知链路不依赖任何在线模型。
 
 1. 建立 `answer-summary` 模块、provider registry、版本化配置存储、DTO/controller 和 OpenAI-compatible 调用服务。
 2. 扩展 AppConfigService、AppModule、`.env.example`、`.gitignore` 和 README，加入配置路径与官方 API Key 链接说明。

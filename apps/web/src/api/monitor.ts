@@ -1,8 +1,5 @@
 import { http } from './http'
 import type {
-  AnswerSummaryProviderId,
-  AnswerSummaryProviderUpdate,
-  AnswerSummaryStatus,
   BindingStartResult,
   BindingWaitResult,
   Delivery,
@@ -26,11 +23,4 @@ export const monitorApi = {
   cancelBinding: (channel: string) => http.delete(`/api/channels/${encodeURIComponent(channel)}/binding/session`),
   unbind: (channel: string) => http.delete(`/api/channels/${encodeURIComponent(channel)}/binding`),
   testNotification: (client: string) => http.post<{ channels: string[] }>('/api/test-notification', { client }),
-  answerSummary: () => http.get<AnswerSummaryStatus>('/api/answer-summary'),
-  updateAnswerSummaryProvider: (provider: AnswerSummaryProviderId, update: AnswerSummaryProviderUpdate) =>
-    http.put<AnswerSummaryStatus>(`/api/answer-summary/providers/${provider}`, update),
-  removeAnswerSummaryProvider: (provider: AnswerSummaryProviderId) =>
-    http.delete<AnswerSummaryStatus>(`/api/answer-summary/providers/${provider}`),
-  updateAnswerSummaryOrder: (order: AnswerSummaryProviderId[]) =>
-    http.put<AnswerSummaryStatus>('/api/answer-summary/order', { order }),
 }

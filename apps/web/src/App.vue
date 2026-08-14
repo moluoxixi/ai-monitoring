@@ -10,7 +10,6 @@ import { useTheme } from './composables/useTheme'
 import type { ChannelFormSchema } from './types/monitor'
 import ExtensionsView from './views/ExtensionsView.vue'
 import OverviewView from './views/OverviewView.vue'
-import SettingsView from './views/SettingsView.vue'
 
 const { stats, events, extensions, channels, loading, refreshing, error, refresh } = useMonitor()
 const { theme, toggleTheme } = useTheme()
@@ -116,7 +115,7 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
           :event-count="stats.events"
         />
         <ExtensionsView
-          v-else-if="activeView === 'extensions'"
+          v-else
           :extensions="extensions"
           :channels="channels"
           :selected-key="selectedExtension"
@@ -126,7 +125,6 @@ const unbindChannel = (channel: string) => run(() => monitorApi.unbind(channel),
           @bind="bindChannel"
           @unbind="unbindChannel"
         />
-        <SettingsView v-else />
       </div>
     </main>
     <ChannelBindingDialog

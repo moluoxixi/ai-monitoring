@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe('DatabaseService idempotent event enrichment', () => {
-  it('adds missing task, answer, and failure details without creating a duplicate event', () => {
+  it('adds missing task and failure details without creating a duplicate event', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);
     const database = new DatabaseService(
@@ -38,7 +38,6 @@ describe('DatabaseService idempotent event enrichment', () => {
     expect(database.insertEvent(event({}, 'Codex turn failed'), [])[1]).toBe(true);
     expect(database.insertEvent(event({
       task_summary: '修复登录失败',
-      answer_summary: '已修复登录并通过测试',
       failure_message: 'unexpected status 502 Bad Gateway',
     }, '提问：修复登录失败'), [])[1]).toBe(false);
 
@@ -47,7 +46,6 @@ describe('DatabaseService idempotent event enrichment', () => {
         message: '提问：修复登录失败',
         metadata: {
           task_summary: '修复登录失败',
-          answer_summary: '已修复登录并通过测试',
           failure_message: 'unexpected status 502 Bad Gateway',
         },
       }),

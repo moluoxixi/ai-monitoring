@@ -40,42 +40,60 @@ const serviceFor = (
 };
 
 describe('DeliveryWorkerService', () => {
-  it('uses a concise title and limits the task summary to 100 characters', () => {
+  it('limits the question to 100 characters and the result to 2000 characters', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
       metadata: { task_summary: 'fix the failing build ' + 'x'.repeat(120) },
+      answer_text: 'final result ' + 'y'.repeat(2_100),
     });
 
-    expect(content.title).toBe('Codex 任务已完成');
-    expect(content.body).toMatch(/^任务摘要：fix the failing build/);
-    expect(Array.from(content.body.replace('任务摘要：', ''))).toHaveLength(100);
+    expect(content.title).toBe('(Codex) 任务已完成');
+    const [question, result] = content.body.split('\n');
+    expect(question).toMatch(/^提问：fix the failing build/);
+    expect(Array.from(question!.replace('提问：', ''))).toHaveLength(100);
+    expect(Array.from(result!.replace('任务结果：', ''))).toHaveLength(2_000);
   });
 
-  it('shows the failure message instead of repeating the task summary', () => {
+  it('does not split Unicode characters at notification limits', () => {
+    const content = notificationContent({
+      ...delivery(1, 'openclaw-qq'),
+      metadata: { task_summary: '😀'.repeat(101) },
+      answer_text: '🚀'.repeat(2_001),
+    });
+
+    const [question, result] = content.body.split('\n');
+    expect(question).not.toContain('\uFFFD');
+    expect(result).not.toContain('\uFFFD');
+    expect(Array.from(question!.replace('提问：', ''))).toHaveLength(100);
+    expect(Array.from(result!.replace('任务结果：', ''))).toHaveLength(2_000);
+  });
+
+  it('includes the question and failure message for failed tasks', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
       status: 'failed',
-      message: 'API request failed because the server is overloaded ' + 'x'.repeat(120),
+      message: 'API request failed because the server is overloaded ' + 'x'.repeat(2_100),
       error_code: 'server_overloaded',
       metadata: { task_summary: 'fix the failing build' },
     });
 
-    expect(content.title).toBe('Codex 任务失败');
-    expect(content.body).toMatch(/^失败消息：API request failed/);
-    expect(content.body).not.toContain('fix the failing build');
-    expect(Array.from(content.body.replace('失败消息：', '')).length).toBeLessThanOrEqual(100);
+    expect(content.title).toBe('(Codex) 任务失败');
+    expect(content.body).toMatch(/^提问：fix the failing build\n失败消息：API request failed/);
+    expect(Array.from(content.body.split('\n')[0]!.replace('提问：', '')).length).toBeLessThanOrEqual(100);
+    expect(Array.from(content.body.split('\n')[1]!.replace('失败消息：', '')).length).toBeLessThanOrEqual(2_000);
     expect(content.body).toMatch(/\.\.\.$/);
   });
 
-  it('shows stable task and answer sections when an answer summary exists', () => {
+  it('sends the captured final answer without an online summary', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
-      metadata: { task_summary: '优化通知内容', answer_summary: '已加入在线摘要与自动回退。' },
+      metadata: { task_summary: '优化通知内容' },
+      answer_text: '已加入在线通知。\n保留换行和代码：`npm test`',
     });
 
     expect(content).toEqual({
-      title: 'Codex 任务已完成',
-      body: '任务摘要：优化通知内容\n回答摘要：已加入在线摘要与自动回退。',
+      title: '(Codex) 任务已完成',
+      body: '提问：优化通知内容\n任务结果：已加入在线通知。\n保留换行和代码：`npm test`',
     });
   });
 
@@ -92,8 +110,8 @@ describe('DeliveryWorkerService', () => {
     });
 
     expect(content).toEqual({
-      title: 'Codex 任务失败',
-      body: '失败消息：unexpected status 502 Bad Gateway: local proxy failed',
+      title: '(Codex) 任务失败',
+      body: '提问：fix the failing build\n失败消息：unexpected status 502 Bad Gateway: local proxy failed',
     });
   });
 
@@ -106,7 +124,7 @@ describe('DeliveryWorkerService', () => {
       metadata: { task_summary: 'fix the failing build' },
     });
 
-    expect(content).toEqual({ title: 'Codex 任务失败', body: '失败消息：server_overloaded' });
+    expect(content).toEqual({ title: '(Codex) 任务失败', body: '提问：fix the failing build\n失败消息：server_overloaded' });
   });
 
   it('filters internal Codex review prompts from notification summaries', () => {
@@ -115,8 +133,8 @@ describe('DeliveryWorkerService', () => {
       message: 'The following is the Codex agent history whose request action you are assessing.',
     });
 
-    expect(content.title).toBe('Codex 任务已完成');
-    expect(content.body).toBe('任务摘要：Test notification');
+    expect(content.title).toBe('(Codex) 任务已完成');
+    expect(content.body).toBe('提问：Test notification\n任务结果：未采集到最终回答');
     expect(content.body).not.toContain('Codex agent history');
   });
 
@@ -128,8 +146,8 @@ describe('DeliveryWorkerService', () => {
     });
 
     expect(content).toEqual({
-      title: 'Codex 任务已完成',
-      body: '任务摘要：未提供',
+      title: '(Codex) 任务已完成',
+      body: '提问：未提供\n任务结果：未采集到最终回答',
     });
   });
 

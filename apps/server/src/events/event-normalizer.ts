@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { NormalizedEvent } from '../database/database.types';
 import type { CreateEventDto } from './dto/create-event.dto';
+import { truncateText } from './event-text';
 
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -35,7 +36,7 @@ export const normalizeEvent = (item: CreateEventDto): NormalizedEvent => {
   const client = String(item.client || source);
   const kind = String(item.kind || 'unknown');
   const status = item.status && item.status !== 'unknown' ? String(item.status) : statusForKind(kind);
-  const message = String(item.message || messageFromMetadata(metadata) || kind).slice(0, 20_000);
+  const message = truncateText(String(item.message || messageFromMetadata(metadata) || kind), 20_000);
   const digest = createHash('sha256').update(stableStringify(item)).digest('hex').slice(0, 24);
   const eventId = String(item.event_id || metadata.event_id || `${source}:${kind}:${digest}`);
   const labels: Record<string, string> = {

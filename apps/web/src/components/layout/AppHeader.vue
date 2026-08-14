@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Connection, Grid, Moon, Refresh, Setting, Sunny } from '@element-plus/icons-vue'
+import { Bell, Connection, Grid, Moon, Refresh, Sunny } from '@element-plus/icons-vue'
 import type { Theme } from '../../composables/useTheme'
 
 defineProps<{ activeView: string; eventCount: number; refreshing: boolean; theme: Theme }>()
@@ -18,9 +18,6 @@ defineEmits<{ refresh: []; view: [value: string]; toggleTheme: [] }>()
       </button>
       <button :class="{ active: activeView === 'extensions' }" type="button" aria-label="扩展" @click="$emit('view', 'extensions')">
         <el-icon><Grid /></el-icon><span>扩展</span>
-      </button>
-      <button :class="{ active: activeView === 'settings' }" type="button" aria-label="设置" @click="$emit('view', 'settings')">
-        <el-icon><Setting /></el-icon><span>设置</span>
       </button>
     </nav>
     <div class="header-actions">

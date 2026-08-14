@@ -6,6 +6,7 @@ import { dirname } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import { ExtensionsService } from '../extensions/extensions.service';
 import type { DeliveryRow, EventRow, NormalizedEvent } from './database.types';
+import { MAX_ANSWER_TEXT_LENGTH, truncateTail } from '../events/event-text';
 
 export const utcNow = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
 
@@ -46,13 +47,13 @@ export class DatabaseService implements OnModuleDestroy {
       const existing = this.db.prepare('SELECT id, message, metadata_json, answer_text FROM events WHERE source_event_id = ?').get(event.source_event_id) as { id: number; message: string; metadata_json: string; answer_text: string | null } | undefined;
       if (existing) {
         const currentMetadata = parseMetadata(existing.metadata_json);
-        const additions = ['task_summary', 'answer_summary', 'failure_message'].reduce<Record<string, string>>((result, key) => {
+        const additions = ['task_summary', 'failure_message'].reduce<Record<string, string>>((result, key) => {
           const value = event.metadata[key];
           if (typeof value === 'string' && value && typeof currentMetadata[key] !== 'string') result[key] = value;
           return result;
         }, {});
         const answerText = event.status === 'completed' && typeof event.metadata.answer_text === 'string'
-          ? event.metadata.answer_text.slice(-24_000)
+          ? truncateTail(event.metadata.answer_text, MAX_ANSWER_TEXT_LENGTH)
           : '';
         const shouldAddAnswer = Boolean(answerText) && !existing.answer_text;
         if (Object.keys(additions).length || shouldAddAnswer) {
@@ -94,7 +95,7 @@ export class DatabaseService implements OnModuleDestroy {
         event.error_code,
         JSON.stringify(Object.fromEntries(Object.entries(event.metadata).filter(([key]) => !['answer_source', 'answer_text'].includes(key)))),
         event.status === 'completed' && typeof event.metadata.answer_text === 'string'
-          ? event.metadata.answer_text.slice(-24_000)
+          ? truncateTail(event.metadata.answer_text, MAX_ANSWER_TEXT_LENGTH)
           : null,
         createdAt,
       );
@@ -229,12 +230,12 @@ export class DatabaseService implements OnModuleDestroy {
           OR (state = 'claimed' AND lease_expires_at <= ?))
       `).run(token, leaseExpiresAt, now, now, now, now, safeLimit, now, now);
       const rows = this.db.prepare(`
-        SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code, e.metadata_json
+        SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code, e.metadata_json, e.answer_text
         FROM deliveries d JOIN events e ON e.id = d.event_id
         WHERE d.state = 'claimed' AND d.lease_token = ?
         ORDER BY d.id
       `).all(token) as Record<string, unknown>[];
-      return rows.map((row) => this.deliveryRow(row));
+      return rows.map((row) => this.deliveryRow(row, true));
     })();
   }
 
@@ -333,9 +334,13 @@ export class DatabaseService implements OnModuleDestroy {
     } as unknown as EventRow;
   }
 
-  private deliveryRow(row: Record<string, unknown>): DeliveryRow {
-    const { metadata_json, ...rest } = row;
-    return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as DeliveryRow;
+  private deliveryRow(row: Record<string, unknown>, includeAnswerText = false): DeliveryRow {
+    const { metadata_json, answer_text, ...rest } = row;
+    return {
+      ...rest,
+      ...(includeAnswerText && typeof answer_text === 'string' && answer_text ? { answer_text } : {}),
+      metadata: parseMetadata(metadata_json),
+    } as unknown as DeliveryRow;
   }
 
   private limit(value: number): number {

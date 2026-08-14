@@ -22,11 +22,7 @@ export class AppConfigService {
   readonly appriseChannelsPath = this.path(
     process.env.AIMONITOR_APPRISE_CHANNELS_PATH || 'data/apprise-channels.json',
   );
-  readonly answerSummaryConfigPath = this.path(
-    process.env.AIMONITOR_ANSWER_SUMMARY_CONFIG_PATH || 'data/answer-summary.json',
-  );
-  readonly answerSummaryTimeoutMs = Math.max(1_000, numberValue(process.env.AIMONITOR_ANSWER_SUMMARY_TIMEOUT_MS, 8_000));
-  readonly answerSummaryGraceMs = Math.max(0, numberValue(process.env.AIMONITOR_ANSWER_SUMMARY_GRACE_MS, 1_500));
+  readonly answerCaptureGraceMs = Math.max(0, numberValue(process.env.AIMONITOR_ANSWER_CAPTURE_GRACE_MS, 1_500));
   readonly codexSessionsPath = resolve(process.env.AIMONITOR_CODEX_SESSIONS_PATH?.trim() || resolve(homedir(), '.codex', 'sessions'));
   readonly codexBackfillMinutes = numberValue(process.env.AIMONITOR_CODEX_BACKFILL_MINUTES, 120);
   readonly ingestToken = process.env.AIMONITOR_INGEST_TOKEN || '';

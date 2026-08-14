@@ -94,34 +94,6 @@ export interface MonitorStats {
   [key: string]: number
 }
 
-export type AnswerSummaryProviderId = 'groq' | 'openrouter' | 'gemini' | 'custom'
-
-export interface AnswerSummaryProviderStatus {
-  id: AnswerSummaryProviderId
-  label: string
-  configured: boolean
-  enabled: boolean
-  model: string
-  baseUrl: string
-  apiKeyUrl?: string
-  custom: boolean
-  cooldownUntil?: string
-  lastError?: string
-}
-
-export interface AnswerSummaryStatus {
-  order: AnswerSummaryProviderId[]
-  providers: AnswerSummaryProviderStatus[]
-  configurationError?: string
-}
-
-export interface AnswerSummaryProviderUpdate {
-  apiKey?: string
-  model: string
-  baseUrl?: string
-  enabled: boolean
-}
-
 export interface Delivery {
   id: number
   event_id: number

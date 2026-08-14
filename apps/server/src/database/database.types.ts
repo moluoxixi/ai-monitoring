@@ -45,4 +45,6 @@ export interface DeliveryRow {
   message: string;
   error_code?: string | null;
   metadata?: Record<string, unknown>;
+  /** Internal delivery projection only; never returned by delivery APIs. */
+  answer_text?: string;
 }

@@ -17,7 +17,6 @@ const clientLabel = (client: string) => extensionFor(client)?.label || client
 const taskSummary = (item: MonitorEvent) => typeof item.metadata.task_summary === 'string'
   ? item.metadata.task_summary
   : item.message.replace(/^提问[：:]\s*/, '')
-const answerSummary = (item: MonitorEvent) => typeof item.metadata.answer_summary === 'string' ? item.metadata.answer_summary : ''
 const answerText = (item: MonitorEvent) => typeof item.answer_text === 'string' ? item.answer_text : ''
 const failureMessage = (item: MonitorEvent) => typeof item.metadata.failure_message === 'string'
   ? item.metadata.failure_message
@@ -49,8 +48,8 @@ const channelLabel = (id: string) => props.channels.find(channel => channel.id =
         <p>{{ taskSummary(event) || '未提供提问内容' }}</p>
       </section>
       <section v-if="event.status === 'completed'" class="detail-block detail-block-answer">
-        <div class="detail-label"><el-icon><CircleCheck /></el-icon>{{ answerText(event) ? '完整回答' : '回答摘要' }}</div>
-        <p>{{ answerText(event) || answerSummary(event) || '暂未生成回答摘要，稍后刷新即可查看。' }}</p>
+        <div class="detail-label"><el-icon><CircleCheck /></el-icon>任务结果</div>
+        <p>{{ answerText(event) || '未采集到最终回答' }}</p>
       </section>
       <section v-if="['failed', 'tool_failed', 'interrupted'].includes(event.status)" class="detail-block detail-block-error">
         <div class="detail-label"><el-icon><CircleClose /></el-icon>失败原因</div>

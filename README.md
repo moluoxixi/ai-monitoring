@@ -22,7 +22,7 @@ Qoder CLI
   -> 通知中心 :8787 -> OpenClaw / Apprise
 ```
 
-通知中心负责任务详情、失败原因、消息概览、重试和通道状态。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”“扩展”和“设置”三个视图：消息支持搜索、按 AI 扩展和状态筛选；扩展用于查看 Codex、Claude、Qoder 采集能力和绑定全局通知通道；设置用于配置回答摘要的在线模型渠道。点击消息直接打开本地任务详情。
+通知中心负责任务详情、失败原因、消息概览、重试和通道状态。OpenClaw 只作为后台 QQ/微信发送网关，不作为本项目用户界面。`8787` 是唯一入口。Vue 3 主界面提供“消息”“扩展”两个视图：消息支持搜索、按 AI 扩展和状态筛选；扩展用于查看 Codex、Claude、Qoder 采集能力和绑定全局通知通道。点击消息直接打开本地任务详情。
 
 通知中心采用标准 npm workspace：`apps/web` 是 Vue 3 + Vite + Element Plus，`apps/server` 是 NestJS。扩展、事件、数据库、通道 provider、投递 worker 和页面组件均为独立模块。Codex、Claude、Qoder 都是内置采集扩展；新 AI 软件需在代码中提供 hook、插件或协议适配器后才会出现在界面中。
 
@@ -117,19 +117,9 @@ AIMONITOR_APPRISE_URLS=SERVICE_URL_1,SERVICE_URL_2
 
 环境变量通道以只读兼容项运行，不能在页面解绑；新配置应优先使用页面绑定。
 
-## 回答摘要
+## 任务结果与长度限制
 
-Codex 完成通知可同时显示任务摘要与回答摘要。打开 `8787` 的“设置”视图，按优先级配置 Groq、OpenRouter、Google Gemini，或一个 OpenAI-compatible 自定义渠道。内置渠道的配置弹窗提供官方 API Key 页面：
-
-- Groq: [https://console.groq.com/keys](https://console.groq.com/keys)
-- OpenRouter: [https://openrouter.ai/keys](https://openrouter.ai/keys)
-- Google Gemini: [https://aistudio.google.com/apikey](https://aistudio.google.com/apikey)
-
-系统按页面顺序调用已启用渠道。某渠道返回 HTTP 429 后，本次请求立即尝试下一渠道，并将该渠道冷却到服务器本地次日零点；当天后续任务直接跳过它。鉴权、余额、容量、网络、超时和上游错误也会回退，但不会阻塞事件入库。事件先写入 SQLite，回答摘要在后台生成，完成后才释放投递；进程异常时，持久化的延迟投递会在到期后以任务摘要兜底发送。
-
-自定义渠道必须使用解析到公网地址的 HTTPS OpenAI-compatible Base URL；本机、局域网、链路本地地址和 HTTP 明文端点会被拒绝，请求也不跟随重定向。服务监听非本机地址时必须设置 `AIMONITOR_INGEST_TOKEN`，否则不能在页面写入模型凭据。
-
-API Key 存在 `data/answer-summary.json`，使用受限权限和原子替换写入，页面与状态 API 不回显。完整回答只在服务端内存中短暂用于摘要，输入限制为最后 24,000 字符；原文不会写入事件数据库或通知。免费模型和额度会随服务商变化，预填模型可在页面修改，本项目不承诺永久免费或不限量。
+通知正文直接使用采集到的最终回答，不调用在线模型改写或摘要。完成通知包含“提问”和“任务结果”，失败通知包含“提问”和“失败消息”。外发正文限制为：提问最多 100 字，任务结果或失败消息最多 2,000 字；超出部分以省略号截断，并保留换行和 Markdown。完整回答经过敏感信息清洗后保存到本地 SQLite，仅在单条任务详情中查看，不出现在消息列表、投递列表或日志中。
 
 若设置 `AIMONITOR_INGEST_TOKEN`，relay 的事件、查询、测试和重试 API 都要求同一个 Bearer token。已安装的 Claude/Codex 生产者会直接读取仓库 `.env`，不需要把 token 写进用户级 Claude/Codex 配置。
 
