@@ -57,7 +57,24 @@ jobs:
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 
       - name: Build desktop package
+        if: matrix.name != 'macOS Intel'
         run: npm run desktop:build
+
+      - name: Build macOS Intel app bundle
+        if: matrix.name == 'macOS Intel'
+        run: npm run build -w @ai-monitor/desktop -- --bundles app
+
+      - name: Create macOS Intel DMG
+        if: matrix.name == 'macOS Intel'
+        shell: bash
+        run: |
+          bundle_root="apps/desktop/src-tauri/target/release/bundle"
+          stage_dir="$RUNNER_TEMP/ai-monitor-dmg"
+          version="$(node -p "require('./package.json').version")"
+          mkdir -p "$stage_dir" "$bundle_root/dmg"
+          cp -R "$bundle_root/macos/AI Monitor.app" "$stage_dir/AI Monitor.app"
+          ln -s /Applications "$stage_dir/Applications"
+          hdiutil create -volname "AI Monitor" -srcfolder "$stage_dir" -ov -format UDZO "$bundle_root/dmg/AI Monitor_${version}_x64.dmg"
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

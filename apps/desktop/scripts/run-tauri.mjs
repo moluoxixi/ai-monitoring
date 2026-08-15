@@ -9,6 +9,7 @@ const mode = process.argv[2]
 if (!['dev', 'build'].includes(mode)) {
   throw new Error('Usage: node scripts/run-tauri.mjs <dev|build>')
 }
+const extraArgs = process.argv.slice(3)
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const projectRoot = resolve(desktopRoot, '../..')
@@ -40,7 +41,7 @@ if (process.platform === 'win32' && !findWindowsLinker()) {
     windowsHide: false,
   })
 } else {
-  result = spawnSync(process.execPath, [tauriScript, mode], {
+  result = spawnSync(process.execPath, [tauriScript, mode, ...extraArgs], {
     cwd: desktopRoot,
     env: process.env,
     stdio: 'inherit',
