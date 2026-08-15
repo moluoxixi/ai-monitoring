@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 
 const numberValue = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
@@ -9,21 +9,30 @@ const numberValue = (value: string | undefined, fallback: number): number => {
 
 @Injectable()
 export class AppConfigService {
-  readonly projectRoot = resolve(__dirname, '../../../..');
+  /** Read-only application files (scripts, hooks and built frontend assets). */
+  readonly resourceRoot = resolve(
+    process.env.AIMONITOR_RESOURCE_ROOT?.trim() || process.env.AIMONITOR_PROJECT_ROOT?.trim() || resolve(__dirname, '../../../..'),
+  );
+  /** Writable runtime files (database, bindings, settings and outbox). */
+  readonly dataRoot = resolve(
+    process.env.AIMONITOR_DATA_ROOT?.trim() || join(this.resourceRoot, 'data'),
+  );
+  /** Kept as an API-compatible alias for integrations that use the project root as cwd. */
+  readonly projectRoot = this.resourceRoot;
   readonly host = process.env.AIMONITOR_HOST?.trim() || '127.0.0.1';
   readonly port = numberValue(process.env.AIMONITOR_PORT, 8787);
-  readonly dbPath = this.path(process.env.AIMONITOR_DB_PATH || 'data/monitor.db');
-  readonly openClawBindingsPath = this.path(
-    process.env.AIMONITOR_OPENCLAW_BINDINGS_PATH || 'data/openclaw-channels.json',
+  readonly dbPath = this.dataPath(process.env.AIMONITOR_DB_PATH || 'monitor.db');
+  readonly openClawBindingsPath = this.dataPath(
+    process.env.AIMONITOR_OPENCLAW_BINDINGS_PATH || 'openclaw-channels.json',
   );
-  readonly pushPlusBindingPath = this.path(
-    process.env.AIMONITOR_PUSHPLUS_BINDING_PATH || 'data/pushplus-binding.json',
+  readonly pushPlusBindingPath = this.dataPath(
+    process.env.AIMONITOR_PUSHPLUS_BINDING_PATH || 'pushplus-binding.json',
   );
-  readonly appriseChannelsPath = this.path(
-    process.env.AIMONITOR_APPRISE_CHANNELS_PATH || 'data/apprise-channels.json',
+  readonly appriseChannelsPath = this.dataPath(
+    process.env.AIMONITOR_APPRISE_CHANNELS_PATH || 'apprise-channels.json',
   );
-  readonly userSettingsPath = this.path(
-    process.env.AIMONITOR_USER_SETTINGS_PATH || 'data/user-settings.json',
+  readonly userSettingsPath = this.dataPath(
+    process.env.AIMONITOR_USER_SETTINGS_PATH || 'user-settings.json',
   );
   readonly answerCaptureGraceMs = Math.max(0, numberValue(process.env.AIMONITOR_ANSWER_CAPTURE_GRACE_MS, 1_500));
   /** Delay recoverable provider failures so a follow-up/retry can suppress them. */
@@ -32,17 +41,22 @@ export class AppConfigService {
     numberValue(process.env.AIMONITOR_RECOVERABLE_FAILURE_GRACE_MS, 10 * 60_000),
   );
   readonly codexSessionsPath = resolve(process.env.AIMONITOR_CODEX_SESSIONS_PATH?.trim() || resolve(homedir(), '.codex', 'sessions'));
+  private readonly applicationSupportPath = process.platform === 'darwin'
+    ? join(homedir(), 'Library', 'Application Support')
+    : (process.env.LOCALAPPDATA || '');
   readonly claudeDesktopSessionsPath = resolve(
     process.env.AIMONITOR_CLAUDE_DESKTOP_SESSIONS_PATH?.trim()
-      || join(process.env.LOCALAPPDATA || '', 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Local', 'Claude-3p', 'local-agent-mode-sessions'),
+      || (process.platform === 'darwin'
+        ? join(this.applicationSupportPath, 'Claude', 'local-agent-mode-sessions')
+        : join(this.applicationSupportPath, 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Local', 'Claude-3p', 'local-agent-mode-sessions')),
   );
   readonly hermesStatePath = resolve(
     process.env.AIMONITOR_HERMES_STATE_PATH?.trim()
-      || join(process.env.LOCALAPPDATA || '', 'hermes', 'state.db'),
+      || join(this.applicationSupportPath, 'hermes', 'state.db'),
   );
   readonly hermesSessionsPath = resolve(
     process.env.AIMONITOR_HERMES_SESSIONS_PATH?.trim()
-      || join(process.env.LOCALAPPDATA || '', 'hermes', 'sessions'),
+      || join(this.applicationSupportPath, 'hermes', 'sessions'),
   );
   readonly codexBackfillMinutes = numberValue(process.env.AIMONITOR_CODEX_BACKFILL_MINUTES, 120);
   readonly ingestToken = process.env.AIMONITOR_INGEST_TOKEN || '';
@@ -52,9 +66,13 @@ export class AppConfigService {
     .filter(Boolean);
   readonly retryBaseSeconds = numberValue(process.env.AIMONITOR_RETRY_BASE_SECONDS, 5);
   readonly retryMaxSeconds = numberValue(process.env.AIMONITOR_RETRY_MAX_SECONDS, 3600);
-  readonly webDistPath = resolve(this.projectRoot, 'apps/web/dist');
+  readonly webDistPath = resolve(
+    process.env.AIMONITOR_WEB_DIST_PATH?.trim() || join(this.resourceRoot, 'apps', 'web', 'dist'),
+  );
 
-  private path(value: string): string {
-    return resolve(this.projectRoot, value);
+  private dataPath(value: string): string {
+    if (isAbsolute(value)) return resolve(value);
+    const relative = value.replace(/^data[\\/]/, '');
+    return resolve(this.dataRoot, relative);
   }
 }

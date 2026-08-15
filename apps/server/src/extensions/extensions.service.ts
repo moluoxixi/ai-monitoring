@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ExtensionDefinition, ExtensionRuntimeState } from './extension.types';
+import type { PlatformScanSnapshot } from './platform-scanner.service';
+import type { UserSettingsSnapshot } from '../settings/user-settings.types';
 
 const EXTENSIONS: ExtensionDefinition[] = [
   {
@@ -138,6 +140,19 @@ export class ExtensionsService {
         detectionSignals: [],
       }),
     }));
+  }
+
+  configurableKeys(snapshot?: PlatformScanSnapshot): string[] {
+    const supported = this.definitions().map((extension) => extension.key);
+    if (!snapshot || snapshot.scanStatus === 'unavailable') return supported;
+    return supported.filter((key) => snapshot.platforms[key]?.detected === true);
+  }
+
+  effectiveVisibleKeys(snapshot: PlatformScanSnapshot | undefined, settings: UserSettingsSnapshot): string[] {
+    const configurable = this.configurableKeys(snapshot);
+    if (!settings.hasVisiblePreference) return configurable;
+    const allowed = new Set(configurable);
+    return settings.visibleExtensions.filter((key) => allowed.has(key));
   }
 
   get(key: string): ExtensionDefinition {

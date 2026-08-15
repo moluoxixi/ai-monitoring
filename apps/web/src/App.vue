@@ -11,7 +11,7 @@ import type { ChannelFormSchema } from './types/monitor'
 import ExtensionsView from './views/ExtensionsView.vue'
 import OverviewView from './views/OverviewView.vue'
 
-const { stats, events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh } = useMonitor()
+const { events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh } = useMonitor()
 const { theme, toggleTheme } = useTheme()
 const activeView = ref('overview')
 const selectedExtension = ref('codex-cli')
@@ -101,9 +101,10 @@ const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: nu
   <div class="app-shell">
     <AppHeader
       :active-view="activeView"
-      :event-count="stats.events"
+      :event-count="extensionPayload.visibleEventCount"
       :refreshing="refreshing"
       :theme="theme"
+      :device="extensionPayload.device"
       @refresh="refresh()"
       @toggle-theme="toggleTheme"
       @view="activeView = $event"
@@ -117,7 +118,8 @@ const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: nu
           :events="events"
           :extensions="extensions"
           :channels="channels"
-          :event-count="stats.events"
+          :event-count="extensionPayload.visibleEventCount"
+          :visible-extensions="extensionPayload.visibleExtensions"
         />
         <ExtensionsView
           v-else
@@ -126,7 +128,10 @@ const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: nu
           :selected-key="selectedExtension"
           :saving="saving"
           :scan-scope="extensionPayload.scanScope"
+          :scan-status="extensionPayload.scanStatus"
           :scanned-at="extensionPayload.scannedAt"
+          :device="extensionPayload.device"
+          :configurable-extensions="extensionPayload.configurableExtensions"
           :visible-extensions="extensionPayload.visibleExtensions"
           :notification-settings="notificationSettings"
           @select="selectedExtension = $event"

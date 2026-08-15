@@ -1,0 +1,89 @@
+name: desktop-build
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+          - name: macOS Intel
+            os: macos-13
+          - name: macOS Apple Silicon
+            os: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Load MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check desktop prerequisites
+        run: npm run desktop:check
+
+      - name: Type-check workspaces
+        run: npm run typecheck
+
+      - name: Test workspaces
+        run: npm test
+
+      - name: Test desktop runtime
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+
+      - name: Build desktop package
+        run: npm run desktop:build
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-monitor-${{ matrix.name }}
+          path: apps/desktop/src-tauri/target/release/bundle/
+          if-no-files-found: error
+
+  release:
+    name: Publish tagged desktop release
+    if: github.ref_type == 'tag'
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release-artifacts/**/*.msi
+            release-artifacts/**/*-setup.exe
+            release-artifacts/**/*.dmg

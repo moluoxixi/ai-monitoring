@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const definitions = [
@@ -15,6 +15,17 @@ const definitions = [
   },
 ]
 
+const openClawCliModule = () => {
+  const candidates = [
+    process.env.AIMONITOR_OPENCLAW_CLI_PATH?.trim(),
+    process.env.AIMONITOR_RESOURCE_ROOT?.trim()
+      ? join(process.env.AIMONITOR_RESOURCE_ROOT.trim(), 'node_modules', 'openclaw', 'openclaw.mjs')
+      : undefined,
+    join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs'),
+  ].filter(Boolean)
+  return candidates.find((candidate) => existsSync(candidate))
+}
+
 for (const definition of definitions) {
   if (!definition.version) {
     throw new Error(`Missing required plugin version for ${definition.id}`)
@@ -22,10 +33,9 @@ for (const definition of definitions) {
 }
 
 const runOpenClaw = (args, stdio = 'pipe') => {
-  const command = process.platform === 'win32' ? process.execPath : 'openclaw'
-  const commandArgs = process.platform === 'win32'
-    ? [join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs'), ...args]
-    : args
+  const cliModule = openClawCliModule()
+  const command = cliModule ? process.execPath : 'openclaw'
+  const commandArgs = cliModule ? [cliModule, ...args] : args
   const result = spawnSync(command, commandArgs, {
     encoding: 'utf8',
     stdio,

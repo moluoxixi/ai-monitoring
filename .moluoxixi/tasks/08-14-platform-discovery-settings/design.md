@@ -34,7 +34,9 @@ monitorVerified, lastVerifiedAt
 
 ## Detection
 
-Windows 检测优先级：精确进程名和可执行路径、PATH 命令、canonical 配置/安装路径组合。Codex、Claude、Qoder、Hermes、Cursor 各自定义探针，不使用模糊目录名。非 Windows 或容器环境返回支持目录和空检测状态，并带 `scanScope=unsupported`。
+Windows 与 macOS 检测优先级：精确进程名和可执行路径、PATH 命令、canonical 配置/安装路径组合。Codex、Claude、Qoder、Hermes、Cursor 各自定义探针，不使用模糊目录名。Linux 或容器环境返回支持目录和空检测状态，并带 `scanScope=unsupported`。
+
+平台偏好由 `ExtensionsService` 依据扫描快照和用户配置统一计算。事件采集始终入库；未启用平台不创建新的 delivery，消息概览也按同一有效平台集合过滤。设备信息随扩展聚合接口返回，前端不得自行推断操作系统。
 
 扫描在服务启动时执行一次；重新扫描由 API 显式触发。扫描异常按平台隔离并返回空信号，不能让扩展 API 失败。
 

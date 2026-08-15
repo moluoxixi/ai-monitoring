@@ -14,6 +14,14 @@ export interface ExtensionRuntimeState {
   detectionSignals: string[];
 }
 
+export type DeviceOperatingSystem = 'windows' | 'macos' | 'linux' | 'other';
+
+export interface DeviceInfo {
+  os: DeviceOperatingSystem;
+  label: string;
+  container: boolean;
+}
+
 export interface ExtensionAdapter {
   id: string;
   active: boolean;

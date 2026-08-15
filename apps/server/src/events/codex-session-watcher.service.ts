@@ -222,7 +222,11 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
         this.enqueue(path, true);
         return;
       }
-      this.enqueue(path, false, backfillEnd);
+      // Recover terminal turns that completed while the relay was offline.
+      // syncFile applies codexBackfillMinutes to startup reads, and the
+      // database de-duplicates existing channel deliveries, so restarting
+      // the service cannot replay already delivered notifications.
+      this.enqueue(path, true, backfillEnd);
       this.enqueue(path, true);
     });
     this.watcher.on('change', (path) => {

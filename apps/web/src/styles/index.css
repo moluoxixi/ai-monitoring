@@ -176,7 +176,8 @@ h1, h2, h3, p { margin-top: 0; }
   line-height: 16px;
   text-align: center;
 }
-.header-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+.device-header { max-width: 110px; overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .icon-action { color: var(--muted); background: #0d1412; border-color: var(--line-strong); }
 .icon-action:hover { color: var(--green); border-color: #3a6856; background: var(--green-soft); }
 
@@ -287,6 +288,8 @@ h1, h2, h3, p { margin-top: 0; }
 .extension-toolbar { min-height: 56px; display: flex; align-items: center; gap: 12px; padding: 10px 17px; border-bottom: 1px solid var(--line); }
 .extension-toolbar .el-radio-group { flex: 0 0 auto; }
 .scan-meta { min-width: 0; flex: 1; overflow: hidden; color: var(--faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.device-pill { color: var(--cyan); font-weight: 650; }
+.device-pill i { color: var(--amber); font-style: normal; font-weight: 500; }
 .extension-toolbar-actions { display: flex; gap: 7px; }
 .extension-empty { min-height: 220px; }
 .extension-settings { display: grid; gap: 18px; }
@@ -465,6 +468,7 @@ html[data-theme="light"] .app-shell .el-button.el-button--primary {
   .app-header { height: 58px; grid-template-columns: auto 1fr auto; padding: 0 12px; }
   .brand strong { display: none; }
   .brand-mark { width: 29px; height: 29px; }
+  .device-header { display: none; }
   .header-tabs { justify-self: center; }
   .header-tabs button { padding: 0 10px; }
   .page-shell { width: calc(100% - 20px); padding: 14px 0 38px; }

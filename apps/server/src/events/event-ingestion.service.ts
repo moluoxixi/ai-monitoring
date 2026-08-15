@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { AppConfigService } from '../config/app-config.service';
 import { DatabaseService } from '../database/database.service';
 import type { NormalizedEvent } from '../database/database.types';
 import { ExtensionsService } from '../extensions/extensions.service';
+import { PlatformScannerService } from '../extensions/platform-scanner.service';
 import { UserSettingsService } from '../settings/user-settings.service';
 import { cleanAnswerText, isRecoverableFailure } from './event-text';
 
@@ -29,6 +30,7 @@ export class EventIngestionService {
     private readonly config: AppConfigService,
     private readonly extensions: ExtensionsService,
     private readonly settings: UserSettingsService,
+    @Optional() private readonly scanner?: PlatformScannerService,
   ) {}
 
   ingest(event: NormalizedEvent, channels: string[], answerSource?: unknown): [number, boolean] {
@@ -58,7 +60,7 @@ export class EventIngestionService {
     if (explicitlyDiagnostic) event.metadata.notification_state = 'diagnostic';
     else if (recoverableFailure) event.metadata.notification_state = 'provisional';
 
-    const deliveryChannels = explicitlyDiagnostic ? [] : channels;
+    const deliveryChannels = explicitlyDiagnostic ? [] : this.deliveryChannelsFor(event.client, channels);
     const deliveryDelay = event.status === 'completed'
       ? this.config.answerCaptureGraceMs
       : recoverableFailure ? Number(this.config.recoverableFailureGraceMs || 0) : 0;
@@ -78,6 +80,12 @@ export class EventIngestionService {
       }
     }
     return [eventId, inserted];
+  }
+
+  deliveryChannelsFor(client: string, channels: string[]): string[] {
+    if (!this.scanner) return [...channels];
+    const visible = new Set(this.extensions.effectiveVisibleKeys(this.scanner.snapshot(), this.settings.snapshot()));
+    return visible.has(client) ? [...channels] : [];
   }
 
   /** Called by watchers when a user starts a follow-up turn. */

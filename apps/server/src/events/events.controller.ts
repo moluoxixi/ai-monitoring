@@ -67,8 +67,8 @@ export class EventsController {
       message: `${this.extensions.get(client).label} 的本地通知链路工作正常。`,
       metadata: { manual: true },
     });
-    const selected = this.channels.deliveryChannels();
-    const [eventId, inserted] = this.database.insertEvent(event, selected);
+    const selected = this.ingestion.deliveryChannelsFor(client, this.channels.deliveryChannels());
+    const [eventId, inserted] = this.ingestion.ingest(event, selected);
     return { ok: true, event_id: eventId, inserted, channels: selected };
   }
 

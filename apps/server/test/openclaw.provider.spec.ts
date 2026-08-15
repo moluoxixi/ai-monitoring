@@ -40,6 +40,7 @@ describe('OpenClawProvider binding', () => {
     temporary.push(root);
     config = {
       projectRoot: root,
+      dataRoot: join(root, 'data'),
       openClawBindingsPath: join(root, 'bindings.json'),
     } as AppConfigService;
     run = vi.fn(async (_executable: string, args: string[]) => {
@@ -168,6 +169,24 @@ describe('OpenClawProvider binding', () => {
       expect.arrayContaining(['cron', 'run', 'job-1', '--wait']),
       expect.objectContaining({ redact: expect.arrayContaining(['qqbot:c2c:user-openid', 'default']) }),
     );
+    const addCall = run.mock.calls.find(([, args]) => args.includes('cron') && args.includes('add'));
+    expect(addCall).toBeDefined();
+    if (!addCall) throw new Error('cron add was not called');
+    const addArgs = addCall[1] as string[];
+    const commandArgvIndex = addArgs.indexOf('--command-argv');
+    const encodedCommandArgv = addArgs[commandArgvIndex + 1];
+    expect(encodedCommandArgv).toBeTypeOf('string');
+    if (!encodedCommandArgv) throw new Error('cron command argv was not provided');
+    const commandArgv = JSON.parse(encodedCommandArgv) as string[];
+    expect(commandArgv.slice(0, 3)).toEqual([
+      process.execPath,
+      join(root, 'scripts', 'openclaw-emit-notification.mjs'),
+      join(root, 'data', 'openclaw-outbound'),
+    ]);
+    const messagePath = commandArgv[3];
+    expect(messagePath).toMatch(/openclaw-outbound[\\/]notification-[\w-]+\.txt$/);
+    if (!messagePath) throw new Error('notification payload path was not provided');
+    expect(existsSync(messagePath)).toBe(false);
   });
 
   it('rejects QQ Gateway runs without a delivered result', async () => {

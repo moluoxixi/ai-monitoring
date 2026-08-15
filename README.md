@@ -1,6 +1,6 @@
 # AI Coding Monitor
 
-本仓库提供本地 AI 任务消息监控中心：保存任务提问、回答、失败原因和通知投递状态，并通过 [OpenClaw](https://github.com/openclaw/openclaw) 及腾讯维护的通道插件发送 QQ/微信消息。本仓库只提供 Windows 快速部署、官方 hooks/notify 接入、可靠通知 outbox 和统一入口。
+本仓库提供本地 AI 任务消息监控中心：保存任务提问、回答、失败原因和通知投递状态，并通过 [OpenClaw](https://github.com/openclaw/openclaw) 及腾讯维护的通道插件发送 QQ/微信消息。本仓库提供 Windows 源码快速部署、Windows/macOS 桌面安装包、官方 hooks/notify 接入、可靠通知 outbox 和统一入口。
 
 ## 架构
 
@@ -76,6 +76,28 @@ Set-ExecutionPolicy -Scope Process Bypass
 扩展页首次启动会按当前环境的进程、PATH 命令和 canonical 配置目录做隔离扫描；Windows 主机显示检测结果，容器或不支持的平台扫描会回退到全部支持目录。用户可在扩展设置中保存要展示的平台集合，这只影响界面，不会停止事件采集、数据库归类或通知投递。消息平台绑定后全局生效：绑定多少个，所有 AI 软件的新事件就向多少个通道分别创建 outbox 投递，其中一个失败不会阻断其它通道。不绑定通道时事件仍保留在本地，但不会产生外发消息。
 
 `scripts/install.ps1` 会自动安装 workspace 依赖并构建。开发模式使用 `npm run dev`，完整生产构建使用 `npm run build`，类型检查使用 `npm run typecheck`，测试使用 `npm test`。
+
+## 桌面 App（Tauri）
+
+仓库同时提供可选的 Tauri 2 桌面壳，适合希望登录后自动启动通知中心、使用独立窗口并避免手工管理 `8787` 服务的用户。桌面端不重写 Nest 监控逻辑，而是启动同一个 Node sidecar；因此 Codex、Claude、Qoder、Hermes、Cursor 的监听和 QQ/微信通道保持一致。
+
+前置条件：Node.js 24.15+（或 22.22.3+）、Rust。Windows 还需要 Visual Studio Build Tools + Windows SDK 和 WebView2；macOS 需要 Xcode Command Line Tools。先运行 `npm run desktop:check` 检查环境；Windows 缺少 MSVC 时运行 `npm run desktop:install-windows-runtime`（管理员 PowerShell），macOS 缺少 Apple 工具链时运行 `npm run desktop:install-macos-runtime` 并完成系统安装提示。开发运行：
+
+```powershell
+npm run desktop:dev
+```
+
+构建安装包：
+
+```powershell
+npm run desktop:build
+```
+
+桌面包默认内置固定版本的 OpenClaw、QQ 插件和微信插件，用户无需另装 Node.js 或 OpenClaw；首次使用仍需在界面扫码登录，凭据不会写进安装包。Windows 和 macOS 必须分别在目标系统构建，因为安装包会嵌入当前系统的 Node runtime 与 `better-sqlite3` 原生模块；macOS 还需按 Intel/Apple Silicon 分别构建，除非另行配置 universal pipeline。
+
+仓库提供 `desktop-build` GitHub Actions（手动触发或推送 `v*` 标签）分别构建 Windows x64、macOS Intel 和 macOS Apple Silicon 安装包；手动构建产物位于 Actions artifacts，`v*` 标签构建还会把 MSI/EXE/DMG 汇总到对应 GitHub Release。当前未配置 Windows 代码签名或 macOS 签名/公证，公开分发前应接入平台证书。
+
+Tauri 会优先复用 `127.0.0.1:8787` 上健康的通知中心；没有服务时启动 Node sidecar，并等待 `/api/health` 后再打开本地页面。这样已安装的 AI hooks 不需要改成随机端口。桌面构建默认把固定版本的 OpenClaw、QQ 插件和微信插件一起打进安装包，首次启动自动把插件准备到用户数据目录并启动 `127.0.0.1:18789` Gateway；已有 Gateway 会复用，不重复启动。首次构建/首次启动需要访问 npm 下载或校验插件，QQ/微信扫码登录仍需用户在页面中完成。SQLite、用户设置、绑定、OpenClaw 登录状态和通知 outbox 使用系统用户数据目录，不会写入安装包。可通过 `AIMONITOR_OPENCLAW_CLI_PATH` 使用外部 CLI，或设置 `AIMONITOR_DESKTOP_SKIP_OPENCLAW_INSTALL=1` 构建不含 OpenClaw 的精简包。
 
 ## Docker 快速部署
 

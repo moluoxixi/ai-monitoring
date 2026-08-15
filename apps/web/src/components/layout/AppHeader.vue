@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Bell, Connection, Grid, Moon, Refresh, Sunny } from '@element-plus/icons-vue'
 import type { Theme } from '../../composables/useTheme'
+import type { DeviceInfo } from '../../types/monitor'
 
-defineProps<{ activeView: string; eventCount: number; refreshing: boolean; theme: Theme }>()
+defineProps<{ activeView: string; eventCount: number; refreshing: boolean; theme: Theme; device: DeviceInfo }>()
 defineEmits<{ refresh: []; view: [value: string]; toggleTheme: [] }>()
 </script>
 
@@ -21,6 +22,7 @@ defineEmits<{ refresh: []; view: [value: string]; toggleTheme: [] }>()
       </button>
     </nav>
     <div class="header-actions">
+      <span class="device-header" :title="device.container ? `${device.label} 容器` : device.label">{{ device.label }}</span>
       <el-tooltip :content="theme === 'dark' ? '切换浅色主题' : '切换深色主题'" placement="bottom">
         <el-button
           class="icon-action"

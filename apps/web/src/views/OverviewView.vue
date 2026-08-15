@@ -5,12 +5,23 @@ import { monitorApi } from '../api/monitor'
 import type { ChannelStatus, ExtensionCard, MonitorEvent } from '../types/monitor'
 import MessageFeed from '../components/overview/MessageFeed.vue'
 import TaskDetailDialog from '../components/overview/TaskDetailDialog.vue'
+import { filterEventsByVisibleKeys } from '../utils/extension-selection'
 
-const props = defineProps<{ events: MonitorEvent[]; extensions: ExtensionCard[]; channels: ChannelStatus[]; eventCount: number }>()
+const props = defineProps<{
+  events: MonitorEvent[]
+  extensions: ExtensionCard[]
+  channels: ChannelStatus[]
+  eventCount: number
+  visibleExtensions: string[]
+}>()
 const query = ref('')
 const extension = ref('all')
 const status = ref('all')
 const selectedEvent = ref<MonitorEvent | null>(null)
+const displayedExtensions = computed(() => {
+  const visible = new Set(props.visibleExtensions)
+  return props.extensions.filter(item => visible.has(item.key))
+})
 const selectEvent = async (event: MonitorEvent) => {
   selectedEvent.value = event
   try {
@@ -29,10 +40,10 @@ const statusOptions = [
 
 const extensionCount = (key: string) => key === 'all'
   ? props.eventCount
-  : props.extensions.find(item => item.key === key)?.event_count || 0
+  : displayedExtensions.value.find(item => item.key === key)?.event_count || 0
 const visibleEvents = computed(() => {
   const needle = query.value.trim().toLowerCase()
-  return props.events.filter((event) => {
+  return filterEventsByVisibleKeys(props.events, props.visibleExtensions).filter((event) => {
     if (extension.value !== 'all' && event.client !== extension.value) return false
     if (status.value !== 'all' && event.status !== status.value) return false
     if (!needle) return true
@@ -55,7 +66,7 @@ const visibleEvents = computed(() => {
         全部 <span>{{ extensionCount('all') }}</span>
       </button>
       <button
-        v-for="item in extensions"
+        v-for="item in displayedExtensions"
         :key="item.key"
         :class="{ active: extension === item.key }"
         type="button"
@@ -64,7 +75,7 @@ const visibleEvents = computed(() => {
         {{ item.label }} <span>{{ extensionCount(item.key) }}</span>
       </button>
     </div>
-    <MessageFeed :events="visibleEvents" :extensions="extensions" :channels="channels" @select="selectEvent" />
+    <MessageFeed :events="visibleEvents" :extensions="displayedExtensions" :channels="channels" @select="selectEvent" />
   </section>
   <TaskDetailDialog
     v-model="selectedEvent"

@@ -4,11 +4,17 @@
   "private": true,
   "workspaces": [
     "apps/server",
-    "apps/web"
+    "apps/web",
+    "apps/desktop"
   ],
   "scripts": {
     "build": "npm run build -w @ai-monitor/web && npm run build -w @ai-monitor/server",
     "dev": "concurrently -n server,web -c green,cyan \"npm run start:dev -w @ai-monitor/server\" \"npm run dev -w @ai-monitor/web\"",
+    "desktop:dev": "npm run dev -w @ai-monitor/desktop",
+    "desktop:build": "npm run build -w @ai-monitor/desktop",
+    "desktop:check": "node scripts/check-desktop-prerequisites.mjs",
+    "desktop:install-macos-runtime": "sh scripts/install-macos-desktop-runtime.sh",
+    "desktop:install-windows-runtime": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-windows-desktop-runtime.ps1",
     "start": "npm run start:prod -w @ai-monitor/server",
     "test": "npm run test -w @ai-monitor/server && npm run test -w @ai-monitor/web",
     "typecheck": "npm run typecheck -w @ai-monitor/server && npm run typecheck -w @ai-monitor/web"

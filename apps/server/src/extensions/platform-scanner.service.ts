@@ -5,20 +5,26 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { AppConfigService } from '../config/app-config.service';
-import type { ExtensionRuntimeState } from './extension.types';
+import type { DeviceInfo, ExtensionRuntimeState } from './extension.types';
 
 export interface PlatformScanSnapshot {
   scanScope: 'host' | 'unsupported';
+  scanStatus: 'reliable' | 'degraded' | 'unavailable';
   scannedAt: string | null;
+  device: DeviceInfo;
   platforms: Record<string, ExtensionRuntimeState>;
 }
+
+type ProbeResult<T> = { value: T; available: boolean };
 
 type Probe = {
   commands: string[];
   executables: string[];
   processNames: string[];
   processPathFragments?: string[];
-  paths: string[];
+  detectionPaths?: string[];
+  appxPackageNames?: string[];
+  installedProductNames?: string[];
   monitorPaths: string[];
   monitorKind: 'sessions' | 'hooks' | 'audit' | 'config';
 };
@@ -32,95 +38,130 @@ const EMPTY_STATE: ExtensionRuntimeState = {
 };
 
 const envPath = (root: string | undefined, ...segments: string[]): string => root ? join(root, ...segments) : '';
-const containerMarker = (): boolean => Boolean(
-  process.env.AIMONITOR_SCAN_SCOPE === 'unsupported'
-  || process.env.DOCKER_CONTAINER === 'true'
+const actualContainerMarker = (): boolean => Boolean(
+  process.env.DOCKER_CONTAINER === 'true'
   || process.env.CONTAINER === 'true'
   || existsSync('/.dockerenv')
   || existsSync('/run/.containerenv'),
 );
+const containerMarker = (): boolean => Boolean(process.env.AIMONITOR_SCAN_SCOPE === 'unsupported' || actualContainerMarker());
 
-const probes: Record<string, Probe> = {
+const supportedKeys = [
+  'codex-cli', 'codex-desktop', 'claude-cli', 'claude-desktop',
+  'qoder-cli', 'qoder-desktop', 'qoder-quest', 'hermes-cli', 'hermes-desktop',
+  'cursor-cli', 'cursor-desktop',
+];
+
+const emptyPlatforms = (): Record<string, ExtensionRuntimeState> => Object.fromEntries(
+  supportedKeys.map((key) => [key, { ...EMPTY_STATE, detectionSignals: [] }]),
+);
+
+const normalizePath = (value: string): string => value.replace(/\\/g, '/').toLowerCase();
+
+const deviceInfo = (): DeviceInfo => {
+  const os = process.platform === 'win32' ? 'windows'
+    : process.platform === 'darwin' ? 'macos'
+      : process.platform === 'linux' ? 'linux' : 'other';
+  return {
+    os,
+    label: os === 'windows' ? 'Windows' : os === 'macos' ? 'macOS' : os === 'linux' ? 'Linux' : '其他设备',
+    container: actualContainerMarker(),
+  };
+};
+
+const createProbes = (platform: NodeJS.Platform): Record<string, Probe> => {
+  const mac = platform === 'darwin';
+  const localAppData = mac ? join(homedir(), 'Library', 'Application Support') : process.env.LOCALAPPDATA;
+  const app = (name: string, binary: string): string[] => mac
+    ? [join('/Applications', `${name}.app`, 'Contents', 'MacOS', binary), join(homedir(), 'Applications', `${name}.app`, 'Contents', 'MacOS', binary)]
+    : [envPath(localAppData, 'Programs', name, `${binary}.exe`)];
+  const appFragment = (name: string): string[] => mac
+    ? [`/applications/${name.toLowerCase()}.app/contents/macos/`]
+    : [`/windowsapps/${name.toLowerCase()}_`];
+  const appSupport = (...segments: string[]): string => join(localAppData || '', ...segments);
+
+  return {
   'codex-cli': {
-    commands: ['codex'], executables: [], processNames: ['codex.exe', 'codex-cli.exe', 'openai.codex.exe'],
-    paths: [join(homedir(), '.codex'), envPath(process.env.LOCALAPPDATA, 'Codex')],
+    // codex.exe is also spawned by Codex Desktop; PATH is the only reliable
+    // CLI signal here, so never classify that shared process as the CLI.
+    commands: ['codex'], executables: [], processNames: [],
+    detectionPaths: [],
     monitorPaths: [join(homedir(), '.codex', 'config.toml')], monitorKind: 'hooks',
   },
   'codex-desktop': {
-    commands: [], executables: [envPath(process.env.LOCALAPPDATA, 'Programs', 'Codex', 'Codex.exe')],
-    processNames: ['codex-desktop.exe', 'openai.codex.exe'],
-    paths: [envPath(process.env.LOCALAPPDATA, 'Codex'), join(homedir(), '.codex')],
+    commands: [], executables: app('Codex', 'Codex'),
+    processNames: mac ? ['codex'] : [], processPathFragments: appFragment('openai.codex'),
+    appxPackageNames: mac ? [] : ['openai.codex'],
     monitorPaths: [], monitorKind: 'sessions',
   },
   'claude-cli': {
-    commands: ['claude'], executables: [], processNames: ['claude-code.exe'],
-    paths: [join(homedir(), '.claude')],
+    commands: ['claude'], executables: [], processNames: [], detectionPaths: [],
     monitorPaths: [join(homedir(), '.claude', 'settings.json')],
     monitorKind: 'hooks',
   },
   'claude-desktop': {
-    commands: [], executables: [envPath(process.env.LOCALAPPDATA, 'Microsoft', 'WindowsApps', 'Claude.exe')], processNames: ['claude.exe'],
-    paths: [envPath(process.env.LOCALAPPDATA, 'Claude'), envPath(process.env.LOCALAPPDATA, 'Packages', 'Claude_pzs8sxrjxfjjc')],
+    commands: [], executables: app('Claude', 'Claude'), processNames: mac ? ['claude'] : ['claude.exe'],
+    processPathFragments: appFragment('claude'), appxPackageNames: mac ? [] : ['claude'],
     monitorPaths: [], monitorKind: 'audit',
   },
   'qoder-cli': {
-    commands: ['qoder'], executables: [join(homedir(), '.qoder', 'bin', 'qodercli', 'qodercli.exe')], processNames: [],
-    paths: [join(homedir(), '.qoder')],
+    commands: ['qoder'], executables: [join(homedir(), '.qoder', 'bin', 'qodercli', mac ? 'qodercli' : 'qodercli.exe')], processNames: [],
+    detectionPaths: [],
     monitorPaths: [join(homedir(), '.qoder', 'settings.json')],
     monitorKind: 'hooks',
   },
   'qoder-desktop': {
-    commands: [], executables: [envPath(process.env.LOCALAPPDATA, 'Programs', 'Qoder', 'Qoder.exe')], processNames: ['qoder.exe'],
-    paths: [envPath(process.env.APPDATA, 'Qoder'), envPath(process.env.LOCALAPPDATA, '.qoder')],
+    commands: [], executables: app('Qoder', 'Qoder'), processNames: mac ? ['qoder'] : ['qoder.exe'],
+    processPathFragments: appFragment('qoder'), installedProductNames: mac ? [] : ['qoder ide (user)'],
     monitorPaths: [join(homedir(), '.qoder', 'settings.json')], monitorKind: 'hooks',
   },
   'qoder-quest': {
     // Quest sessions are not distinguishable from the desktop process by
     // executable name. Never report a generic qoder.exe as Quest.
     commands: [], executables: [], processNames: [],
-    paths: [envPath(process.env.APPDATA, 'Qoder', 'logs')],
+    detectionPaths: [mac ? appSupport('Qoder', 'logs') : envPath(process.env.APPDATA, 'Qoder', 'logs')],
     monitorPaths: [join(homedir(), '.qoder', 'settings.json')], monitorKind: 'hooks',
   },
   'hermes-cli': {
-    commands: ['hermes'], executables: [envPath(process.env.LOCALAPPDATA, 'hermes', 'hermes-agent', 'venv', 'Scripts', 'hermes.exe')], processNames: [],
-    processPathFragments: ['\\hermes-agent\\venv\\scripts\\hermes.exe'],
-    paths: [envPath(process.env.LOCALAPPDATA, 'hermes'), join(homedir(), '.hermes')],
-    monitorPaths: [envPath(process.env.LOCALAPPDATA, 'hermes', 'config.yaml'), join(homedir(), '.hermes', 'config.yaml')],
+    commands: ['hermes'], executables: [mac ? join(homedir(), '.hermes', 'bin', 'hermes') : envPath(process.env.LOCALAPPDATA, 'hermes', 'hermes-agent', 'venv', 'Scripts', 'hermes.exe')], processNames: [],
+    processPathFragments: mac ? ['/.hermes/bin/hermes'] : ['\\hermes-agent\\venv\\scripts\\hermes.exe'],
+    monitorPaths: [mac ? join(homedir(), 'Library', 'Application Support', 'hermes', 'config.yaml') : envPath(process.env.LOCALAPPDATA, 'hermes', 'config.yaml'), join(homedir(), '.hermes', 'config.yaml')],
     monitorKind: 'config',
   },
   'hermes-desktop': {
-    commands: [], executables: [
-      envPath(process.env.LOCALAPPDATA, 'Programs', 'Hermes', 'Hermes.exe'),
-      envPath(process.env.LOCALAPPDATA, 'hermes', 'hermes-agent', 'apps', 'desktop', 'release', 'win-unpacked', 'Hermes.exe'),
-    ], processNames: [],
-    processPathFragments: ['\\hermes-agent\\apps\\desktop\\', '\\programs\\hermes\\hermes.exe'],
-    paths: [envPath(process.env.LOCALAPPDATA, 'hermes'), join(homedir(), '.hermes')],
+    commands: [], executables: mac
+      ? app('Hermes', 'Hermes')
+      : [envPath(process.env.LOCALAPPDATA, 'Programs', 'Hermes', 'Hermes.exe'), envPath(process.env.LOCALAPPDATA, 'hermes', 'hermes-agent', 'apps', 'desktop', 'release', 'win-unpacked', 'Hermes.exe')],
+    processNames: mac ? ['hermes'] : [],
+    processPathFragments: mac ? appFragment('hermes') : ['\\hermes-agent\\apps\\desktop\\', '\\programs\\hermes\\hermes.exe'],
     monitorPaths: [
-      envPath(process.env.LOCALAPPDATA, 'hermes', 'state.db'),
-      envPath(process.env.LOCALAPPDATA, 'hermes', 'sessions'),
+      mac ? appSupport('hermes', 'state.db') : envPath(process.env.LOCALAPPDATA, 'hermes', 'state.db'),
+      mac ? appSupport('hermes', 'sessions') : envPath(process.env.LOCALAPPDATA, 'hermes', 'sessions'),
     ],
     monitorKind: 'sessions',
   },
   'cursor-cli': {
-    commands: ['cursor'], executables: [envPath(process.env.LOCALAPPDATA, 'Programs', 'Cursor', 'resources', 'app', 'bin', 'cursor.cmd')], processNames: [],
-    paths: [join(homedir(), '.cursor')],
+    commands: ['agent', 'cursor-agent'], executables: [], processNames: [],
     monitorPaths: [join(homedir(), '.cursor', 'hooks.json')], monitorKind: 'hooks',
   },
   'cursor-desktop': {
-    commands: [], executables: [envPath(process.env.LOCALAPPDATA, 'Programs', 'Cursor', 'Cursor.exe')], processNames: ['cursor.exe'],
-    paths: [join(homedir(), '.cursor'), envPath(process.env.APPDATA, 'Cursor')],
+    commands: [], executables: app('Cursor', 'Cursor'), processNames: mac ? ['cursor'] : ['cursor.exe'],
+    processPathFragments: appFragment('cursor'), installedProductNames: mac ? [] : ['cursor (user)'],
     monitorPaths: [join(homedir(), '.cursor', 'hooks.json')],
     monitorKind: 'hooks',
   },
+  };
 };
 
 @Injectable()
 export class PlatformScannerService implements OnModuleInit {
   private readonly logger = new Logger(PlatformScannerService.name);
   private snapshotValue: PlatformScanSnapshot = {
-    scanScope: process.platform === 'win32' && !containerMarker() ? 'host' : 'unsupported',
+    scanScope: ['win32', 'darwin'].includes(process.platform) && !containerMarker() ? 'host' : 'unsupported',
+    scanStatus: 'unavailable',
     scannedAt: null,
-    platforms: Object.fromEntries(Object.keys(probes).map((key) => [key, { ...EMPTY_STATE, detectionSignals: [] }])),
+    device: deviceInfo(),
+    platforms: emptyPlatforms(),
   };
 
   constructor(private readonly config: AppConfigService) {
@@ -134,6 +175,7 @@ export class PlatformScannerService implements OnModuleInit {
   snapshot(): PlatformScanSnapshot {
     return {
       ...this.snapshotValue,
+      device: { ...this.snapshotValue.device },
       platforms: Object.fromEntries(Object.entries(this.snapshotValue.platforms).map(([key, state]) => [key, {
         ...state,
         detectionSignals: [...state.detectionSignals],
@@ -142,85 +184,161 @@ export class PlatformScannerService implements OnModuleInit {
   }
 
   scan(): PlatformScanSnapshot {
-    const supportedHost = process.platform === 'win32' && !containerMarker();
+    const supportedHost = ['win32', 'darwin'].includes(process.platform) && !containerMarker();
     if (!supportedHost) {
       this.snapshotValue = {
         scanScope: 'unsupported',
+        scanStatus: 'unavailable',
         scannedAt: new Date().toISOString(),
-        platforms: Object.fromEntries(Object.keys(probes).map((key) => [key, { ...EMPTY_STATE, detectionSignals: [] }])),
+        device: deviceInfo(),
+        platforms: emptyPlatforms(),
       };
       return this.snapshot();
     }
-    const running = this.runningProcesses();
-    const runningPaths = this.runningExecutablePaths();
-    const next: Record<string, ExtensionRuntimeState> = {};
-    for (const [key, probe] of Object.entries(probes)) {
-      try {
-        const cliAvailable = process.platform === 'win32' && (
-          probe.commands.some((command) => this.commandAvailable(command))
-          || probe.executables.some((path) => Boolean(path) && existsSync(path))
-        );
-        const runningNow = probe.processPathFragments?.length
-          ? probe.processPathFragments.some((fragment) => [...runningPaths].some((path) => path.includes(fragment.toLowerCase())))
-          : probe.processNames.some((name) => running.has(name.toLowerCase()));
-        const configPathFound = probe.paths.some((path) => Boolean(path) && existsSync(path));
-        const monitorConfigured = key === 'codex-desktop'
-          ? this.hasSessionFile(this.config.codexSessionsPath)
-          : this.monitorConfigured(key, probe);
-        const detectionSignals = [
-          ...(cliAvailable ? ['cli'] : []),
-          ...(runningNow ? ['running'] : []),
-          ...(configPathFound ? ['config'] : []),
-          ...(monitorConfigured ? [probe.monitorKind] : []),
-        ];
-        next[key] = {
-          detected: detectionSignals.length > 0,
-          cliAvailable,
-          running: runningNow,
-          monitorConfigured,
-          detectionSignals: [...new Set(detectionSignals)],
-        };
-      } catch (error) {
-        this.logger.warn(`Platform probe failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
-        next[key] = { ...EMPTY_STATE, detectionSignals: [] };
+    try {
+      const probes = createProbes(process.platform);
+      let degraded = false;
+      const runningResult = this.runningProcesses();
+      const runningPathsResult = this.runningExecutablePaths();
+      const appxResult = this.installedAppxPackages();
+      const productResult = this.installedProducts();
+      degraded ||= !runningResult.available || !runningPathsResult.available || !appxResult.available || !productResult.available;
+      const running = runningResult.value;
+      const runningPaths = runningPathsResult.value;
+      const next: Record<string, ExtensionRuntimeState> = {};
+      for (const [key, probe] of Object.entries(probes)) {
+        try {
+          const commandResults = probe.commands.map((command) => this.commandAvailable(command));
+          degraded ||= commandResults.some((result) => !result.available);
+          const commandAvailable = commandResults.some((result) => result.value);
+          const executableFound = probe.executables.some((path) => Boolean(path) && existsSync(path));
+          const runningNow = probe.processPathFragments?.length
+            ? probe.processPathFragments.some((fragment) => [...runningPaths].some((path) => normalizePath(path).includes(normalizePath(fragment))))
+            : probe.processNames.some((name) => running.has(name.toLowerCase()));
+          const detectionPathFound = probe.detectionPaths?.some((path) => Boolean(path) && existsSync(path)) || false;
+          const appxPackageFound = probe.appxPackageNames?.some((name) => appxResult.value.has(name.toLowerCase())) || false;
+          const installedProductFound = probe.installedProductNames?.some((name) => productResult.value.has(name.toLowerCase())) || false;
+          const monitorConfigured = key === 'codex-desktop'
+            ? this.hasSessionFile(this.config.codexSessionsPath)
+            : this.monitorConfigured(key, probe);
+          const detectionSignals = [
+            ...((key.endsWith('-cli') && (commandAvailable || executableFound)) ? ['cli'] : []),
+            ...((!key.endsWith('-cli') && (executableFound || appxPackageFound || installedProductFound)) ? ['installed'] : []),
+            ...(runningNow ? ['running'] : []),
+            ...(detectionPathFound ? ['activity'] : []),
+            ...(monitorConfigured ? [probe.monitorKind] : []),
+          ];
+          const detected = key.endsWith('-cli')
+            ? commandAvailable || executableFound || runningNow
+            : executableFound || appxPackageFound || installedProductFound || runningNow || detectionPathFound;
+          next[key] = {
+            detected,
+            cliAvailable: key.endsWith('-cli') && (commandAvailable || executableFound),
+            running: runningNow,
+            monitorConfigured,
+            detectionSignals: [...new Set(detectionSignals)],
+          };
+        } catch (error) {
+          this.logger.warn(`Platform probe failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);
+          degraded = true;
+          next[key] = { ...EMPTY_STATE, detectionSignals: [] };
+        }
       }
+      this.snapshotValue = {
+        scanScope: 'host',
+        scanStatus: degraded ? 'degraded' : 'reliable',
+        scannedAt: new Date().toISOString(),
+        device: deviceInfo(),
+        platforms: next,
+      };
+      return this.snapshot();
+    } catch (error) {
+      this.logger.warn(`Platform scan unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      this.snapshotValue = {
+        scanScope: 'host',
+        scanStatus: 'unavailable',
+        scannedAt: new Date().toISOString(),
+        device: deviceInfo(),
+        platforms: emptyPlatforms(),
+      };
+      return this.snapshot();
     }
-    this.snapshotValue = { scanScope: 'host', scannedAt: new Date().toISOString(), platforms: next };
-    return this.snapshot();
   }
 
-  private commandAvailable(command: string): boolean {
+  private commandAvailable(command: string): ProbeResult<boolean> {
     try {
-      execFileSync('where.exe', [command], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
-      return true;
-    } catch {
-      return false;
+      const executable = process.platform === 'win32' ? 'where.exe' : 'which';
+      execFileSync(executable, [command], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      return { value: true, available: true };
+    } catch (error) {
+      // where.exe exits with status 1 for a normal "not found" result. Any
+      // other failure means the command probe itself was unavailable.
+      const status = (error as { status?: number }).status;
+      return { value: false, available: status === 1 };
     }
   }
 
-  private runningProcesses(): Set<string> {
+  private runningProcesses(): ProbeResult<Set<string>> {
     try {
+      if (process.platform === 'darwin') {
+        const output = execFileSync('ps', ['-axo', 'comm='], { encoding: 'utf8' });
+        return { value: new Set(output.split(/\r?\n/).map((line) => line.trim().split('/').pop()?.toLowerCase() || '').filter(Boolean)), available: true };
+      }
       const output = execFileSync('tasklist.exe', ['/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true });
-      return new Set(output.split(/\r?\n/).map((line) => {
+      return { value: new Set(output.split(/\r?\n/).map((line) => {
         const match = /^"([^"]+)"/.exec(line.trim());
         return match?.[1]?.toLowerCase() || '';
-      }).filter(Boolean));
+      }).filter(Boolean)), available: true };
     } catch {
-      return new Set<string>();
+      return { value: new Set<string>(), available: false };
     }
   }
 
-  private runningExecutablePaths(): Set<string> {
+  private runningExecutablePaths(): ProbeResult<Set<string>> {
+    try {
+      if (process.platform === 'darwin') {
+        const output = execFileSync('ps', ['-axo', 'command='], { encoding: 'utf8' });
+        return { value: new Set(output.split(/\r?\n/).map((path) => normalizePath(path.trim().split(/\s+/)[0] || '')).filter(Boolean)), available: true };
+      }
+      const output = execFileSync('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^(Codex|Claude|Qoder|Cursor|Hermes)$' } | ForEach-Object { try { $_.Path } catch {} }",
+      ], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      return { value: new Set(output.split(/\r?\n/).map((path) => normalizePath(path.trim())).filter(Boolean)), available: true };
+    } catch {
+      return { value: new Set<string>(), available: false };
+    }
+  }
+
+  private installedAppxPackages(): ProbeResult<Set<string>> {
+    if (process.platform === 'darwin') return { value: new Set(), available: true };
     try {
       const output = execFileSync('powershell.exe', [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        'Get-Process -Name Hermes -ErrorAction SilentlyContinue | ForEach-Object { try { $_.Path } catch {} }',
+        'Get-AppxPackage -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }',
       ], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
-      return new Set(output.split(/\r?\n/).map((path) => path.trim().toLowerCase()).filter(Boolean));
+      return { value: new Set(output.split(/\r?\n/).map((name) => name.trim().toLowerCase()).filter(Boolean)), available: true };
     } catch {
-      return new Set<string>();
+      return { value: new Set<string>(), available: false };
+    }
+  }
+
+  private installedProducts(): ProbeResult<Set<string>> {
+    if (process.platform === 'darwin') return { value: new Set(), available: true };
+    try {
+      const output = execFileSync('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        "$roots = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'; Get-ItemProperty $roots -ErrorAction SilentlyContinue | ForEach-Object { $_.DisplayName }",
+      ], { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      return { value: new Set(output.split(/\r?\n/).map((name) => name.trim().toLowerCase()).filter(Boolean)), available: true };
+    } catch {
+      return { value: new Set<string>(), available: false };
     }
   }
 

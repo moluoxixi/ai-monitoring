@@ -103,4 +103,36 @@ describe('EventIngestionService', () => {
 
     expect(setup.markMonitorVerified).toHaveBeenCalledWith('qoder-quest', 'qoder');
   });
+
+  it('keeps hidden-platform events but does not create notification deliveries', () => {
+    const setup = serviceFor(vi.fn(() => [7, true, 0]));
+    const settings = {
+      markMonitorVerified: setup.markMonitorVerified,
+      snapshot: vi.fn(() => ({
+        version: 1,
+        notification: { taskLimit: 100, resultLimit: 2_000 },
+        visibleExtensions: ['codex-cli'],
+        visibleExtensionsConfigured: true,
+        monitorVerification: {},
+        hasVisiblePreference: true,
+      })),
+    };
+    const scanner = {
+      snapshot: vi.fn(() => ({
+        scanScope: 'host',
+        scanStatus: 'reliable',
+        scannedAt: '2026-08-15T00:00:00.000Z',
+        device: { os: 'windows', label: 'Windows', container: false },
+        platforms: {
+          'codex-cli': { detected: true, cliAvailable: true, running: false, monitorConfigured: true, detectionSignals: ['cli'] },
+          'claude-cli': { detected: true, cliAvailable: true, running: false, monitorConfigured: true, detectionSignals: ['cli'] },
+        },
+      })),
+    };
+    const service = new EventIngestionService(setup.database, setup.config, setup.extensions, settings as never, scanner as never);
+
+    service.ingest({ ...event(), source: 'claude', client: 'claude-cli' }, ['qq', 'pushplus']);
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({ client: 'claude-cli' }), [], 1_500);
+  });
 });

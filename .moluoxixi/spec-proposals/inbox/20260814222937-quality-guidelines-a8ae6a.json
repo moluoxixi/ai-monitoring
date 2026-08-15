@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "id": "20260814222937-quality-guidelines-a8ae6a",
+  "createdAt": "2026-08-14T22:29:37.206Z",
+  "createdBy": "wl",
+  "sourceTask": ".moluoxixi/tasks/08-14-platform-discovery-settings",
+  "reason": "平台扫描 API 与前端显示偏好的跨层状态契约，避免把空扫描误判为不可用或把配置残留误报为已安装。",
+  "target": "backend/quality-guidelines.md",
+  "kind": "file",
+  "baseHash": "262fa49d9c4bd29b8490edd0c11ddb8f7e23fd2eb4418c8a388e176aab550357",
+  "contentFile": "content/20260814222937-quality-guidelines-a8ae6a.md",
+  "contentHash": "883dd0339da4117175b548ecc5630f9a73099b004d9a67dc348be1defa3450a6"
+}

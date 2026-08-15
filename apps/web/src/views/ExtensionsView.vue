@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Refresh, Setting } from '@element-plus/icons-vue'
-import type { ChannelStatus, ExtensionCard, NotificationSettings } from '../types/monitor'
+import type { ChannelStatus, DeviceInfo, ExtensionCard, NotificationSettings } from '../types/monitor'
 import ExtensionPanel from '../components/extensions/ExtensionPanel.vue'
+import { filterExtensionsByKeys, getDisplayedExtensions, reconcileVisibleKeys } from '../utils/extension-selection'
 
 const props = defineProps<{
   extensions: ExtensionCard[]
@@ -10,7 +11,10 @@ const props = defineProps<{
   selectedKey: string
   saving: boolean
   scanScope: string
+  scanStatus: string
   scannedAt: string | null
+  device: DeviceInfo
+  configurableExtensions: string[]
   visibleExtensions: string[]
   notificationSettings: NotificationSettings
 }>()
@@ -32,17 +36,22 @@ const resultLimitDraft = ref(2000)
 const settingsOpen = ref(false)
 
 const allowedExtensions = computed(() => {
-  const allowed = new Set(props.visibleExtensions)
-  return props.extensions.filter(extension => allowed.has(extension.key))
+  return filterExtensionsByKeys(props.extensions, props.visibleExtensions)
 })
-const displayedExtensions = computed(() => mode.value === 'detected'
-  ? allowedExtensions.value.filter(extension => extension.detected)
-  : allowedExtensions.value)
+const displayedExtensions = computed(() => getDisplayedExtensions(
+  props.extensions, props.visibleExtensions, mode.value, props.scanStatus,
+))
+const configurableExtensions = computed(() => filterExtensionsByKeys(props.extensions, props.configurableExtensions))
 const detectedCount = computed(() => allowedExtensions.value.filter(extension => extension.detected).length)
 const selected = computed(() => displayedExtensions.value.find(item => item.key === active.value) || displayedExtensions.value[0])
 const scanTime = computed(() => props.scannedAt
   ? new Date(props.scannedAt).toLocaleString('zh-CN', { hour12: false })
   : '尚未扫描')
+const scanSummary = computed(() => props.scanStatus === 'unavailable'
+  ? '无法扫描宿主机，已显示全部支持平台'
+  : props.scanStatus === 'degraded'
+    ? `扫描部分可用 · ${scanTime.value}`
+    : `最近扫描 · ${scanTime.value}`)
 
 watch(() => props.selectedKey, value => { if (value) active.value = value })
 watch(active, value => emit('select', value))
@@ -51,8 +60,8 @@ watch(displayedExtensions, extensions => {
     active.value = extensions[0]?.key || ''
   }
 }, { immediate: true })
-watch(() => props.visibleExtensions, value => {
-  if (!settingsOpen.value) preferenceDraft.value = [...value]
+watch([() => props.visibleExtensions, () => props.configurableExtensions], ([visible, configurable]) => {
+  if (!settingsOpen.value) preferenceDraft.value = reconcileVisibleKeys(visible, configurable)
 }, { immediate: true })
 watch(() => props.notificationSettings, value => {
   if (settingsOpen.value) return
@@ -74,7 +83,7 @@ const saveLimits = () => emit('saveNotificationSettings', {
         <el-radio-button value="detected">已检测 {{ detectedCount }}</el-radio-button>
         <el-radio-button value="all">已展示 {{ allowedExtensions.length }}</el-radio-button>
       </el-radio-group>
-      <span class="scan-meta">{{ scanScope === 'host' ? scanTime : '当前环境无法扫描宿主机' }}</span>
+      <span class="scan-meta"><span class="device-pill">{{ device.label }}<i v-if="device.container"> · 容器</i></span> {{ scanSummary }}</span>
       <div class="extension-toolbar-actions">
         <el-tooltip content="重新扫描" placement="bottom">
           <el-button :icon="Refresh" circle :loading="saving" aria-label="重新扫描" @click="emit('scan')" />
@@ -93,10 +102,11 @@ const saveLimits = () => emit('saveNotificationSettings', {
             <div class="setting-block">
               <strong>显示平台</strong>
               <el-checkbox-group v-model="preferenceDraft" class="platform-options">
-                <el-checkbox v-for="extension in extensions" :key="extension.key" :value="extension.key">
+                <el-checkbox v-for="extension in configurableExtensions" :key="extension.key" :value="extension.key">
                   {{ extension.label }}
                 </el-checkbox>
               </el-checkbox-group>
+              <el-empty v-if="!configurableExtensions.length" :image-size="54" description="未检测到可配置平台" />
               <el-button type="primary" size="small" :loading="saving" @click="savePreferences">保存平台</el-button>
             </div>
             <div class="setting-block">
@@ -136,7 +146,7 @@ const saveLimits = () => emit('saveNotificationSettings', {
     <el-empty
       v-else
       class="extension-empty"
-      :description="mode === 'detected' ? '未检测到已展示的平台' : '没有选择要展示的平台'"
+      :description="allowedExtensions.length ? '没有选择要展示的平台' : '未检测到可展示的平台'"
     />
     <ExtensionPanel
       v-if="selected"

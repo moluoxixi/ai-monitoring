@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { QrConnectCredentials, startQrConnect as StartQrConnect } from '@tencent-connect/qqbot-connector';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
@@ -55,7 +55,8 @@ export class OpenClawProvider implements ChannelProvider {
     private readonly config: AppConfigService,
     private readonly runner: ProcessRunnerService,
   ) {
-    this.outboundDir = join(config.projectRoot, 'data', 'openclaw-outbound');
+    const dataRoot = config.dataRoot || join(config.projectRoot, 'data');
+    this.outboundDir = join(dataRoot, 'openclaw-outbound');
     this.emitterPath = join(config.projectRoot, 'scripts', 'openclaw-emit-notification.mjs');
   }
 
@@ -261,9 +262,8 @@ export class OpenClawProvider implements ChannelProvider {
     const loginArgs = ['channels', 'login', '--channel', OPENCLAW_WEIXIN];
     let command = 'openclaw';
     let args = loginArgs;
-    if (process.platform === 'win32') {
-      const cliModule = join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs');
-      if (!existsSync(cliModule)) throw new Error('OpenClaw CLI is unavailable');
+    const cliModule = this.openClawCliModule();
+    if (cliModule) {
       command = process.execPath;
       args = [cliModule, ...loginArgs];
     }
@@ -431,7 +431,7 @@ export class OpenClawProvider implements ChannelProvider {
         '--name', `ai-monitor-${randomUUID().replace(/-/g, '').slice(0, 12)}`,
         '--at', '+24h',
         '--keep-after-run',
-        '--command-argv', JSON.stringify([process.execPath, this.emitterPath, messagePath]),
+        '--command-argv', JSON.stringify([process.execPath, this.emitterPath, this.outboundDir, messagePath]),
         '--command-cwd', this.config.projectRoot,
         '--timeout-seconds', '30',
         '--output-max-bytes', '16000',
@@ -471,7 +471,7 @@ export class OpenClawProvider implements ChannelProvider {
         throw new Error('OpenClaw Gateway did not confirm QQ message delivery');
       }
     } finally {
-      if (existsSync(messagePath)) unlinkSync(messagePath);
+      rmSync(messagePath, { force: true });
       if (jobId) {
         try {
           await this.run(['cron', 'rm', jobId, '--json'], 30_000);
@@ -500,9 +500,8 @@ export class OpenClawProvider implements ChannelProvider {
       const token = await this.gatewayToken();
       if (token) env.OPENCLAW_GATEWAY_TOKEN = token;
     }
-    if (process.platform === 'win32') {
-      const cliModule = join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs');
-      if (!existsSync(cliModule)) throw new Error('OpenClaw CLI is unavailable');
+    const cliModule = this.openClawCliModule();
+    if (cliModule) {
       return this.runner.run(process.execPath, [cliModule, ...args], {
         timeoutMs,
         cwd: this.config.projectRoot,
@@ -511,6 +510,16 @@ export class OpenClawProvider implements ChannelProvider {
       });
     }
     return this.runner.run('openclaw', args, { timeoutMs, cwd: this.config.projectRoot, env, redact });
+  }
+
+  private openClawCliModule(): string | null {
+    const configured = process.env.AIMONITOR_OPENCLAW_CLI_PATH?.trim();
+    const candidates = [
+      configured,
+      join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs'),
+      join(this.config.projectRoot, 'node_modules', 'openclaw', 'openclaw.mjs'),
+    ].filter((value): value is string => Boolean(value));
+    return candidates.find((candidate) => existsSync(candidate)) || null;
   }
 
   private async gatewayToken(): Promise<string> {

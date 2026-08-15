@@ -10,7 +10,11 @@ const emptyStats = (): MonitorStats => ({
 export const useMonitor = () => {
   const stats = ref<MonitorStats>(emptyStats())
   const events = ref<MonitorEvent[]>([])
-  const extensionPayload = ref<ExtensionPayload>({ channels: [], extensions: [], visibleExtensions: [], scanScope: 'unsupported', scannedAt: null })
+  const extensionPayload = ref<ExtensionPayload>({
+    channels: [], extensions: [], configurableExtensions: [], visibleExtensions: [],
+    visibleEventCount: 0, scanScope: 'unsupported', scanStatus: 'unavailable', scannedAt: null,
+    device: { os: 'other', label: '未知设备', container: false },
+  })
   const notificationSettings = ref<NotificationSettings>({ taskLimit: 100, resultLimit: 2000 })
   const loading = ref(true)
   const refreshing = ref(false)

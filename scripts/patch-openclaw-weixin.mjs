@@ -1,14 +1,20 @@
 import { spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const quietIfMissing = process.argv.includes('--quiet-if-missing')
 const marker = 'AI_MONITOR_CONTEXT_RESTORE_PATCH'
 const pluginArgs = ['plugins', 'list', '--json']
-const command = process.platform === 'win32' ? process.execPath : 'openclaw'
-const commandArgs = process.platform === 'win32'
-  ? [join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs'), ...pluginArgs]
-  : pluginArgs
+const cliCandidates = [
+  process.env.AIMONITOR_OPENCLAW_CLI_PATH?.trim(),
+  process.env.AIMONITOR_RESOURCE_ROOT?.trim()
+    ? join(process.env.AIMONITOR_RESOURCE_ROOT.trim(), 'node_modules', 'openclaw', 'openclaw.mjs')
+    : undefined,
+  join(dirname(process.execPath), 'node_modules', 'openclaw', 'openclaw.mjs'),
+].filter(Boolean)
+const cliModule = cliCandidates.find((candidate) => existsSync(candidate))
+const command = cliModule ? process.execPath : 'openclaw'
+const commandArgs = cliModule ? [cliModule, ...pluginArgs] : pluginArgs
 const result = spawnSync(command, commandArgs, {
   encoding: 'utf8',
   windowsHide: true,

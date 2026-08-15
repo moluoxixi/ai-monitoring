@@ -86,9 +86,19 @@ export interface ExtensionCard {
 export interface ExtensionPayload {
   channels: ChannelStatus[]
   extensions: ExtensionCard[]
+  configurableExtensions: string[]
   visibleExtensions: string[]
+  visibleEventCount: number
   scanScope: 'host' | 'unsupported' | string
+  scanStatus: 'reliable' | 'degraded' | 'unavailable' | string
   scannedAt: string | null
+  device: DeviceInfo
+}
+
+export interface DeviceInfo {
+  os: 'windows' | 'macos' | 'linux' | 'other' | string
+  label: string
+  container: boolean
 }
 
 export interface NotificationSettings {

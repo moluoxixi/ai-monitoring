@@ -362,6 +362,27 @@ describe('Codex session file synchronization', () => {
     }), []);
   });
 
+  it('creates deliveries for terminal events found during startup recovery', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'startup-recovery.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'startup-recovery-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'startup-recovery-turn' })}\n`);
+    const insertEvent = vi.fn();
+    const config = { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService;
+    const deliveryChannels = vi.fn(() => ['openclaw-qq']);
+    const channels = { deliveryChannels } as unknown as ChannelsService;
+    const service = new CodexSessionWatcherService(
+      config, channels, { ingest: insertEvent } as unknown as EventIngestionService,
+    );
+
+    service.onModuleInit();
+    await vi.waitFor(() => expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'startup-recovery-session:startup-recovery-turn:completed',
+    }), ['openclaw-qq']), { timeout: 3_000 });
+    await service.onModuleDestroy();
+  });
+
   it('notifies for bytes appended after the initial scan snapshot', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);

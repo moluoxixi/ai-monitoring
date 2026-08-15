@@ -22,15 +22,21 @@ export class ExtensionsController {
     const channelData = await this.channels.status();
     const snapshot = this.scanner.snapshot();
     const settings = this.settings.snapshot();
+    const configurableExtensions = this.extensions.configurableKeys(snapshot);
+    const visibleExtensions = this.extensions.effectiveVisibleKeys(snapshot, settings);
     return {
       channels: channelData,
       extensions: this.extensions.cards(snapshot.platforms).map((definition) => ({
         ...this.card(definition, settings.monitorVerification[definition.key]),
         event_count: this.database.countEvents(definition.key),
       })),
-      visibleExtensions: this.visibleExtensions(snapshot),
+      visibleEventCount: visibleExtensions.reduce((total, key) => total + this.database.countEvents(key), 0),
+      configurableExtensions,
+      visibleExtensions,
       scanScope: snapshot.scanScope,
+      scanStatus: snapshot.scanStatus,
       scannedAt: snapshot.scannedAt,
+      device: snapshot.device,
     };
   }
 
@@ -42,20 +48,9 @@ export class ExtensionsController {
 
   @Put('preferences')
   savePreferences(@Body() body: UpdateVisibleExtensionsDto) {
-    const supported = this.extensions.definitions().map((extension) => extension.key);
-    const visibleExtensions = this.settings.updateVisibleExtensions(body.visibleExtensions, supported);
+    const configurableExtensions = this.extensions.configurableKeys(this.scanner.snapshot());
+    const visibleExtensions = this.settings.updateVisibleExtensions(body.visibleExtensions, configurableExtensions);
     return { visibleExtensions };
-  }
-
-  private visibleExtensions(snapshot: ReturnType<PlatformScannerService['snapshot']>): string[] {
-    const supported = this.extensions.definitions().map((extension) => extension.key);
-    const settings = this.settings.snapshot();
-    if (settings.hasVisiblePreference) {
-      const selected = settings.visibleExtensions.filter((key) => supported.includes(key));
-      if (selected.length) return selected;
-    }
-    const detected = supported.filter((key) => snapshot.platforms[key]?.detected);
-    return detected.length ? detected : supported;
   }
 
   private card(definition: ExtensionDefinition & {
