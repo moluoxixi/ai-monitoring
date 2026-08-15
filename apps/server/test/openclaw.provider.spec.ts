@@ -21,12 +21,15 @@ let weixinCallbacks: {
 const dispose = vi.fn();
 
 const temporary: string[] = [];
+let previousGatewayToken: string | undefined;
 
 afterEach(() => {
   connectorCallbacks = null;
   weixinCallbacks = null;
   dispose.mockClear();
   for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
+  if (previousGatewayToken === undefined) delete process.env.OPENCLAW_GATEWAY_TOKEN;
+  else process.env.OPENCLAW_GATEWAY_TOKEN = previousGatewayToken;
 });
 
 describe('OpenClawProvider binding', () => {
@@ -36,6 +39,8 @@ describe('OpenClawProvider binding', () => {
   let provider: OpenClawProvider;
 
   beforeEach(() => {
+    previousGatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+    process.env.OPENCLAW_GATEWAY_TOKEN = 'test-gateway-token';
     root = mkdtempSync(join(tmpdir(), 'ai-monitor-openclaw-'));
     temporary.push(root);
     config = {

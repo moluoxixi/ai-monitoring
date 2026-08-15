@@ -62,29 +62,41 @@ describe('PlatformScannerService', () => {
   it('detects an exact CLI executable without treating a desktop launcher as a CLI', () => {
     const scanner = new PlatformScannerService({ codexSessionsPath: '' } as never);
     stubProcessScan(scanner);
+    const internals = scanner as unknown as {
+      commandAvailable: (command: string) => { value: boolean; available: boolean };
+    };
+    vi.spyOn(internals, 'commandAvailable').mockImplementation((command) => ({
+      value: command === 'qoder',
+      available: true,
+    }));
     const result = scanner.scan();
     expect(result.platforms['qoder-cli']?.cliAvailable).toBe(true);
     expect(result.platforms['cursor-cli']?.cliAvailable).toBe(false);
   });
 
   it('distinguishes Hermes Desktop from the same-named CLI process', () => {
-    const scanner = new PlatformScannerService({ codexSessionsPath: '' } as never);
-    const processScanner = scanner as unknown as {
-      runningProcesses: () => { value: Set<string>; available: boolean };
-      runningExecutablePaths: () => { value: Set<string>; available: boolean };
-    };
-    vi.spyOn(processScanner, 'runningProcesses').mockReturnValue({ value: new Set(['hermes.exe']), available: true });
-    vi.spyOn(processScanner, 'runningExecutablePaths').mockReturnValue({
-      value: new Set([
-        'c:\\users\\test\\appdata\\local\\hermes\\hermes-agent\\apps\\desktop\\release\\win-unpacked\\hermes.exe',
-      ]),
-      available: true,
-    });
+    const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+    try {
+      const scanner = new PlatformScannerService({ codexSessionsPath: '' } as never);
+      const processScanner = scanner as unknown as {
+        runningProcesses: () => { value: Set<string>; available: boolean };
+        runningExecutablePaths: () => { value: Set<string>; available: boolean };
+      };
+      vi.spyOn(processScanner, 'runningProcesses').mockReturnValue({ value: new Set(['hermes.exe']), available: true });
+      vi.spyOn(processScanner, 'runningExecutablePaths').mockReturnValue({
+        value: new Set([
+          'c:\\users\\test\\appdata\\local\\hermes\\hermes-agent\\apps\\desktop\\release\\win-unpacked\\hermes.exe',
+        ]),
+        available: true,
+      });
 
-    const result = scanner.scan();
+      const result = scanner.scan();
 
-    expect(result.platforms['hermes-cli']?.running).toBe(false);
-    expect(result.platforms['hermes-desktop']?.running).toBe(true);
+      expect(result.platforms['hermes-cli']?.running).toBe(false);
+      expect(result.platforms['hermes-desktop']?.running).toBe(true);
+    } finally {
+      platform.mockRestore();
+    }
   });
 
   it('scans macOS and keeps CLI/Desktop detection independent', () => {
