@@ -50,7 +50,8 @@ jobs:
         run: npm test
 
       - name: Create Tauri test resource directory
-        run: node -e "require('node:fs').mkdirSync('apps/desktop/src-tauri/resources', { recursive: true })"
+        run: |
+          node -e "require('node:fs').mkdirSync('apps/desktop/src-tauri/resources', { recursive: true })"
 
       - name: Test desktop runtime
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
