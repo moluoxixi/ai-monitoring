@@ -156,6 +156,37 @@ describe('PlatformScannerService', () => {
     }
   });
 
+  it('recognizes a shared Qoder hook for Desktop and Quest without a forced CLI runtime', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-qoder-scan-'));
+    try {
+      const adapterDirectory = join(directory, 'scripts', 'hooks');
+      mkdirSync(adapterDirectory, { recursive: true });
+      writeFileSync(join(adapterDirectory, 'qoder_event_adapter.py'), '# fixture\n');
+      const configPath = join(directory, 'settings.json');
+      writeFileSync(configPath, JSON.stringify({ hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py' }] }],
+        PostToolUseFailure: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py' }] }],
+      } }));
+      const scanner = new PlatformScannerService({ projectRoot: directory } as never);
+      const configured = scanner as unknown as {
+        jsonHooksConfigured: (path: string, adapter: string, events: string[], required?: string, forbidden?: string) => boolean;
+      };
+
+      expect(configured.jsonHooksConfigured(
+        configPath, 'qoder_event_adapter.py', ['Stop', 'PostToolUseFailure'], '', '--runtime',
+      )).toBe(true);
+      writeFileSync(configPath, JSON.stringify({ hooks: {
+        Stop: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py --runtime cli' }] }],
+        PostToolUseFailure: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py --runtime cli' }] }],
+      } }));
+      expect(configured.jsonHooksConfigured(
+        configPath, 'qoder_event_adapter.py', ['Stop', 'PostToolUseFailure'], '', '--runtime',
+      )).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('requires the Hermes CLI hook to assert its runtime', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-hermes-scan-'));
     try {
@@ -179,6 +210,37 @@ describe('PlatformScannerService', () => {
       expect(configured.hermesHooksConfigured(configPath)).toBe(true);
       writeFileSync(configPath, config(''));
       expect(configured.hermesHooksConfigured(configPath)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('recognizes only transcripts with a top-level Claude Desktop entrypoint', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-claude-desktop-scan-'));
+    try {
+      const nested = join(directory, 'project');
+      mkdirSync(nested, { recursive: true });
+      const transcript = join(nested, 'session.jsonl');
+      const scanner = new PlatformScannerService({
+        claudeDesktopTranscriptsPath: directory,
+      } as never);
+      const configured = scanner as unknown as {
+        monitorConfigured: (key: string, probe: { monitorPaths: string[] }) => boolean;
+      };
+
+      writeFileSync(transcript, `${JSON.stringify({
+        type: 'user',
+        entrypoint: 'claude-code',
+        message: { content: 'literal claude-desktop-3p text is not a source marker' },
+      })}\n`);
+      expect(configured.monitorConfigured('claude-desktop', { monitorPaths: [] })).toBe(false);
+
+      writeFileSync(transcript, `${JSON.stringify({
+        type: 'user',
+        entrypoint: 'claude-desktop-3p',
+        message: { content: 'desktop prompt' },
+      })}\n`);
+      expect(configured.monitorConfigured('claude-desktop', { monitorPaths: [] })).toBe(true);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

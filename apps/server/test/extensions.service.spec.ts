@@ -29,4 +29,23 @@ describe('ExtensionsService', () => {
 
     expect(service.get('codex-cli').adapter.capabilities.completed).toBe(true);
   });
+
+  it('reports only event capabilities implemented by each desktop adapter', () => {
+    const service = new ExtensionsService();
+    expect(service.get('qoder-quest').adapter.capabilities).toMatchObject({
+      completed: true, failed: false, interrupted: false, toolFailed: true, tracing: false,
+    });
+    expect(service.get('qoder-desktop').adapter.capabilities).toMatchObject({
+      completed: true, failed: false, interrupted: false, toolFailed: true, tracing: false,
+    });
+    expect(service.get('claude-desktop').adapter.capabilities).toMatchObject({
+      completed: true, failed: true, interrupted: true, toolFailed: false, tracing: false,
+    });
+    expect(service.get('hermes-desktop').adapter.capabilities).toMatchObject({
+      completed: true, failed: true, interrupted: true, toolFailed: true, tracing: false,
+    });
+    expect(service.get('codex-desktop').adapter.capabilities).toMatchObject({
+      completed: true, failed: true, interrupted: true, toolFailed: false, tracing: false,
+    });
+  });
 });

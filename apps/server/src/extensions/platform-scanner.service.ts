@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { load as parseYaml } from 'js-yaml';
 import { AppConfigService } from '../config/app-config.service';
+import { hasClaudeDesktopEntrypoint } from '../events/claude-desktop-transcript';
 import type { DeviceInfo, ExtensionRuntimeState } from './extension.types';
 
 export interface PlatformScanSnapshot {
@@ -26,7 +27,7 @@ type Probe = {
   appxPackageNames?: string[];
   installedProductNames?: string[];
   monitorPaths: string[];
-  monitorKind: 'sessions' | 'hooks' | 'audit' | 'config';
+  monitorKind: 'sessions' | 'hooks' | 'config';
 };
 
 const EMPTY_STATE: ExtensionRuntimeState = {
@@ -102,7 +103,7 @@ const createProbes = (platform: NodeJS.Platform): Record<string, Probe> => {
   'claude-desktop': {
     commands: [], executables: app('Claude', 'Claude'), processNames: mac ? ['claude'] : ['claude.exe'],
     processPathFragments: appFragment('claude'), appxPackageNames: mac ? [] : ['claude'],
-    monitorPaths: [], monitorKind: 'audit',
+    monitorPaths: [], monitorKind: 'sessions',
   },
   'qoder-cli': {
     commands: ['qoder'], executables: [join(homedir(), '.qoder', 'bin', 'qodercli', mac ? 'qodercli' : 'qodercli.exe')], processNames: [],
@@ -347,7 +348,7 @@ export class PlatformScannerService implements OnModuleInit {
       return probe.monitorPaths.some((path) => this.jsonHooksConfigured(path, 'claude_event_adapter.py', ['Stop', 'StopFailure', 'PostToolUseFailure']));
     }
     if (key === 'claude-desktop') {
-      return this.hasAuditFile(this.config.claudeDesktopSessionsPath);
+      return this.hasClaudeDesktopTranscript(this.config.claudeDesktopTranscriptsPath);
     }
     if (key === 'qoder-cli') {
       return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
@@ -357,7 +358,18 @@ export class PlatformScannerService implements OnModuleInit {
         '--runtime cli',
       ));
     }
-    if (key === 'qoder-desktop' || key === 'qoder-quest') return false;
+    if (key === 'qoder-desktop' || key === 'qoder-quest') {
+      // The shared Qoder hook must infer the runtime from the payload,
+      // Quest session suffix, or process ancestry. A CLI-forced command cannot
+      // safely claim Desktop/Quest coverage.
+      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
+        path,
+        'qoder_event_adapter.py',
+        ['Stop', 'PostToolUseFailure'],
+        '',
+        '--runtime',
+      ));
+    }
     if (key === 'cursor-cli' || key === 'cursor-desktop') {
       const runtime = key === 'cursor-cli' ? 'cli' : 'desktop';
       return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
@@ -390,7 +402,13 @@ export class PlatformScannerService implements OnModuleInit {
     }
   }
 
-  private jsonHooksConfigured(path: string, adapterName: string, events: string[], requiredCommandFragment = ''): boolean {
+  private jsonHooksConfigured(
+    path: string,
+    adapterName: string,
+    events: string[],
+    requiredCommandFragment = '',
+    forbiddenCommandFragment = '',
+  ): boolean {
     try {
       const document = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
       const hooks = document.hooks;
@@ -398,10 +416,13 @@ export class PlatformScannerService implements OnModuleInit {
       const adapterPath = join(this.config.projectRoot, 'scripts', 'hooks', adapterName).toLowerCase();
       if (!existsSync(adapterPath)) return false;
       const required = requiredCommandFragment.toLowerCase().replace(/\s+/g, ' ').trim();
+      const forbidden = forbiddenCommandFragment.toLowerCase().replace(/\s+/g, ' ').trim();
       const commandConfigured = (value: unknown): boolean => {
         if (typeof value !== 'string') return false;
         const command = value.toLowerCase().replace(/\s+/g, ' ').trim();
-        return command.includes(adapterName.toLowerCase()) && (!required || command.includes(required));
+        return command.includes(adapterName.toLowerCase())
+          && (!required || command.includes(required))
+          && (!forbidden || !command.includes(forbidden));
       };
       return events.every((event) => {
         const entries = (hooks as Record<string, unknown>)[event];
@@ -470,8 +491,30 @@ export class PlatformScannerService implements OnModuleInit {
     return this.findFile(root, (name) => name.toLowerCase().endsWith('.jsonl'));
   }
 
-  private hasAuditFile(root: string): boolean {
-    return this.findFile(root, (name) => name.toLowerCase() === 'audit.jsonl');
+  private hasClaudeDesktopTranscript(root: string, depth = 5): boolean {
+    if (!root || depth < 0 || !existsSync(root)) return false;
+    try {
+      if (statSync(root).isFile()) {
+        return root.toLowerCase().endsWith('.jsonl') && this.transcriptHasDesktopEntrypoint(root);
+      }
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        const path = join(root, entry.name);
+        if (entry.isFile() && entry.name.toLowerCase().endsWith('.jsonl')
+          && this.transcriptHasDesktopEntrypoint(path)) return true;
+        if (entry.isDirectory() && this.hasClaudeDesktopTranscript(path, depth - 1)) return true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
+
+  private transcriptHasDesktopEntrypoint(path: string): boolean {
+    try {
+      return hasClaudeDesktopEntrypoint(readFileSync(path, 'utf8'));
+    } catch {
+      return false;
+    }
   }
 
   private findFile(root: string, predicate: (name: string) => boolean, depth = 5): boolean {

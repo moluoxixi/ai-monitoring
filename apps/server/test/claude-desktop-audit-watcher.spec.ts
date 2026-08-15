@@ -1,71 +1,248 @@
-import { describe, expect, it } from 'vitest';
-import { parseClaudeDesktopAuditLine } from '../src/events/claude-desktop-audit-watcher.service';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ChannelsService } from '../src/channels/channels.service';
+import type { AppConfigService } from '../src/config/app-config.service';
+import {
+  ClaudeDesktopTranscriptWatcherService,
+  parseClaudeDesktopTranscriptLine,
+} from '../src/events/claude-desktop-audit-watcher.service';
+import type { EventIngestionService } from '../src/events/event-ingestion.service';
 
-describe('ClaudeDesktopAuditWatcher', () => {
-  it('keeps user and assistant text while ignoring tool blocks', () => {
-    const user = parseClaudeDesktopAuditLine(JSON.stringify({
+const temporaryDirectories: string[] = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
+});
+
+const jsonLines = (...records: unknown[]): string => `${records.map((record) => JSON.stringify(record)).join('\n')}\n`;
+
+const serviceFor = (transcriptRoot: string) => {
+  const ingest = vi.fn();
+  const suppressProvisionalFailures = vi.fn();
+  const config = {
+    claudeDesktopTranscriptsPath: transcriptRoot,
+  } as unknown as AppConfigService;
+  const channels = { deliveryChannels: vi.fn(() => []) } as unknown as ChannelsService;
+  const ingestion = { ingest, suppressProvisionalFailures } as unknown as EventIngestionService;
+  return {
+    service: new ClaudeDesktopTranscriptWatcherService(config, channels, ingestion),
+    ingest,
+    suppressProvisionalFailures,
+  };
+};
+
+describe('ClaudeDesktopTranscriptWatcher', () => {
+  it('emits one completed Desktop transcript event with the visible answer', () => {
+    const prompt = parseClaudeDesktopTranscriptLine(JSON.stringify({
       type: 'user',
-      session_id: 'session',
-      message: { content: 'fix the login flow' },
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'session',
+      message: { role: 'user', content: 'desktop question' },
     }));
-    const assistant = parseClaudeDesktopAuditLine(JSON.stringify({
+    const thinking = parseClaudeDesktopTranscriptLine(JSON.stringify({
       type: 'assistant',
-      session_id: 'session',
-      message: { content: [{ type: 'thinking', thinking: 'private' }, { type: 'text', text: 'final answer' }] },
-    }), user.sessionId, user.taskSummary, user.answerSource);
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'session',
+      message: {
+        id: 'message-1',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        content: [{ type: 'thinking', thinking: 'private reasoning' }],
+      },
+    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript);
+    const answer = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'assistant',
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'session',
+      message: {
+        id: 'message-1',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        content: [{ type: 'text', text: 'visible answer' }],
+      },
+    }), thinking.sessionId, thinking.taskSummary, thinking.answerSource, thinking.desktopTranscript);
 
-    expect(assistant.taskSummary).toBe('fix the login flow');
-    expect(assistant.answerSource).toBe('final answer');
-    expect(JSON.stringify(assistant)).not.toContain('private');
-  });
-
-  it('maps a successful result to a completed event', () => {
-    const parsed = parseClaudeDesktopAuditLine(JSON.stringify({
-      type: 'result',
-      subtype: 'success',
-      session_id: 'session',
-      uuid: 'result-1',
-      result: 'done',
-    }), 'session', 'question', '');
-
-    expect(parsed.event).toMatchObject({
+    expect(thinking.event).toBeUndefined();
+    expect(JSON.stringify(thinking)).not.toContain('private reasoning');
+    expect(answer.event).toMatchObject({
+      source_event_id: 'session:transcript:message-1:completed',
       source: 'claude-desktop',
       client: 'claude-desktop',
       status: 'completed',
-      metadata: { task_summary: 'question', answer_source: 'done' },
+      metadata: { task_summary: 'desktop question', answer_source: 'visible answer' },
     });
   });
 
-  it('maps an API error result to a failed event without the response body', () => {
-    const parsed = parseClaudeDesktopAuditLine(JSON.stringify({
-      type: 'result',
-      subtype: 'success',
-      is_error: true,
-      api_error_status: 502,
-      session_id: 'session',
-      uuid: 'result-2',
-      result: 'Authorization: Bearer secret-token upstream failed',
-    }), 'session', 'question', 'previous answer');
+  it('ignores ordinary Claude CLI transcripts', () => {
+    const prompt = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'user',
+      entrypoint: 'claude-code',
+      sessionId: 'cli-session',
+      message: { role: 'user', content: 'mentions claude-desktop-3p in plain text' },
+    }));
+    const answer = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'assistant',
+      entrypoint: 'claude-code',
+      sessionId: 'cli-session',
+      message: { id: 'cli-message', role: 'assistant', stop_reason: 'end_turn', content: 'CLI answer' },
+    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript);
+
+    expect(prompt.desktopTranscript).toBe(false);
+    expect(prompt.taskSummary).toBe('');
+    expect(answer.event).toBeUndefined();
+  });
+
+  it('maps Desktop transcript API errors to sanitized failures', () => {
+    const parsed = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'system',
+      subtype: 'api_error',
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'session',
+      uuid: 'error-1',
+      error: { message: 'Authorization: Bearer secret-token upstream failed' },
+    }), 'session', 'desktop question');
 
     expect(parsed.event).toMatchObject({
+      source_event_id: 'session:transcript:error-1:failed',
       status: 'failed',
-      error_code: '502',
-      metadata: { failure_message: 'Authorization: Bearer <redacted> upstream failed' },
+      error_code: 'claude_desktop_api_error',
+      message: 'Authorization: Bearer <redacted> upstream failed',
+      metadata: { task_summary: 'desktop question' },
     });
-    expect(parsed.event?.metadata).not.toHaveProperty('answer_source');
+    expect(JSON.stringify(parsed.event)).not.toContain('secret-token');
   });
 
-  it('does not replace the real prompt with a tool result user record', () => {
-    const prompt = parseClaudeDesktopAuditLine(JSON.stringify({
-      type: 'user', session_id: 'session', message: { role: 'user', content: 'real question' },
+  it('does not replace a Desktop prompt with a tool-result user record', () => {
+    const prompt = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'user',
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'session',
+      message: { role: 'user', content: 'real desktop question' },
     }));
-    const toolResult = parseClaudeDesktopAuditLine(JSON.stringify({
-      type: 'user', session_id: 'session', parent_tool_use_id: 'tool-1',
-      tool_use_result: { content: 'private tool output' },
-      message: { role: 'user', content: 'private tool output' },
-    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource);
+    const toolResult = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'user',
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'session',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'private tool output' }],
+      },
+    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript);
 
-    expect(toolResult.taskSummary).toBe('real question');
+    expect(toolResult.taskSummary).toBe('real desktop question');
     expect(JSON.stringify(toolResult)).not.toContain('private tool output');
+  });
+
+  it('watches a newly created nested Desktop transcript', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'claude-desktop-watcher-'));
+    temporaryDirectories.push(directory);
+    const { service, ingest, suppressProvisionalFailures } = serviceFor(directory);
+
+    service.onModuleInit();
+    try {
+      const nested = join(directory, 'project');
+      mkdirSync(nested, { recursive: true });
+      writeFileSync(join(nested, 'session.jsonl'), jsonLines(
+        {
+          type: 'user', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+          message: { role: 'user', content: 'new nested question' },
+        },
+        {
+          type: 'assistant', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+          message: {
+            id: 'message-1', role: 'assistant', stop_reason: 'end_turn',
+            content: [{ type: 'thinking', thinking: 'private reasoning' }],
+          },
+        },
+        {
+          type: 'assistant', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+          message: {
+            id: 'message-1', role: 'assistant', stop_reason: 'end_turn',
+            content: [{ type: 'text', text: 'nested answer' }],
+          },
+        },
+      ));
+
+      await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1), { timeout: 3_000 });
+      expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
+        source_event_id: 'session:transcript:message-1:completed',
+        metadata: expect.objectContaining({ answer_source: 'nested answer' }),
+      }), [], 'nested answer');
+      expect(suppressProvisionalFailures).toHaveBeenCalledWith('claude-desktop', 'session');
+    } finally {
+      await service.onModuleDestroy();
+    }
+  });
+
+  it('does not consume a legacy audit.jsonl even inside the transcript root', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'claude-desktop-legacy-'));
+    temporaryDirectories.push(directory);
+    const { service, ingest } = serviceFor(directory);
+
+    service.onModuleInit();
+    try {
+      writeFileSync(join(directory, 'audit.jsonl'), jsonLines(
+        {
+          type: 'user', entrypoint: 'claude-desktop-3p', sessionId: 'legacy-session',
+          message: { role: 'user', content: 'legacy prompt' },
+        },
+        {
+          type: 'assistant', entrypoint: 'claude-desktop-3p', sessionId: 'legacy-session',
+          message: { id: 'legacy-message', role: 'assistant', stop_reason: 'end_turn', content: 'legacy answer' },
+        },
+      ));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      expect(ingest).not.toHaveBeenCalled();
+    } finally {
+      await service.onModuleDestroy();
+    }
+  });
+
+  it('skips startup transcript history and detects an appended Desktop turn', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'claude-desktop-startup-'));
+    temporaryDirectories.push(directory);
+    const transcript = join(directory, 'session.jsonl');
+    writeFileSync(transcript, jsonLines(
+      {
+        type: 'user', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+        message: { role: 'user', content: 'historical question' },
+      },
+      {
+        type: 'assistant', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+        message: { id: 'historical-message', role: 'assistant', stop_reason: 'end_turn', content: 'historical answer' },
+      },
+    ));
+    const { service, ingest } = serviceFor(directory);
+
+    service.onModuleInit();
+    try {
+      const internals = service as unknown as { transcriptFiles: Map<string, unknown> };
+      await vi.waitFor(() => expect(internals.transcriptFiles.has(transcript)).toBe(true), { timeout: 3_000 });
+      expect(ingest).not.toHaveBeenCalled();
+
+      appendFileSync(transcript, jsonLines(
+        {
+          type: 'user', sessionId: 'session',
+          message: { role: 'user', content: 'appended question' },
+        },
+        {
+          type: 'assistant', sessionId: 'session',
+          message: { id: 'appended-message', role: 'assistant', stop_reason: 'end_turn', content: 'appended answer' },
+        },
+      ));
+
+      await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1), { timeout: 3_000 });
+      expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
+        source_event_id: 'session:transcript:appended-message:completed',
+        metadata: expect.objectContaining({
+          task_summary: 'appended question',
+          answer_source: 'appended answer',
+        }),
+      }), [], 'appended answer');
+    } finally {
+      await service.onModuleDestroy();
+    }
   });
 });

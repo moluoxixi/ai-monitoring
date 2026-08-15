@@ -11,7 +11,7 @@ import type { ChannelFormSchema } from './types/monitor'
 import ExtensionsView from './views/ExtensionsView.vue'
 import OverviewView from './views/OverviewView.vue'
 
-const { events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh } = useMonitor()
+const { events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh, desktop } = useMonitor()
 const { theme, toggleTheme } = useTheme()
 const activeView = ref('overview')
 const selectedExtension = ref('codex-cli')
@@ -95,6 +95,14 @@ const saveExtensionPreferences = (keys: string[]) => run(() => monitorApi.saveEx
 const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: number }) => run(
   () => monitorApi.saveNotificationSettings(settings), '通知长度已保存',
 )
+const setAutostart = async (enabled: boolean) => {
+  try {
+    await desktop.setAutostart(enabled)
+    ElMessage.success(enabled ? '已启用开机自启' : '已关闭开机自启')
+  } catch (reason) {
+    ElMessage.error(reason instanceof Error ? reason.message : '开机自启设置失败')
+  }
+}
 </script>
 
 <template>
@@ -134,6 +142,7 @@ const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: nu
           :configurable-extensions="extensionPayload.configurableExtensions"
           :visible-extensions="extensionPayload.visibleExtensions"
           :notification-settings="notificationSettings"
+          :desktop="desktop"
           @select="selectedExtension = $event"
           @test="testNotification"
           @bind="bindChannel"
@@ -141,6 +150,7 @@ const saveNotificationSettings = (settings: { taskLimit: number; resultLimit: nu
           @scan="scanExtensions"
           @save-preferences="saveExtensionPreferences"
           @save-notification-settings="saveNotificationSettings"
+          @set-autostart="setAutostart"
         />
       </div>
     </main>

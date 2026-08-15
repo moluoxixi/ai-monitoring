@@ -15,6 +15,12 @@ interface HermesAssistantRow {
   session_id: string;
   content: string | null;
   task_summary: string | null;
+  finish_reason?: string | null;
+}
+
+interface HermesSessionContext {
+  session_id: string;
+  task_summary: string | null;
 }
 
 const recordValue = (value: unknown): Record<string, unknown> =>
@@ -27,22 +33,54 @@ const textValue = (value: unknown, limit = 24_000): string => {
 
 export const hermesDesktopCompletedEvent = (row: HermesAssistantRow): NormalizedEvent | null => {
   const answer = textValue(row.content);
-  if (!answer) return null;
+  const finishReason = textValue(row.finish_reason, 120).toLowerCase();
+  if (finishReason === 'tool_calls') return null;
+  const interrupted = /\b(interrupted|interrupt|cancelled|canceled|aborted|abort)\b/.test(finishReason);
+  const failed = !interrupted && /\b(error|failed|failure|api_error|authentication_error)\b/.test(finishReason);
+  if (!answer && !failed && !interrupted) return null;
   const taskSummary = summarizeTask(textValue(row.task_summary, 2_000));
+  const status = failed ? 'failed' : interrupted ? 'interrupted' : 'completed';
+  const label = status === 'failed' ? 'failed' : status === 'interrupted' ? 'interrupted' : 'completed';
   return {
     source_event_id: `hermes-desktop:assistant:${row.id}`,
     source: 'hermes-desktop',
     client: 'hermes-desktop',
-    kind: 'assistant_completed',
-    status: 'completed',
-    title: 'Hermes Desktop task completed',
-    message: 'Hermes Desktop task completed',
-    error_code: null,
+    kind: `assistant_${status}`,
+    status,
+    title: `Hermes Desktop task ${label}`,
+    message: `Hermes Desktop task ${label}`,
+    error_code: failed ? `hermes_desktop_${finishReason || 'task_failed'}` : null,
     metadata: {
       session_id: row.session_id,
       turn_id: String(row.id),
       ...(taskSummary ? { task_summary: taskSummary } : {}),
-      answer_source: answer,
+      ...(status === 'completed' && answer ? { answer_source: answer } : {}),
+    },
+  };
+};
+
+export const parseHermesDesktopLogLine = (
+  line: string,
+  sourceEventId: string,
+  sessionId = '',
+  taskSummary = '',
+): NormalizedEvent | null => {
+  if (!/\]\s*(?:[^\w\s]+\s*)?interrupted during api call\.\s*$/i.test(line)
+    || /\[subagent(?:[-\]])/i.test(line)) return null;
+  const summary = summarizeTask(textValue(taskSummary, 2_000));
+  return {
+    source_event_id: sourceEventId,
+    source: 'hermes-desktop',
+    client: 'hermes-desktop',
+    kind: 'assistant_interrupted',
+    status: 'interrupted',
+    title: 'Hermes Desktop task interrupted',
+    message: 'Hermes Desktop task interrupted',
+    error_code: null,
+    metadata: {
+      ...(sessionId ? { session_id: sessionId } : {}),
+      ...(summary ? { task_summary: summary } : {}),
+      detection_source: 'desktop_log',
     },
   };
 };
@@ -95,6 +133,8 @@ export class HermesDesktopStateWatcherService implements OnModuleInit, OnModuleD
   private watcher: FSWatcher | null = null;
   private timer: NodeJS.Timeout | null = null;
   private lastTerminalAssistantId = 0;
+  private desktopLogOffset = 0;
+  private desktopLogBaselineCaptured = false;
   private queue = Promise.resolve();
 
   constructor(
@@ -115,14 +155,19 @@ export class HermesDesktopStateWatcherService implements OnModuleInit, OnModuleD
             AND m.active = 1 AND m.finish_reason IS NOT NULL AND m.finish_reason <> 'tool_calls'
         `).get() as { id: number };
         this.lastTerminalAssistantId = baseline.id;
-        this.timer = setInterval(() => this.pollCompleted(), 1_000);
-        this.timer.unref();
       } catch (error) {
         this.logger.warn(`Unable to open Hermes Desktop state database: ${error instanceof Error ? error.message : String(error)}`);
         this.database?.close();
         this.database = null;
       }
     }
+    this.desktopLogOffset = this.desktopLogSize();
+    this.desktopLogBaselineCaptured = existsSync(this.config.hermesDesktopLogPath);
+    this.timer = setInterval(() => {
+      this.pollCompleted();
+      this.pollDesktopLog();
+    }, 1_000);
+    this.timer.unref();
     this.startDumpWatcher();
   }
 
@@ -137,7 +182,7 @@ export class HermesDesktopStateWatcherService implements OnModuleInit, OnModuleD
     if (!this.database) return;
     try {
       const rows = this.database.prepare(`
-        SELECT m.id, m.session_id, m.content,
+        SELECT m.id, m.session_id, m.content, m.finish_reason,
           (SELECT u.content FROM messages u
            WHERE u.session_id = m.session_id AND u.role = 'user' AND u.active = 1 AND u.id < m.id
            ORDER BY u.id DESC LIMIT 1) AS task_summary
@@ -154,6 +199,71 @@ export class HermesDesktopStateWatcherService implements OnModuleInit, OnModuleD
       }
     } catch (error) {
       this.logger.warn(`Unable to poll Hermes Desktop state: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private pollDesktopLog(): void {
+    if (!existsSync(this.config.hermesDesktopLogPath)) return;
+    try {
+      const bytes = readFileSync(this.config.hermesDesktopLogPath);
+      if (bytes.length < this.desktopLogOffset) {
+        this.desktopLogOffset = bytes.length;
+        return;
+      }
+      if (!this.desktopLogBaselineCaptured) {
+        this.desktopLogOffset = bytes.length;
+        this.desktopLogBaselineCaptured = true;
+        return;
+      }
+      if (bytes.length === this.desktopLogOffset) return;
+      const chunk = bytes.subarray(this.desktopLogOffset);
+      const lastNewline = chunk.lastIndexOf(0x0a);
+      if (lastNewline < 0) return;
+      const complete = chunk.subarray(0, lastNewline + 1).toString('utf8');
+      let relativeOffset = 0;
+      for (const rawLine of complete.split('\n')) {
+        const lineBytes = Buffer.byteLength(rawLine, 'utf8') + 1;
+        if (rawLine.trim()) {
+          const context = this.latestTuiSessionContext();
+          const event = parseHermesDesktopLogLine(
+            rawLine,
+            `hermes-desktop:log-interrupted:${this.desktopLogOffset + relativeOffset}`,
+            context?.session_id || '',
+            context?.task_summary || '',
+          );
+          if (event) this.ingestion.ingest(event, this.channels.deliveryChannels());
+        }
+        relativeOffset += lineBytes;
+      }
+      this.desktopLogOffset += lastNewline + 1;
+    } catch (error) {
+      this.logger.warn(`Unable to poll Hermes Desktop log: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private desktopLogSize(): number {
+    try {
+      return statSync(this.config.hermesDesktopLogPath).size;
+    } catch {
+      return 0;
+    }
+  }
+
+  private latestTuiSessionContext(): HermesSessionContext | undefined {
+    if (!this.database) return undefined;
+    try {
+      return this.database.prepare(`
+        SELECT s.id AS session_id,
+          (SELECT u.content FROM messages u
+           WHERE u.session_id = s.id AND u.role = 'user' AND u.active = 1
+           ORDER BY u.id DESC LIMIT 1) AS task_summary
+        FROM sessions s
+        WHERE s.source = 'tui'
+        ORDER BY s.started_at DESC
+        LIMIT 1
+      `).get() as HermesSessionContext | undefined;
+    } catch {
+      return undefined;
     }
   }
 

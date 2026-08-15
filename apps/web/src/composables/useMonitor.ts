@@ -1,5 +1,6 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { monitorApi } from '../api/monitor'
+import { useDesktopIntegrations } from './useDesktopIntegrations'
 import type { Delivery, ExtensionPayload, MonitorEvent, MonitorStats, NotificationSettings } from '../types/monitor'
 
 const emptyStats = (): MonitorStats => ({
@@ -8,6 +9,7 @@ const emptyStats = (): MonitorStats => ({
 })
 
 export const useMonitor = () => {
+  const desktop = useDesktopIntegrations()
   const stats = ref<MonitorStats>(emptyStats())
   const events = ref<MonitorEvent[]>([])
   const extensionPayload = ref<ExtensionPayload>({
@@ -20,6 +22,8 @@ export const useMonitor = () => {
   const refreshing = ref(false)
   const error = ref('')
   let timer: number | undefined
+  let eventHistoryInitialized = false
+  const seenEventIds = new Set<number>()
 
   const extensions = computed(() => extensionPayload.value.extensions)
   const channels = computed(() => extensionPayload.value.channels)
@@ -36,7 +40,7 @@ export const useMonitor = () => {
       for (const delivery of nextDeliveries) {
         deliveryByEvent.set(delivery.event_id, [...(deliveryByEvent.get(delivery.event_id) || []), delivery])
       }
-      events.value = nextEvents.map(event => {
+      const enrichedEvents = nextEvents.map(event => {
         const deliveries = deliveryByEvent.get(event.id) || []
         const deliveryState = deliveries.some(item => item.state === 'dead') ? 'dead'
           : deliveries.some(item => item.state === 'retrying') ? 'retrying'
@@ -54,6 +58,17 @@ export const useMonitor = () => {
           delivery_time: deliveryTime,
         }
       })
+      if (eventHistoryInitialized) {
+        const freshEvents = enrichedEvents.filter(event => !seenEventIds.has(event.id))
+        void Promise.all(freshEvents.map(event => desktop.notifyTerminalEvent(event)))
+      }
+      enrichedEvents.forEach(event => seenEventIds.add(event.id))
+      if (seenEventIds.size > 1000) {
+        seenEventIds.clear()
+        enrichedEvents.forEach(event => seenEventIds.add(event.id))
+      }
+      eventHistoryInitialized = true
+      events.value = enrichedEvents
       extensionPayload.value = nextExtensions
       notificationSettings.value = nextNotificationSettings
       error.value = ''
@@ -71,5 +86,5 @@ export const useMonitor = () => {
   })
   onBeforeUnmount(() => window.clearInterval(timer))
 
-  return { stats, events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh }
+  return { stats, events, extensions, channels, extensionPayload, notificationSettings, loading, refreshing, error, refresh, desktop }
 }

@@ -5,7 +5,7 @@ import { ExtensionsModule } from '../extensions/extensions.module';
 import { EventsController } from './events.controller';
 import { CodexSessionWatcherService } from './codex-session-watcher.service';
 import { EventIngestionService } from './event-ingestion.service';
-import { ClaudeDesktopAuditWatcherService } from './claude-desktop-audit-watcher.service';
+import { ClaudeDesktopTranscriptWatcherService } from './claude-desktop-audit-watcher.service';
 import { HermesDesktopStateWatcherService } from './hermes-desktop-state-watcher.service';
 
 @Module({
@@ -13,7 +13,7 @@ import { HermesDesktopStateWatcherService } from './hermes-desktop-state-watcher
   controllers: [EventsController],
   providers: [
     CodexSessionWatcherService,
-    ClaudeDesktopAuditWatcherService,
+    ClaudeDesktopTranscriptWatcherService,
     HermesDesktopStateWatcherService,
     EventIngestionService,
   ],

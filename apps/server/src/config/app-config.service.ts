@@ -44,11 +44,10 @@ export class AppConfigService {
   private readonly applicationSupportPath = process.platform === 'darwin'
     ? join(homedir(), 'Library', 'Application Support')
     : (process.env.LOCALAPPDATA || '');
-  readonly claudeDesktopSessionsPath = resolve(
-    process.env.AIMONITOR_CLAUDE_DESKTOP_SESSIONS_PATH?.trim()
-      || (process.platform === 'darwin'
-        ? join(this.applicationSupportPath, 'Claude', 'local-agent-mode-sessions')
-        : join(this.applicationSupportPath, 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Local', 'Claude-3p', 'local-agent-mode-sessions')),
+  /** Claude Desktop's embedded Claude Code writes live JSONL session transcripts here. */
+  readonly claudeDesktopTranscriptsPath = resolve(
+    process.env.AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH?.trim()
+      || join(homedir(), '.claude', 'projects'),
   );
   readonly hermesStatePath = resolve(
     process.env.AIMONITOR_HERMES_STATE_PATH?.trim()
@@ -57,6 +56,10 @@ export class AppConfigService {
   readonly hermesSessionsPath = resolve(
     process.env.AIMONITOR_HERMES_SESSIONS_PATH?.trim()
       || join(this.applicationSupportPath, 'hermes', 'sessions'),
+  );
+  readonly hermesDesktopLogPath = resolve(
+    process.env.AIMONITOR_HERMES_DESKTOP_LOG_PATH?.trim()
+      || join(this.applicationSupportPath, 'hermes', 'logs', 'desktop.log'),
   );
   readonly codexBackfillMinutes = numberValue(process.env.AIMONITOR_CODEX_BACKFILL_MINUTES, 120);
   readonly ingestToken = process.env.AIMONITOR_INGEST_TOKEN || '';

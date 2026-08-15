@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hermesDesktopCompletedEvent,
   parseHermesDesktopRequestDump,
+  parseHermesDesktopLogLine,
 } from '../src/events/hermes-desktop-state-watcher.service';
 
 describe('HermesDesktopStateWatcher', () => {
@@ -24,6 +25,56 @@ describe('HermesDesktopStateWatcher', () => {
         answer_source: '任务已完成',
       },
     });
+  });
+
+  it('maps documented failure and interruption finish reasons without retaining partial answers', () => {
+    expect(hermesDesktopCompletedEvent({
+      id: 43,
+      session_id: 'session',
+      content: 'partial failure response',
+      task_summary: '失败任务',
+      finish_reason: 'error',
+    })).toMatchObject({
+      status: 'failed',
+      kind: 'assistant_failed',
+      error_code: 'hermes_desktop_error',
+      metadata: { task_summary: '失败任务' },
+    });
+
+    expect(hermesDesktopCompletedEvent({
+      id: 44,
+      session_id: 'session',
+      content: 'partial interrupted response',
+      task_summary: '中断任务',
+      finish_reason: 'cancelled',
+    })).toMatchObject({
+      status: 'interrupted',
+      kind: 'assistant_interrupted',
+      metadata: { task_summary: '中断任务' },
+    });
+  });
+
+  it('maps a desktop interruption log line without retaining log text', () => {
+    const event = parseHermesDesktopLogLine(
+      '[hermes] ⚡ Interrupted during API call.',
+      'hermes-desktop:log-interrupted:128',
+      'session',
+      '检查监控',
+    );
+
+    expect(event).toMatchObject({
+      source_event_id: 'hermes-desktop:log-interrupted:128',
+      status: 'interrupted',
+      kind: 'assistant_interrupted',
+      metadata: {
+        session_id: 'session',
+        task_summary: '检查监控',
+        detection_source: 'desktop_log',
+      },
+    });
+    expect(parseHermesDesktopLogLine('[hermes] normal line', 'event')).toBeNull();
+    expect(parseHermesDesktopLogLine('[hermes] message mentions interrupted during API call.', 'event')).toBeNull();
+    expect(parseHermesDesktopLogLine('[hermes] [subagent-0] ⚡ Interrupted during API call.', 'event')).toBeNull();
   });
 
   it('maps a request dump error without retaining request headers or body', () => {

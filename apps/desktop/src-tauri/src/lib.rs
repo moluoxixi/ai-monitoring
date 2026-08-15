@@ -10,7 +10,9 @@ use std::sync::Mutex;
 use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use tauri::{Manager, RunEvent, Url, WebviewWindow};
+use tauri::menu::{MenuBuilder, MenuItemBuilder};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{Manager, RunEvent, Url, WebviewWindow, WindowEvent};
 
 type AppResult<T> = Result<T, Box<dyn Error>>;
 
@@ -27,6 +29,72 @@ struct ServerLaunch {
 struct GatewayLaunch {
     child: Option<Child>,
     state_root: Option<PathBuf>,
+}
+
+const MAIN_WINDOW_LABEL: &str = "main";
+const SHOW_MAIN_MENU_ID: &str = "show-main";
+const QUIT_MENU_ID: &str = "quit";
+
+#[derive(Debug, PartialEq, Eq)]
+enum TrayMenuAction {
+    ShowMain,
+    Quit,
+    Ignore,
+}
+
+fn tray_menu_action(id: &str) -> TrayMenuAction {
+    match id {
+        SHOW_MAIN_MENU_ID => TrayMenuAction::ShowMain,
+        QUIT_MENU_ID => TrayMenuAction::Quit,
+        _ => TrayMenuAction::Ignore,
+    }
+}
+
+fn restore_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
+        return;
+    };
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+}
+
+fn create_tray(app: &tauri::AppHandle) -> AppResult<()> {
+    let show_main = MenuItemBuilder::with_id(SHOW_MAIN_MENU_ID, "显示 AI Monitor").build(app)?;
+    let quit = MenuItemBuilder::with_id(QUIT_MENU_ID, "退出 AI Monitor").build(app)?;
+    let menu = MenuBuilder::new(app)
+        .item(&show_main)
+        .separator()
+        .item(&quit)
+        .build()?;
+
+    let mut builder = TrayIconBuilder::with_id("main-tray")
+        .menu(&menu)
+        .tooltip("AI Monitor")
+        .icon_as_template(cfg!(target_os = "macos"))
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match tray_menu_action(event.id().as_ref()) {
+            TrayMenuAction::ShowMain => restore_main_window(app),
+            TrayMenuAction::Quit => app.exit(0),
+            TrayMenuAction::Ignore => {}
+        })
+        .on_tray_icon_event(|tray, event| match event {
+            TrayIconEvent::DoubleClick {
+                button: MouseButton::Left,
+                ..
+            }
+            | TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } => restore_main_window(tray.app_handle()),
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    builder.build(app)?;
+    Ok(())
 }
 
 fn repo_root() -> PathBuf {
@@ -422,13 +490,31 @@ fn append_startup_log(app: &tauri::AppHandle, message: &str) {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            restore_main_window(app);
+        }))
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(RuntimeState {
             server: Mutex::new(None),
             gateway: Mutex::new(None),
         })
+        .on_window_event(|window, event| {
+            if window.label() != MAIN_WINDOW_LABEL {
+                return;
+            }
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             let result: AppResult<()> = (|| {
                 append_startup_log(app.handle(), "startup begin");
+                create_tray(app.handle())?;
                 let resources = resource_root(app.handle())?;
                 let data_root = writable_data_root(app.handle())?;
                 append_startup_log(
@@ -516,4 +602,19 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{tray_menu_action, TrayMenuAction, QUIT_MENU_ID, SHOW_MAIN_MENU_ID};
+
+    #[test]
+    fn tray_menu_ids_map_to_explicit_actions() {
+        assert_eq!(
+            tray_menu_action(SHOW_MAIN_MENU_ID),
+            TrayMenuAction::ShowMain
+        );
+        assert_eq!(tray_menu_action(QUIT_MENU_ID), TrayMenuAction::Quit);
+        assert_eq!(tray_menu_action("unknown"), TrayMenuAction::Ignore);
+    }
 }

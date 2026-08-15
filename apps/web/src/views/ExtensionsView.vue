@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { Refresh, Setting } from '@element-plus/icons-vue'
+import type { DesktopIntegrations } from '../composables/useDesktopIntegrations'
 import type { ChannelStatus, DeviceInfo, ExtensionCard, NotificationSettings } from '../types/monitor'
 import ExtensionPanel from '../components/extensions/ExtensionPanel.vue'
 import { filterExtensionsByKeys, getDisplayedExtensions, reconcileVisibleKeys } from '../utils/extension-selection'
@@ -17,6 +18,7 @@ const props = defineProps<{
   configurableExtensions: string[]
   visibleExtensions: string[]
   notificationSettings: NotificationSettings
+  desktop: DesktopIntegrations
 }>()
 const emit = defineEmits<{
   select: [key: string]
@@ -26,6 +28,7 @@ const emit = defineEmits<{
   scan: []
   savePreferences: [keys: string[]]
   saveNotificationSettings: [settings: NotificationSettings]
+  setAutostart: [enabled: boolean]
 }>()
 
 const mode = ref<'detected' | 'all'>('detected')
@@ -120,6 +123,18 @@ const saveLimits = () => emit('saveNotificationSettings', {
                 <el-input-number v-model="resultLimitDraft" :min="1" :max="24000" :step="500" controls-position="right" />
               </label>
               <el-button type="primary" size="small" :loading="saving" @click="saveLimits">保存长度</el-button>
+            </div>
+            <div v-if="desktop.available" class="setting-block">
+              <strong>桌面行为</strong>
+              <label class="limit-field">
+                <span>开机自启</span>
+                <el-switch
+                  :model-value="desktop.autostartEnabled"
+                  :loading="desktop.autostartLoading"
+                  @change="emit('setAutostart', Boolean($event))"
+                />
+              </label>
+              <small>关闭主窗口后，AI Monitor 会继续在系统托盘运行。</small>
             </div>
           </div>
         </el-popover>

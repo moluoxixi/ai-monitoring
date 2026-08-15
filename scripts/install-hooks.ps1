@@ -81,7 +81,9 @@ if ($ConfigureNotifications) {
     $QoderAdapter = Join-Path $PSScriptRoot "hooks\qoder_event_adapter.py"
     $QoderPythonPosix = $ProjectPython.Replace('\', '/')
     $QoderAdapterPosix = $QoderAdapter.Replace('\', '/')
-    $QoderCommand = "`"$QoderPythonPosix`" `"$QoderAdapterPosix`" --runtime cli"
+    # Leave runtime inference to the payload/session/process ancestry so the
+    # same official hook can keep Qoder CLI, Desktop and Quest separate.
+    $QoderCommand = "`"$QoderPythonPosix`" `"$QoderAdapterPosix`""
     & $ProjectPython (Join-Path $PSScriptRoot "configure_qoder_hooks.py") --config $QoderConfig --command $QoderCommand
     if ($LASTEXITCODE -ne 0) { throw "Failed to configure Qoder lifecycle hooks." }
     Write-Host "Qoder completion and failure notification hooks registered."

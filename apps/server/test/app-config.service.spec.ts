@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AppConfigService } from '../src/config/app-config.service';
 
@@ -11,6 +11,8 @@ const keys = [
   'AIMONITOR_DB_PATH',
   'AIMONITOR_OPENCLAW_BINDINGS_PATH',
   'AIMONITOR_WEB_DIST_PATH',
+  'AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH',
+  'AIMONITOR_HERMES_DESKTOP_LOG_PATH',
 ] as const;
 
 describe('AppConfigService desktop paths', () => {
@@ -66,5 +68,23 @@ describe('AppConfigService desktop paths', () => {
     });
 
     expect(new AppConfigService().dbPath).toBe(database);
+  });
+
+  it('accepts an explicit Hermes Desktop log path', () => {
+    const logPath = join(tmpdir(), 'hermes-desktop.log');
+    setEnv({ AIMONITOR_HERMES_DESKTOP_LOG_PATH: logPath });
+
+    expect(new AppConfigService().hermesDesktopLogPath).toBe(logPath);
+  });
+
+  it('uses an explicit Claude Desktop transcript root', () => {
+    const transcriptsPath = join(tmpdir(), 'claude-transcripts');
+    setEnv({
+      AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH: `  ${transcriptsPath}  `,
+    });
+
+    const config = new AppConfigService();
+
+    expect(config.claudeDesktopTranscriptsPath).toBe(resolve(transcriptsPath));
   });
 });

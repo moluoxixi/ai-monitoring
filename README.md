@@ -10,7 +10,7 @@ Claude CLI
   -> 通知中心 :8787 -> OpenClaw / Apprise
 
 Claude Desktop
-  -> Desktop audit watcher
+  -> Desktop session transcript watcher
   -> 通知中心 :8787 -> OpenClaw / Apprise
 
 Codex CLI
@@ -42,7 +42,7 @@ Hermes CLI
   -> 通知中心 :8787
 
 Hermes Desktop
-  -> 官方 on_session_end / api_request_error shell hooks
+  -> state.db / request dump / Desktop log watcher
   -> 通知中心 :8787
 
 Cursor CLI
@@ -71,7 +71,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 主界面：[http://127.0.0.1:8787](http://127.0.0.1:8787)。任务详情和通知记录使用 `data/monitor.db` 下的本地 SQLite，单机部署不需要 Docker、PostgreSQL、ClickHouse、Redis 或 MinIO。
 
-安装脚本直接注册本仓库的 Claude、Codex、Qoder、Hermes 和 Cursor hooks/notify 适配器。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，不进入仓库。默认关闭提示词/回复正文与工具输出内容记录，仅保留工具详情。Hermes 首次运行还需要用 `hermes --accept-hooks` 启动一次实际任务，或在交互终端确认本项目 hook；未获 Hermes 安全同意前不会报告已配置。
+安装脚本直接注册本仓库的 Claude、Codex、Qoder、Hermes 和 Cursor hooks/notify 适配器。Qoder 使用不强制 CLI runtime 的共享 hook，由官方 payload、Quest session 后缀或 Windows 进程祖先区分 CLI、Desktop 和 Quest；不能可靠区分时会丢弃事件，不会猜测平台。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，不进入仓库。默认关闭提示词/回复正文与工具输出内容记录，仅保留工具详情。Hermes 首次运行还需要用 `hermes --accept-hooks` 启动一次实际任务，或在交互终端确认本项目 hook；未获 Hermes 安全同意前不会报告已配置。
 
 扩展页首次启动会按当前环境的进程、PATH 命令和 canonical 配置目录做隔离扫描；Windows 主机显示检测结果，容器或不支持的平台扫描会回退到全部支持目录。用户可在扩展设置中保存要展示的平台集合，这只影响界面，不会停止事件采集、数据库归类或通知投递。消息平台绑定后全局生效：绑定多少个，所有 AI 软件的新事件就向多少个通道分别创建 outbox 投递，其中一个失败不会阻断其它通道。不绑定通道时事件仍保留在本地，但不会产生外发消息。
 
@@ -181,21 +181,58 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 
 ## 错误检测边界
 
-- **Claude CLI**：官方 hook 覆盖 `Stop`、`StopFailure`、`PostToolUseFailure`，可监测任务完成、API/轮次失败和工具失败。
-- **Claude Desktop**：独立读取 Desktop 的 `audit.jsonl`，不把 Desktop 事件归入 Claude CLI。
-- **Qoder CLI**：官方 hook 覆盖完成终态 `Stop` 和工具失败 `PostToolUseFailure`；当前版本未公开任务失败终态 hook，不能把工具失败等同于整轮失败。
+- **Claude CLI**：本地也会生成 session transcript，但 CLI 的官方 hook 额外提供 `StopFailure`、`PostToolUseFailure` 和 runtime 事实，因此 CLI 仍以 hook 为权威，避免与 session 重复投递。
+- **Claude Desktop**：读取 Desktop 内嵌 Claude Code 写入的 `~/.claude/projects/**/*.jsonl` session transcript；仅接受顶层 `entrypoint: "claude-desktop-3p"` 的会话，不把普通 Claude CLI、thinking 或工具回写归入 Desktop。
+- **Qoder CLI**：本机可见项目 session JSONL，但记录没有稳定的 CLI/Desktop/Quest runtime 区分；因此仍使用带 runtime 校验的官方 hook，不把无法归类的 session 猜成某个平台。
 - **Qoder Desktop**：独立平台条目；适配器优先使用官方 payload/环境中的运行端，缺失时在 Windows 沿进程祖先识别 `Qoder.exe`，不会静默归入 CLI。
 - **Qoder Quest**：独立平台条目；通过 Quest session id 的 `.session.execution` 后缀归类，复用 Qoder 官方 hook。当前已实测完成事件；官方失败终态 schema 尚未公开，因此失败能力不宣称已验证。
 - **QoderWork**：已检测到独立应用，但 GUI 当前没有稳定、公开且可由本项目订阅的完成/失败 hook；保持“已安装，未接入”，不会从日志猜测任务结果。
 - **Hermes CLI**：官方 shell hook 覆盖 `on_session_end` 和 `api_request_error`；首次 hook consent 未完成时不会运行。
-- **Hermes Desktop**：Desktop 的 `tui_gateway` 不加载 CLI shell hooks，因此服务只读监听官方 `state.db` 的终态回答和新生成的 `request_dump` 失败记录；不会读取请求 headers/body、thinking 或工具内容，验证状态和事件计数不与 CLI 合并。
-- **Cursor CLI**：官方 `stop` 可监测响应完成，`postToolUseFailure` 只代表工具失败，不等价于整个任务/API 失败。
-- **Cursor Desktop**：独立平台条目；同样只报告官方能证明的“完成 + 工具失败”能力，不伪造完整错误覆盖。
+- **Hermes Desktop**：Desktop 的 `tui_gateway` 不加载 CLI shell hooks，因此服务只读监听官方 `state.db` 的终态回答、新生成的 `request_dump` 失败记录和 Desktop 日志中的新增中断标记；`finish_reason` 或日志可证明失败/中断时才按对应状态归类，不会读取请求 headers/body、thinking 或工具内容，验证状态和事件计数不与 CLI 合并。
+- **Cursor CLI**：目前只有 `conversation-search.db` 索引和编辑历史，未确认稳定的 agent session transcript；官方 `stop` 可监测响应完成，`postToolUseFailure` 只代表工具失败，不等价于整个任务/API 失败。
+- **Cursor Desktop**：独立平台条目；搜索数据库不保存可安全重放的完整终态，因此继续使用显式 runtime 的官方 hook，只报告官方能证明的“完成 + 工具失败”能力。
 - **Codex CLI**：notify multiplexer 与 App Server proxy 归入 Codex CLI，负责 CLI 的完成和严格协议错误。
 - **Codex Desktop**：结构化 session JSONL watcher 独立归入 Codex Desktop，补齐 Desktop 的完成、中断和带错误终态；Desktop 没有公开内部 App Server 事件订阅，不能承诺捕获每一次 API 失败。
 - **Codex 严格错误终态**：只有通过 [Codex App Server 正式协议](https://learn.chatgpt.com/docs/app-server) 的客户端，才能可靠获得 `error`、`turn/completed` 的 `completed/interrupted/failed` 以及 `item/completed`。使用 `.\scripts\run-codex-app-server-proxy.ps1` 作为该客户端的 stdio server command。
 - **Codex Desktop 限制**：Desktop 当前没有向第三方公开其内部 App Server 事件订阅，因此无法承诺外部监控能捕获每一次 Desktop API 失败。仅靠 `notify` 或猜测私有日志不能满足“错误必检”。
-- **Claude Desktop**：新版 Desktop 生成的 `audit.jsonl` 由本地 watcher 读取，只接受真正的 `audit.jsonl` 终态并忽略工具回写；Claude Code hooks 与 Desktop audit 的验证来源在界面中分开记录。
+- **Claude Desktop**：本地 watcher 只监听 session transcript；启动时跳过已有历史，只监测后续新增消息。路径可通过 `AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH` 覆盖。
+
+## v1.0.7 发布报告
+
+发布日期：2026-08-15。该版本把桌面端生命周期和多平台监控支持一起发布，并统一根包、server、web、desktop 与 lockfile 的版本号为 `1.0.7`。
+
+### 主要变更
+
+- Claude Desktop 从旧版 `audit.jsonl` 切换为监听 `~/.claude/projects/**/*.jsonl` session transcript；只接受顶层 `entrypoint: "claude-desktop-3p"`，过滤普通 Claude CLI、thinking、工具回写和历史重复事件。
+- Codex Desktop 使用 `~/.codex/sessions/**/*.jsonl`，支持启动回填、增量 tail、完成/中断/错误终态归类和去重。
+- Hermes Desktop 使用只读 `state.db`、新生成的 `request_dump_*.json` 和 Desktop 日志；不读取请求 headers、body、thinking 或工具内容。
+- Qoder CLI/Desktop/Quest 和 Cursor CLI/Desktop 继续使用带 runtime 事实的官方 hooks。Qoder session 缺少稳定的 CLI/Desktop/Quest 终态字段，Cursor 的 `conversation-search.db` 只是搜索索引，均不强行猜测 session 来源。
+- Tauri 桌面端新增托盘驻留、关闭窗口转隐藏、显式退出、单实例、自启动开关和终态原生通知；浏览器开发模式不会加载桌面专用 API。
+- 扩展扫描、能力矩阵、前端展示和 README 同步上述数据源边界；QoderWork 保持“已检测、未接入”。
+
+### 数据源决策
+
+本版本遵循“平台提供稳定 session/数据库时优先使用，否则使用官方 hook”的原则：
+
+| 平台 | 权威来源 | 当前边界 |
+|---|---|---|
+| Claude Desktop | `~/.claude/projects/**/*.jsonl` | 只监测 Desktop entrypoint，启动时跳过已有历史 |
+| Codex Desktop | `~/.codex/sessions/**/*.jsonl` | 可识别完成、中断和结构化错误；私有 API 失败仍受限 |
+| Hermes Desktop | `state.db`、request dump、Desktop log | 只采集官方数据能证明的完成、失败或中断 |
+| Qoder CLI/Desktop/Quest | 官方 Stop/PostToolUseFailure hooks | session 缺少稳定 runtime，不能安全重放 |
+| Cursor CLI/Desktop | 官方 stop/postToolUseFailure hooks | 搜索数据库不是完整 agent session |
+
+### 验证记录
+
+- `npm test`：server `139 passed`、`1 skipped`；web `6 passed`；desktop toolchain `1 passed`。
+- `npm run typecheck`、`npm run build`、`git diff --check`：通过。
+- Python hooks/adapter 测试：`67 passed`；Tauri Rust 测试：`1 passed`。
+- 本机冒烟验证：Claude transcript 识别到 `claude-desktop-3p` 与 `end_turn`；Codex rollout 解析到 13 个终态事件；Hermes `state.db`、Cursor conversation index 和 Qoder session 文件均已探测并按上述边界处理。
+- relay 已重启并在 `http://127.0.0.1:8787` 健康运行；Claude Desktop 扫描状态为 `monitorConfigured=true`，监控来源为 `sessions`，不再依赖 `audit`。
+
+### 发布边界
+
+本版本不逆向第三方私有协议，不把缺少 runtime 的日志猜成平台事件，也不宣称覆盖 Desktop 未公开的每一次 API 失败。Windows/macOS 桌面安装包仍由 `v*` 标签触发构建；当前未配置代码签名或 macOS 公证。
 
 ## 服务
 

@@ -19,7 +19,7 @@ const EXTENSIONS: ExtensionDefinition[] = [
     adapter: {
       id: 'codex-desktop-session',
       active: true,
-      capabilities: { completed: true, failed: true, interrupted: true, toolFailed: true, tracing: true },
+      capabilities: { completed: true, failed: true, interrupted: true, toolFailed: false, tracing: false },
     },
   },
   {
@@ -35,9 +35,9 @@ const EXTENSIONS: ExtensionDefinition[] = [
     key: 'claude-desktop', product: 'Claude', runtime: 'desktop',
     label: 'Claude Desktop',
     adapter: {
-      id: 'claude-desktop-audit',
+      id: 'claude-desktop-session',
       active: true,
-      capabilities: { completed: true, failed: true, interrupted: false, toolFailed: false, tracing: false },
+      capabilities: { completed: true, failed: true, interrupted: true, toolFailed: false, tracing: false },
     },
   },
   {
@@ -55,7 +55,7 @@ const EXTENSIONS: ExtensionDefinition[] = [
     adapter: {
       id: 'qoder-desktop-hooks',
       active: true,
-      capabilities: { completed: true, failed: true, interrupted: false, toolFailed: true, tracing: true },
+      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: true, tracing: false },
     },
   },
   {
@@ -64,7 +64,7 @@ const EXTENSIONS: ExtensionDefinition[] = [
     adapter: {
       id: 'qoder-quest-hooks',
       active: true,
-      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: false, tracing: false },
+      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: true, tracing: false },
     },
   },
   {
@@ -82,7 +82,7 @@ const EXTENSIONS: ExtensionDefinition[] = [
     adapter: {
       id: 'hermes-desktop-state-watcher',
       active: true,
-      capabilities: { completed: true, failed: true, interrupted: false, toolFailed: true, tracing: false },
+      capabilities: { completed: true, failed: true, interrupted: true, toolFailed: true, tracing: false },
     },
   },
   {

@@ -1,0 +1,38 @@
+{
+  "id": "desktop-tray-native-integration",
+  "name": "desktop-tray-native-integration",
+  "title": "Desktop tray and native integration",
+  "description": "",
+  "status": "in_progress",
+  "complexity": {
+    "level": "complex",
+    "signals": [],
+    "reason": ""
+  },
+  "executionApproval": {
+    "mode": "auto",
+    "granted": true,
+    "source": "explicit_user",
+    "grantedAt": "2026-08-15T10:08:50.724533Z",
+    "reason": "用户已确认桌面托盘、自启、原生通知和单实例并授权直接实现测试发布"
+  },
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "wl",
+  "assignee": "wl",
+  "createdAt": "2026-08-15",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

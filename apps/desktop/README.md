@@ -8,6 +8,26 @@ It does not duplicate monitoring logic in Rust:
 3. Tauri waits for `/api/health`, then navigates the window to the sidecar.
 4. On exit it terminates only the Node process started by this app.
 
+## Tray and desktop behavior
+
+The desktop window is intentionally a background application. Closing the
+window hides it to the Windows notification area or the macOS menu bar and
+leaves the monitor and Gateway running. Use the tray menu's **显示 AI Monitor**
+entry to restore the window, or **退出 AI Monitor** to stop the sidecars and
+exit cleanly. A Windows double-click restores the window; macOS uses a left
+click because its native tray event does not expose the same double-click event
+through Tauri.
+
+Open the **扩展** settings popover in the desktop client to opt into launch at
+login. The setting uses the native Windows startup registration or macOS
+LaunchAgent and remains off until enabled. Removing the startup entry from the
+same toggle is safe and does not affect an already running monitor.
+
+Newly observed completed, failed, interrupted, or tool-failed events can also
+produce native Windows/macOS notifications. The first notification may ask
+for operating-system permission. Denying it only disables the desktop toast;
+the event list and configured QQ/Weixin delivery channels continue to work.
+
 ## What is bundled
 
 OpenClaw is bundled in the default desktop package because it is the local
