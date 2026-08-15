@@ -12,8 +12,8 @@ if (!['dev', 'build'].includes(mode)) {
 
 const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const projectRoot = resolve(desktopRoot, '../..')
-const tauriCommand = join(projectRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'tauri.cmd' : 'tauri')
-if (!existsSync(tauriCommand)) {
+const tauriScript = join(projectRoot, 'node_modules', '@tauri-apps', 'cli', 'tauri.js')
+if (!existsSync(tauriScript)) {
   throw new Error('Tauri CLI is not installed. Run npm install from the repository root.')
 }
 
@@ -30,7 +30,8 @@ if (process.platform === 'win32' && !findWindowsLinker()) {
     env: {
       ...process.env,
       AIMONITOR_DESKTOP_ROOT: desktopRoot,
-      AIMONITOR_TAURI_CMD: tauriCommand,
+      AIMONITOR_NODE_EXECUTABLE: process.execPath,
+      AIMONITOR_TAURI_SCRIPT: tauriScript,
       AIMONITOR_TAURI_MODE: mode,
       AIMONITOR_VSDEVCMD: devCommand,
       AIMONITOR_VS_ARCH: architecture,
@@ -39,7 +40,7 @@ if (process.platform === 'win32' && !findWindowsLinker()) {
     windowsHide: false,
   })
 } else {
-  result = spawnSync(tauriCommand, [mode], {
+  result = spawnSync(process.execPath, [tauriScript, mode], {
     cwd: desktopRoot,
     env: process.env,
     stdio: 'inherit',

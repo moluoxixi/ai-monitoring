@@ -1,6 +1,6 @@
 [package]
 name = "ai-monitor-desktop"
-version = "1.0.3"
+version = "1.0.4"
 description = "AI Monitor desktop launcher"
 authors = ["AI Monitor"]
 edition = "2021"

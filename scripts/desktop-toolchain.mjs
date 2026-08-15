@@ -2,30 +2,36 @@ import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
+export function isWindowsMsvcLinkerPath(candidate) {
+  const normalized = String(candidate ?? '').replaceAll('/', '\\').toLowerCase()
+  return normalized.endsWith('\\link.exe') && normalized.includes('\\vc\\tools\\msvc\\')
+}
+
+function linkerFromOutput(output) {
+  return String(output)
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .find((value) => isWindowsMsvcLinkerPath(value) && existsSync(value)) ?? null
+}
+
 export function findWindowsLinker() {
   if (process.platform !== 'win32') return null
   try {
-    const powershellPath = execFileSync(
+    const powershellPath = linkerFromOutput(execFileSync(
       'powershell.exe',
       ['-NoProfile', '-Command', '(Get-Command link.exe -ErrorAction SilentlyContinue).Source'],
       { encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] },
-    )
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .find(Boolean)
-    if (powershellPath && existsSync(powershellPath)) return powershellPath
+    ))
+    if (powershellPath) return powershellPath
   } catch {
     // Fall through to where.exe for shells that do not expose Get-Command.
   }
   try {
-    return execFileSync('where.exe', ['link.exe'], {
+    return linkerFromOutput(execFileSync('where.exe', ['link.exe'], {
       encoding: 'utf8',
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .split(/\r?\n/)
-      .map((value) => value.trim())
-      .find(Boolean) ?? null
+    }))
   } catch {
     return null
   }
