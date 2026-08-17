@@ -108,20 +108,20 @@ const createProbes = (platform: NodeJS.Platform): Record<string, Probe> => {
   'qoder-cli': {
     commands: ['qoder'], executables: [join(homedir(), '.qoder', 'bin', 'qodercli', mac ? 'qodercli' : 'qodercli.exe')], processNames: [],
     detectionPaths: [],
-    monitorPaths: [join(homedir(), '.qoder', 'settings.json')],
-    monitorKind: 'hooks',
+    monitorPaths: [join(homedir(), '.qoder', 'projects')],
+    monitorKind: 'sessions',
   },
   'qoder-desktop': {
     commands: [], executables: app('Qoder', 'Qoder'), processNames: mac ? ['qoder'] : ['qoder.exe'],
     processPathFragments: appFragment('qoder'), installedProductNames: mac ? [] : ['qoder ide (user)'],
-    monitorPaths: [join(homedir(), '.qoder', 'settings.json')], monitorKind: 'hooks',
+    monitorPaths: [join(homedir(), '.qoder', 'projects')], monitorKind: 'sessions',
   },
   'qoder-quest': {
     // Quest sessions are not distinguishable from the desktop process by
     // executable name. Never report a generic qoder.exe as Quest.
     commands: [], executables: [], processNames: [],
     detectionPaths: [mac ? appSupport('Qoder', 'logs') : envPath(process.env.APPDATA, 'Qoder', 'logs')],
-    monitorPaths: [join(homedir(), '.qoder', 'settings.json')], monitorKind: 'hooks',
+    monitorPaths: [join(homedir(), '.qoder', 'projects')], monitorKind: 'sessions',
   },
   'hermes-cli': {
     commands: ['hermes'], executables: [mac ? join(homedir(), '.hermes', 'bin', 'hermes') : envPath(process.env.LOCALAPPDATA, 'hermes', 'hermes-agent', 'venv', 'Scripts', 'hermes.exe')], processNames: [],
@@ -351,24 +351,13 @@ export class PlatformScannerService implements OnModuleInit {
       return this.hasClaudeDesktopTranscript(this.config.claudeDesktopTranscriptsPath);
     }
     if (key === 'qoder-cli') {
-      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
-        path,
-        'qoder_event_adapter.py',
-        ['Stop', 'PostToolUseFailure'],
-        '--runtime cli',
-      ));
+      return Boolean(this.config.qoderSessionsPath) && existsSync(this.config.qoderSessionsPath);
     }
     if (key === 'qoder-desktop' || key === 'qoder-quest') {
-      // The shared Qoder hook must infer the runtime from the payload,
-      // Quest session suffix, or process ancestry. A CLI-forced command cannot
-      // safely claim Desktop/Quest coverage.
-      return probe.monitorPaths.some((path) => this.jsonHooksConfigured(
-        path,
-        'qoder_event_adapter.py',
-        ['Stop', 'PostToolUseFailure'],
-        '',
-        '--runtime',
-      ));
+      return Boolean(this.config.qoderSessionsPath)
+        && existsSync(this.config.qoderSessionsPath)
+        && Boolean(this.config.qoderLogsPath)
+        && existsSync(this.config.qoderLogsPath);
     }
     if (key === 'cursor-cli' || key === 'cursor-desktop') {
       const runtime = key === 'cursor-cli' ? 'cli' : 'desktop';

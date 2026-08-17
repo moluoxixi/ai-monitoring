@@ -51,6 +51,26 @@ if (Test-Path -LiteralPath $HostCodexSessions) {
     $CodexMount = "./data/codex-sessions"
 }
 Set-EnvDefault -Name "CODEX_SESSIONS_PATH" -Value $CodexMount
+
+$HostQoderSessions = Join-Path $env:USERPROFILE ".qoder\projects"
+if (Test-Path -LiteralPath $HostQoderSessions) {
+    $QoderMount = $HostQoderSessions.Replace("\", "/")
+} else {
+    $LocalQoderSessions = Join-Path $Root "data\qoder-sessions"
+    New-Item -ItemType Directory -Force -Path $LocalQoderSessions | Out-Null
+    $QoderMount = "./data/qoder-sessions"
+}
+Set-EnvDefault -Name "QODER_SESSIONS_PATH" -Value $QoderMount
+
+$HostQoderLogs = Join-Path $env:APPDATA "Qoder\logs"
+if (Test-Path -LiteralPath $HostQoderLogs) {
+    $QoderLogsMount = $HostQoderLogs.Replace("\", "/")
+} else {
+    $LocalQoderLogs = Join-Path $Root "data\qoder-logs"
+    New-Item -ItemType Directory -Force -Path $LocalQoderLogs | Out-Null
+    $QoderLogsMount = "./data/qoder-logs"
+}
+Set-EnvDefault -Name "QODER_LOGS_PATH" -Value $QoderLogsMount
 [IO.File]::WriteAllText($EnvFile, $EnvText, (New-Object Text.UTF8Encoding($false)))
 
 Push-Location $Root
@@ -67,4 +87,4 @@ try {
 
 $port = if ($EnvText -match '(?m)^AIMONITOR_DOCKER_PORT=(\d+)$') { $Matches[1] } else { "8787" }
 Write-Host "AI Monitor is ready: http://127.0.0.1:$port"
-Write-Host "Run .\scripts\install-hooks.ps1 -ConfigureNotifications on the host once to connect local AI clients."
+Write-Host "Run .\scripts\install-hooks.ps1 -ConfigureNotifications on the host for hook-based clients and legacy Qoder hook cleanup."

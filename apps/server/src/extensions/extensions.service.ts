@@ -44,27 +44,27 @@ const EXTENSIONS: ExtensionDefinition[] = [
     key: 'qoder-cli', product: 'Qoder', runtime: 'cli',
     label: 'Qoder CLI',
     adapter: {
-      id: 'qoder-hooks',
+      id: 'qoder-session',
       active: true,
-      capabilities: { completed: true, failed: true, interrupted: false, toolFailed: true, tracing: true },
+      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: false, tracing: false },
     },
   },
   {
     key: 'qoder-desktop', product: 'Qoder', runtime: 'desktop',
     label: 'Qoder Desktop',
     adapter: {
-      id: 'qoder-desktop-hooks',
+      id: 'qoder-desktop-session',
       active: true,
-      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: true, tracing: false },
+      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: false, tracing: false },
     },
   },
   {
     key: 'qoder-quest', product: 'Qoder', runtime: 'quest',
     label: 'Qoder Quest',
     adapter: {
-      id: 'qoder-quest-hooks',
+      id: 'qoder-quest-session',
       active: true,
-      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: true, tracing: false },
+      capabilities: { completed: true, failed: false, interrupted: false, toolFailed: false, tracing: false },
     },
   },
   {

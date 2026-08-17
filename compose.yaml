@@ -48,6 +48,8 @@ services:
       AIMONITOR_HOST: 0.0.0.0
       AIMONITOR_PORT: 8787
       AIMONITOR_CODEX_SESSIONS_PATH: /codex-sessions
+      AIMONITOR_QODER_SESSIONS_PATH: /qoder-sessions
+      AIMONITOR_QODER_LOGS_PATH: /qoder-logs
       OPENCLAW_GATEWAY_URL: ws://openclaw:18789
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Run scripts/docker-start.ps1 to generate OPENCLAW_GATEWAY_TOKEN}
       OPENCLAW_STATE_DIR: /home/node/.openclaw
@@ -56,6 +58,8 @@ services:
     volumes:
       - ./data:/app/data
       - ${CODEX_SESSIONS_PATH:-./data/codex-sessions}:/codex-sessions:ro
+      - ${QODER_SESSIONS_PATH:-./data/qoder-sessions}:/qoder-sessions:ro
+      - ${QODER_LOGS_PATH:-./data/qoder-logs}:/qoder-logs:ro
       - openclaw-data:/home/node/.openclaw
     healthcheck:
       test:

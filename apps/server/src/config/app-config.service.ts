@@ -41,6 +41,16 @@ export class AppConfigService {
     numberValue(process.env.AIMONITOR_RECOVERABLE_FAILURE_GRACE_MS, 10 * 60_000),
   );
   readonly codexSessionsPath = resolve(process.env.AIMONITOR_CODEX_SESSIONS_PATH?.trim() || resolve(homedir(), '.codex', 'sessions'));
+  readonly qoderSessionsPath = resolve(
+    process.env.AIMONITOR_QODER_SESSIONS_PATH?.trim() || resolve(homedir(), '.qoder', 'projects'),
+  );
+  private readonly qoderApplicationSupportPath = process.platform === 'darwin'
+    ? join(homedir(), 'Library', 'Application Support')
+    : (process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'));
+  readonly qoderLogsPath = resolve(
+    process.env.AIMONITOR_QODER_LOGS_PATH?.trim()
+      || join(this.qoderApplicationSupportPath, 'Qoder', 'logs'),
+  );
   private readonly applicationSupportPath = process.platform === 'darwin'
     ? join(homedir(), 'Library', 'Application Support')
     : (process.env.LOCALAPPDATA || '');

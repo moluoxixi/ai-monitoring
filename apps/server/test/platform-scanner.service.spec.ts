@@ -156,32 +156,21 @@ describe('PlatformScannerService', () => {
     }
   });
 
-  it('recognizes a shared Qoder hook for Desktop and Quest without a forced CLI runtime', () => {
+  it('requires Qoder sessions for CLI and both sessions and logs for Desktop and Quest', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-qoder-scan-'));
+    const logs = join(directory, 'logs');
     try {
-      const adapterDirectory = join(directory, 'scripts', 'hooks');
-      mkdirSync(adapterDirectory, { recursive: true });
-      writeFileSync(join(adapterDirectory, 'qoder_event_adapter.py'), '# fixture\n');
-      const configPath = join(directory, 'settings.json');
-      writeFileSync(configPath, JSON.stringify({ hooks: {
-        Stop: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py' }] }],
-        PostToolUseFailure: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py' }] }],
-      } }));
-      const scanner = new PlatformScannerService({ projectRoot: directory } as never);
+      const scanner = new PlatformScannerService({ qoderSessionsPath: directory, qoderLogsPath: logs } as never);
       const configured = scanner as unknown as {
-        jsonHooksConfigured: (path: string, adapter: string, events: string[], required?: string, forbidden?: string) => boolean;
+        monitorConfigured: (key: string, probe: { monitorPaths: string[] }) => boolean;
       };
 
-      expect(configured.jsonHooksConfigured(
-        configPath, 'qoder_event_adapter.py', ['Stop', 'PostToolUseFailure'], '', '--runtime',
-      )).toBe(true);
-      writeFileSync(configPath, JSON.stringify({ hooks: {
-        Stop: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py --runtime cli' }] }],
-        PostToolUseFailure: [{ hooks: [{ type: 'command', command: 'python qoder_event_adapter.py --runtime cli' }] }],
-      } }));
-      expect(configured.jsonHooksConfigured(
-        configPath, 'qoder_event_adapter.py', ['Stop', 'PostToolUseFailure'], '', '--runtime',
-      )).toBe(false);
+      expect(configured.monitorConfigured('qoder-cli', { monitorPaths: [] })).toBe(true);
+      expect(configured.monitorConfigured('qoder-desktop', { monitorPaths: [] })).toBe(false);
+      expect(configured.monitorConfigured('qoder-quest', { monitorPaths: [] })).toBe(false);
+      mkdirSync(logs);
+      expect(configured.monitorConfigured('qoder-desktop', { monitorPaths: [] })).toBe(true);
+      expect(configured.monitorConfigured('qoder-quest', { monitorPaths: [] })).toBe(true);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

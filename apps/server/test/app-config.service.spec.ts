@@ -12,6 +12,8 @@ const keys = [
   'AIMONITOR_OPENCLAW_BINDINGS_PATH',
   'AIMONITOR_WEB_DIST_PATH',
   'AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH',
+  'AIMONITOR_QODER_SESSIONS_PATH',
+  'AIMONITOR_QODER_LOGS_PATH',
   'AIMONITOR_HERMES_DESKTOP_LOG_PATH',
 ] as const;
 
@@ -86,5 +88,19 @@ describe('AppConfigService desktop paths', () => {
     const config = new AppConfigService();
 
     expect(config.claudeDesktopTranscriptsPath).toBe(resolve(transcriptsPath));
+  });
+
+  it('uses an explicit Qoder session root', () => {
+    const sessionsPath = join(tmpdir(), 'qoder-sessions');
+    const logsPath = join(tmpdir(), 'qoder-logs');
+    setEnv({
+      AIMONITOR_QODER_SESSIONS_PATH: `  ${sessionsPath}  `,
+      AIMONITOR_QODER_LOGS_PATH: `  ${logsPath}  `,
+    });
+
+    const config = new AppConfigService();
+
+    expect(config.qoderSessionsPath).toBe(resolve(sessionsPath));
+    expect(config.qoderLogsPath).toBe(resolve(logsPath));
   });
 });

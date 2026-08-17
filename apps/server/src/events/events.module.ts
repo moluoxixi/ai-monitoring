@@ -7,6 +7,7 @@ import { CodexSessionWatcherService } from './codex-session-watcher.service';
 import { EventIngestionService } from './event-ingestion.service';
 import { ClaudeDesktopTranscriptWatcherService } from './claude-desktop-audit-watcher.service';
 import { HermesDesktopStateWatcherService } from './hermes-desktop-state-watcher.service';
+import { QoderSessionWatcherService } from './qoder-session-watcher.service';
 
 @Module({
   imports: [DatabaseModule, ChannelsModule, ExtensionsModule],
@@ -15,6 +16,7 @@ import { HermesDesktopStateWatcherService } from './hermes-desktop-state-watcher
     CodexSessionWatcherService,
     ClaudeDesktopTranscriptWatcherService,
     HermesDesktopStateWatcherService,
+    QoderSessionWatcherService,
     EventIngestionService,
   ],
 })
