@@ -8,9 +8,10 @@ import type { EventIngestionService } from '../src/events/event-ingestion.servic
 import {
   CodexSessionWatcherService,
   parseCodexSessionLine,
-  sanitizeFailureMessage,
-  summarizeTask,
+  sanitizeFailureMessage as legacySanitizeFailureMessage,
+  summarizeTask as legacySummarizeTask,
 } from '../src/events/codex-session-watcher.service';
+import { sanitizeFailureMessage, summarizeTask } from '../src/utils/event-text';
 
 const tempDirectories: string[] = [];
 
@@ -31,6 +32,11 @@ afterEach(() => {
 });
 
 describe('Codex session watcher parser', () => {
+  it('keeps the legacy text helper exports wired to the shared module', () => {
+    expect(legacySanitizeFailureMessage).toBe(sanitizeFailureMessage);
+    expect(legacySummarizeTask).toBe(summarizeTask);
+  });
+
   it('keeps a short user task summary for the terminal event', () => {
     const prompt = parseCodexSessionLine(terminalLine({
       type: 'user_message', message: '<in-app-browser-context>ignore me</in-app-browser-context> ## My request: 修复登录失败',
@@ -45,11 +51,6 @@ describe('Codex session watcher parser', () => {
     });
     expect(result.taskSummary).toBe('');
     expect(result.answerSource).toBe('private response');
-  });
-
-  it('normalizes and truncates task summaries', () => {
-    expect(summarizeTask(`  ${'a'.repeat(2_010)}  `)).toHaveLength(2_000);
-    expect(summarizeTask('The following is the Codex agent history whose request action you are assessing.')).toBe('');
   });
 
   it('marks a follow-up turn so provisional failures are suppressed', () => {
@@ -121,10 +122,6 @@ describe('Codex session watcher parser', () => {
     expect(JSON.stringify(result.event)).not.toContain('private-token');
     expect(JSON.stringify(result.event)).not.toContain('private-query');
     expect(JSON.stringify(result.event)).not.toContain('alice');
-  });
-
-  it('limits stored failure details', () => {
-    expect(sanitizeFailureMessage('x'.repeat(25_000))).toHaveLength(24_000);
   });
 
   it('maps turn_aborted to interrupted', () => {

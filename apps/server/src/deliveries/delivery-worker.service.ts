@@ -5,7 +5,7 @@ import { ChannelsService } from '../channels/channels.service';
 import { DeliveryOutcomeUnknownError } from '../channels/channel-provider';
 import { DatabaseService, utcNow } from '../database/database.service';
 import type { DeliveryRow } from '../database/database.types';
-import { cleanAnswerText, truncateText } from '../events/event-text';
+import { cleanAnswerText, truncateText } from '../utils/event-text';
 import { UserSettingsService } from '../settings/user-settings.service';
 import { DEFAULT_RESULT_LIMIT, DEFAULT_TASK_LIMIT, type NotificationSettings } from '../settings/user-settings.types';
 const LEASE_MS = 5 * 60_000;

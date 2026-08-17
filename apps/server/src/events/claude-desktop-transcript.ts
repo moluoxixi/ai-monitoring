@@ -1,5 +1,4 @@
-const recordValue = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+import { recordValue } from '../utils/event-record';
 
 export const hasClaudeDesktopEntrypoint = (source: string): boolean => source
   .split(/\r?\n/)

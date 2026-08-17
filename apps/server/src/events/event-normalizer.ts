@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { NormalizedEvent } from '../database/database.types';
 import type { CreateEventDto } from './dto/create-event.dto';
-import { truncateText } from './event-text';
+import { truncateText } from '../utils/event-text';
 
 const stableStringify = (value: unknown): string => {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;

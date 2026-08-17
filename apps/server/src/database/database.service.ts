@@ -6,7 +6,7 @@ import { dirname } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import { ExtensionsService } from '../extensions/extensions.service';
 import type { DeliveryRow, EventRow, NormalizedEvent } from './database.types';
-import { MAX_ANSWER_TEXT_LENGTH, truncateTail } from '../events/event-text';
+import { MAX_ANSWER_TEXT_LENGTH, truncateTail } from '../utils/event-text';
 
 export const utcNow = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
 

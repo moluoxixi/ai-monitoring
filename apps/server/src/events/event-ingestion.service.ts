@@ -5,7 +5,7 @@ import type { NormalizedEvent } from '../database/database.types';
 import { ExtensionsService } from '../extensions/extensions.service';
 import { PlatformScannerService } from '../extensions/platform-scanner.service';
 import { UserSettingsService } from '../settings/user-settings.service';
-import { cleanAnswerText, isRecoverableFailure } from './event-text';
+import { cleanAnswerText, isRecoverableFailure } from '../utils/event-text';
 
 const VERIFIED_SOURCES: Record<string, Set<string>> = {
   'codex-cli': new Set(['codex', 'codex-notify', 'codex-app-server']),

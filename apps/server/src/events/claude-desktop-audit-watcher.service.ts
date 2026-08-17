@@ -6,9 +6,9 @@ import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import type { NormalizedEvent } from '../database/database.types';
 import { EventIngestionService } from './event-ingestion.service';
-import { sanitizeFailureMessage, summarizeTask } from './codex-session-watcher.service';
 import { hasClaudeDesktopEntrypoint } from './claude-desktop-transcript';
-import { truncateTail } from './event-text';
+import { recordValue } from '../utils/event-record';
+import { sanitizeFailureMessage, summarizeTask, truncateTail } from '../utils/event-text';
 
 interface TranscriptFileState {
   offset: number;
@@ -18,15 +18,14 @@ interface TranscriptFileState {
   desktopTranscript: boolean;
 }
 
-const recordValue = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 const contentText = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map(contentText).filter(Boolean).join('\n');
   if (value === null || typeof value !== 'object') return '';
   const record = recordValue(value);
   if (record.type === 'text' && typeof record.text === 'string') return record.text;
+  // Traverse only known transcript containers; arbitrary fields such as
+  // private thinking payloads must not become notification content.
   for (const key of ['content', 'text', 'message']) {
     const text = contentText(record[key]);
     if (text) return text;

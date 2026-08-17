@@ -6,9 +6,9 @@ import { basename, join } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import type { NormalizedEvent } from '../database/database.types';
-import { sanitizeFailureMessage, summarizeTask } from './codex-session-watcher.service';
 import { EventIngestionService } from './event-ingestion.service';
-import { truncateTail } from './event-text';
+import { recordValue } from '../utils/event-record';
+import { sanitizeFailureMessage, summarizeTask, truncateTail } from '../utils/event-text';
 
 interface HermesAssistantRow {
   id: number;
@@ -22,9 +22,6 @@ interface HermesSessionContext {
   session_id: string;
   task_summary: string | null;
 }
-
-const recordValue = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 const textValue = (value: unknown, limit = 24_000): string => {
   const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
@@ -147,6 +144,8 @@ export class HermesDesktopStateWatcherService implements OnModuleInit, OnModuleD
     if (existsSync(this.config.hermesStatePath)) {
       try {
         this.database = new Database(this.config.hermesStatePath, { readonly: true, fileMustExist: true });
+        // Establish a startup baseline so historical terminal rows are not
+        // replayed as fresh desktop notifications after every restart.
         const baseline = this.database.prepare(`
           SELECT COALESCE(MAX(m.id), 0) AS id
           FROM messages m

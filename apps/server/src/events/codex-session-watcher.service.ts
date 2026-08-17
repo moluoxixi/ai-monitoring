@@ -7,7 +7,11 @@ import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import type { NormalizedEvent } from '../database/database.types';
 import { EventIngestionService } from './event-ingestion.service';
-import { truncateTail, truncateText } from './event-text';
+import { recordValue } from '../utils/event-record';
+import { sanitizeFailureMessage, summarizeTask, truncateTail } from '../utils/event-text';
+
+// Preserve the pre-refactor import path for integrations outside this workspace.
+export { sanitizeFailureMessage, summarizeTask } from '../utils/event-text';
 
 const INITIAL_TAIL_BYTES = 1024 * 1024;
 
@@ -33,9 +37,6 @@ interface ParsedTerminalEvent {
   suppressProvisional?: boolean;
 }
 
-const recordValue = (value: unknown): Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-
 const sessionIdentity = (payload: Record<string, unknown>, currentClient: 'codex-cli' | 'codex-desktop' = 'codex-desktop'):
   { isSubagent: boolean; client: 'codex-cli' | 'codex-desktop' } => {
   const source = payload.source;
@@ -59,30 +60,6 @@ const safeErrorCode = (error: Record<string, unknown>): string => {
   const info = error.codex_error_info;
   const candidate = typeof info === 'string' ? info : Object.keys(recordValue(info))[0];
   return candidate && /^[a-z0-9_.:-]{1,100}$/i.test(candidate) ? candidate : 'codex_task_failed';
-};
-
-export const sanitizeFailureMessage = (value: unknown, preserveAuthorizationScheme = false): string => {
-  if (typeof value !== 'string') return '';
-  const cleaned = value
-    .replace(/\b(Authorization\s*[:=]\s*)(Bearer\s+)?[^\s,;]+/gi, (_match, prefix: string, scheme: string | undefined) => `${prefix}${preserveAuthorizationScheme ? (scheme || '') : ''}<redacted>`)
-    .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1<redacted>')
-    .replace(/\b((?:api[_-]?key|token|secret|password)\s*[=:]\s*)[^\s,;]+/gi, '$1<redacted>')
-    .replace(/([?&](?:api[_-]?key|token|secret|password|access_token)=)[^&#\s]+/gi, '$1<redacted>')
-    .replace(/\bC:\\Users\\[^\\\s]+/gi, 'C:\\Users\\<user>')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return truncateText(cleaned, 24_000);
-};
-
-export const summarizeTask = (value: unknown): string => {
-  if (typeof value !== 'string') return '';
-  const cleaned = value
-    .replace(/<in-app-browser-context\b[^>]*>[\s\S]*?<\/in-app-browser-context>/gi, ' ')
-    .replace(/##\s*My request:\s*/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (/^The following is the Codex agent history whose request action you are assessing\./i.test(cleaned)) return '';
-  return truncateText(cleaned, 2_000);
 };
 
 export const parseCodexSessionLine = (

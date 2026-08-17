@@ -19,7 +19,7 @@
 - `npm run typecheck`：server 与 web 均通过。
 - `npm run build`：web 与 server 均通过；仅保留第三方 `@vueuse/core` PURE 注释 warning。
 - Vite debug config：加载 `apps/web/vite.config.ts`，`/api` proxy 为 `http://127.0.0.1:8787`。
-- 重启检查：`/api/health` 返回 `ok: true`，`/` 返回 HTTP 200，监听 PID `22200`。
+- 重启检查：`/api/health` 返回 `ok: true`，`/` 返回 HTTP 200；生产服务根 PID `28064`，监听 PID `47228`。
 - 空目录检查：应用源码树不再包含无引用空目录；保留目录均有运行时或工具链引用证据。
 
 ## Validation Commands

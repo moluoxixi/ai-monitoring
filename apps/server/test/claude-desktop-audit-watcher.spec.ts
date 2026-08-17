@@ -94,6 +94,20 @@ describe('ClaudeDesktopTranscriptWatcher', () => {
     expect(answer.event).toBeUndefined();
   });
 
+  it('extracts and normalizes text from nested transcript containers', () => {
+    const prompt = parseClaudeDesktopTranscriptLine(JSON.stringify({
+      type: 'user',
+      entrypoint: 'claude-desktop-3p',
+      sessionId: 'nested-session',
+      message: {
+        role: 'user',
+        content: { content: [{ type: 'text', text: '  nested\nquestion  ' }] },
+      },
+    }));
+
+    expect(prompt.taskSummary).toBe('nested question');
+  });
+
   it('maps Desktop transcript API errors to sanitized failures', () => {
     const parsed = parseClaudeDesktopTranscriptLine(JSON.stringify({
       type: 'system',
