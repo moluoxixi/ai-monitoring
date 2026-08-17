@@ -83,6 +83,25 @@ describe('DeliveryWorkerService', () => {
     expect(Array.from(result!.replace('任务结果：', ''))).toHaveLength(24);
   });
 
+  it('renders heartbeat findings without exposing the internal envelope', () => {
+    const content = notificationContent({
+      ...delivery(1, 'openclaw-qq'),
+      title: 'vite-cli 有新进展',
+      message: 'Publish succeeded.',
+      metadata: {
+        task_summary: 'vite-cli',
+        automation_id: 'vite-cli',
+        automation_decision: 'NOTIFY',
+      },
+      answer_text: 'Publish succeeded.',
+    });
+
+    expect(content).toEqual({
+      title: 'vite-cli 有新进展',
+      body: 'Publish succeeded.',
+    });
+  });
+
   it('reads the current settings when a delivery starts', async () => {
     const sent: string[] = [];
     const send = vi.fn((_channel: string, _title: string, body: string) => {

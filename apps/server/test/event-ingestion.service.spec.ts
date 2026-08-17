@@ -41,6 +41,69 @@ describe('EventIngestionService', () => {
     }), [], 1_500);
   });
 
+  it('normalizes heartbeat findings before persistence and delivery', () => {
+    const setup = serviceFor();
+    const service = new EventIngestionService(setup.database, setup.config, setup.extensions, { markMonitorVerified: setup.markMonitorVerified } as never);
+
+    service.ingest({
+      ...event({ task_summary: '<heartbeat>internal prompt</heartbeat>' }),
+      source: 'codex-session',
+      client: 'codex-desktop',
+    }, ['pushplus'], [
+      '<heartbeat>',
+      '<automation_id>vite-cli</automation_id>',
+      '<decision>NOTIFY</decision>',
+      '<message>Publish succeeded.</message>',
+      '</heartbeat>',
+    ].join('\n'));
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'vite-cli 有新进展',
+      message: 'Publish succeeded.',
+      metadata: {
+        task_summary: 'vite-cli',
+        automation_id: 'vite-cli',
+        automation_decision: 'NOTIFY',
+        answer_text: 'Publish succeeded.',
+      },
+    }), ['pushplus'], 1_500);
+  });
+
+  it('keeps quiet heartbeat checks in history without creating notifications', () => {
+    const setup = serviceFor(vi.fn(() => [7, true, 0]));
+    const service = new EventIngestionService(setup.database, setup.config, setup.extensions, { markMonitorVerified: setup.markMonitorVerified } as never);
+
+    service.ingest({
+      ...event(),
+      source: 'codex-session',
+      client: 'codex-desktop',
+    }, ['pushplus'], '<heartbeat><automation_id>vite-cli</automation_id><decision>DONT_NOTIFY</decision><message>Still running.</message></heartbeat>');
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'vite-cli 状态检查',
+      message: 'Still running.',
+      metadata: expect.objectContaining({
+        automation_decision: 'DONT_NOTIFY',
+        notification_state: 'diagnostic',
+        terminal: false,
+      }),
+    }), [], 1_500);
+  });
+
+  it('does not reinterpret heartbeat-shaped answers from other clients', () => {
+    const setup = serviceFor();
+    const service = new EventIngestionService(setup.database, setup.config, setup.extensions, { markMonitorVerified: setup.markMonitorVerified } as never);
+    const answer = '<heartbeat><automation_id>vite-cli</automation_id><decision>DONT_NOTIFY</decision><message>Ordinary answer.</message></heartbeat>';
+
+    service.ingest(event(), ['pushplus'], answer);
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'done',
+      message: 'task',
+      metadata: { answer_text: answer },
+    }), ['pushplus'], 1_500);
+  });
+
   it('does not persist an answer attached to a failed event', () => {
     const setup = serviceFor(vi.fn(() => [7, true, 0]));
     const service = new EventIngestionService(setup.database, setup.config, setup.extensions, { markMonitorVerified: setup.markMonitorVerified } as never);

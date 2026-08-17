@@ -78,6 +78,44 @@ describe('DatabaseService idempotent event enrichment', () => {
     database.onModuleDestroy();
   });
 
+  it('preserves quiet heartbeat metadata across idempotent watcher replays', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+    const quietHeartbeat = {
+      ...event({
+        task_summary: 'vite-cli',
+        automation_id: 'vite-cli',
+        automation_decision: 'DONT_NOTIFY',
+        notification_state: 'diagnostic',
+        terminal: false,
+        answer_text: 'Still running.',
+      }, 'Still running.'),
+      source_event_id: 'session:heartbeat-turn:completed',
+      client: 'codex-desktop',
+      status: 'completed',
+      title: 'vite-cli 状态检查',
+      error_code: null,
+    };
+
+    expect(database.insertEvent(quietHeartbeat, [])[1]).toBe(true);
+    expect(database.insertEvent(quietHeartbeat, [])[1]).toBe(false);
+    expect(database.listEvents(10)[0]).toEqual(expect.objectContaining({
+      title: 'vite-cli 状态检查',
+      message: 'Still running.',
+      metadata: expect.objectContaining({
+        automation_decision: 'DONT_NOTIFY',
+        notification_state: 'diagnostic',
+        terminal: false,
+      }),
+    }));
+    expect(database.getDeliveriesForEvent(database.listEvents(10)[0]!.id)).toEqual([]);
+    database.onModuleDestroy();
+  });
+
   it('adds the answer column to an existing database without rebuilding events', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);

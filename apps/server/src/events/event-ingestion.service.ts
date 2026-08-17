@@ -5,7 +5,7 @@ import type { NormalizedEvent } from '../database/database.types';
 import { ExtensionsService } from '../extensions/extensions.service';
 import { PlatformScannerService } from '../extensions/platform-scanner.service';
 import { UserSettingsService } from '../settings/user-settings.service';
-import { cleanAnswerText, isRecoverableFailure } from '../utils/event-text';
+import { cleanAnswerText, isRecoverableFailure, parseHeartbeatResult } from '../utils/event-text';
 
 const VERIFIED_SOURCES: Record<string, Set<string>> = {
   'codex-cli': new Set(['codex', 'codex-notify', 'codex-app-server']),
@@ -47,7 +47,28 @@ export class EventIngestionService {
     const source = typeof answerSource === 'string'
       ? answerSource
       : typeof metadataSource === 'string' ? metadataSource : '';
-    if (event.status === 'completed' && source) event.metadata.answer_text = cleanAnswerText(source);
+    const heartbeat = event.status === 'completed'
+      && event.client === 'codex-desktop'
+      && event.source.trim().toLowerCase() === 'codex-session'
+      ? parseHeartbeatResult(source)
+      : null;
+    if (heartbeat) {
+      const message = cleanAnswerText(heartbeat.message);
+      event.title = heartbeat.decision === 'NOTIFY'
+        ? `${heartbeat.automationId} 有新进展`
+        : `${heartbeat.automationId} 状态检查`;
+      event.message = message;
+      event.metadata.task_summary = heartbeat.automationId;
+      event.metadata.automation_id = heartbeat.automationId;
+      event.metadata.automation_decision = heartbeat.decision;
+      event.metadata.answer_text = message;
+      if (heartbeat.decision === 'DONT_NOTIFY') {
+        event.metadata.notification_state = 'diagnostic';
+        event.metadata.terminal = false;
+      }
+    } else if (event.status === 'completed' && source) {
+      event.metadata.answer_text = cleanAnswerText(source);
+    }
     const failureText = [
       event.message,
       event.error_code || '',

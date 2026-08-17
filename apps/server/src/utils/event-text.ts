@@ -1,5 +1,42 @@
 export const MAX_ANSWER_TEXT_LENGTH = 24_000;
 
+export type HeartbeatDecision = 'NOTIFY' | 'DONT_NOTIFY';
+
+export interface HeartbeatResult {
+  automationId: string;
+  decision: HeartbeatDecision;
+  message: string;
+}
+
+const HEARTBEAT_RESULT_PATTERN = /^\s*<heartbeat>\s*<automation_id>([^<]*)<\/automation_id>\s*<decision>\s*(NOTIFY|DONT_NOTIFY)\s*<\/decision>\s*<message>([\s\S]*?)<\/message>\s*<\/heartbeat>\s*$/i;
+const XML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  apos: "'",
+  gt: '>',
+  lt: '<',
+  quot: '"',
+};
+
+const decodeXmlText = (value: string): string => value.replace(
+  /&(amp|apos|gt|lt|quot);/gi,
+  (entity, name: string) => XML_ENTITIES[name.toLowerCase()] || entity,
+);
+
+/** Decode the strict scalar envelope emitted by Codex heartbeat runs. */
+export const parseHeartbeatResult = (value: unknown): HeartbeatResult | null => {
+  if (typeof value !== 'string') return null;
+  const match = HEARTBEAT_RESULT_PATTERN.exec(value);
+  if (!match) return null;
+  const automationId = decodeXmlText(match[1]!).replace(/\s+/g, ' ').trim();
+  const message = decodeXmlText(match[3]!).trim();
+  if (!automationId || Array.from(automationId).length > 200 || !message) return null;
+  return {
+    automationId,
+    decision: match[2]!.toUpperCase() as HeartbeatDecision,
+    message,
+  };
+};
+
 /** Truncate by Unicode code points so surrogate pairs stay intact. */
 export const truncateText = (value: string, limit: number): string => {
   if (limit <= 0) return '';
@@ -61,4 +98,3 @@ export const isRecoverableFailure = (value: unknown): boolean => {
   if (typeof value !== 'string') return false;
   return /(?:stream\s+(?:disconnected|closed)|before\s+(?:completion|response\.completed)|server(?:s)?\s+(?:are\s+)?overloaded|(?:too\s+many\s+requests|rate\s+limit)|(?:https?|upstream|unexpected\s+status)\s*(?:status\s*)?(?:408|425|429|5\d\d)|\b(?:502|503|504|512)\b|(?:connection|network|socket)\s+(?:failed|reset|refused|closed)|\b(?:timeout|timed\s+out)\b)/i.test(value);
 };
-

@@ -45,6 +45,13 @@ export const notificationContent = (
     : '';
   const message = cleanText(row.message);
   const summary = taskSummary || message || cleanText(row.title);
+  const automationId = cleanText(row.metadata?.automation_id);
+  if (row.status === 'completed' && automationId && row.metadata?.automation_decision === 'NOTIFY') {
+    return {
+      title: `${automationId} 有新进展`,
+      body: truncateText(answer || message || '未提供进展内容', limits.resultLimit),
+    };
+  }
   const failureMessage = cleanText(row.metadata?.failure_message)
     || cleanText(row.metadata?.error)
     || (message !== taskSummary ? message : '')

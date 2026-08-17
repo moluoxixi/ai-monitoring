@@ -7,6 +7,8 @@ const MAX_NOTIFICATION_BODY_LENGTH = 240
 export const isTauriRuntime = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 export const isTerminalMonitorEvent = (event: MonitorEvent) => TERMINAL_STATUSES.has(event.status)
+  && event.metadata.notification_state !== 'diagnostic'
+  && event.metadata.terminal !== false
 
 const notificationBody = (event: MonitorEvent) => {
   const text = event.answer_text || event.message || event.title

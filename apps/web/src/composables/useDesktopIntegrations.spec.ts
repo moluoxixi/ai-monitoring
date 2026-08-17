@@ -25,6 +25,17 @@ describe('desktop integrations', () => {
     expect(isTerminalMonitorEvent(event('pending'))).toBe(false)
   })
 
+  it('does not notify for diagnostic or explicitly non-terminal events', () => {
+    expect(isTerminalMonitorEvent({
+      ...event('completed'),
+      metadata: { notification_state: 'diagnostic' },
+    })).toBe(false)
+    expect(isTerminalMonitorEvent({
+      ...event('completed'),
+      metadata: { terminal: false },
+    })).toBe(false)
+  })
+
   it('does not detect a Tauri runtime in browser test environments', () => {
     expect(isTauriRuntime()).toBe(false)
   })
