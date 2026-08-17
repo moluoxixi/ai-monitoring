@@ -1,6 +1,6 @@
 ---
 name: start
-description: "Initializes an AI development session by reading workflow guides, developer identity, git status, active tasks, and project guidelines from .moluoxixi/. Classifies incoming tasks and routes to brainstorm, direct edit, or task workflow. Use when beginning a new coding session, resuming work, starting a new task, or re-establishing project context."
+description: "Initialize a Moluoxixi development session, classify the incoming task, and route it to the appropriate workflow."
 ---
 
 # Start Session
@@ -42,7 +42,7 @@ Index files list the specific guideline docs to read when you actually start cod
 From Step 1 you know the current task and status. Check the task directory:
 
 - **Active task status `planning` + no `prd.md`** → Phase 1.1. Load the `brainstorm` skill.
-- **Active task status `planning` + `prd.md` exists** → stay in Phase 1. Lightweight tasks can be PRD-only; complex tasks need `design.md` + `implement.md`. Load the relevant Phase 1 step detail before `task.py start`.
+- **Active task status `planning`** → read `task.json`. Persist `complexity.level` if unclassified. Lightweight tasks can be PRD-only; complex tasks need `design.md` + `implement.md` and curated sub-agent context. Manual mode uses `task.py start <task> --user-approved` only after review; auto mode must already contain explicit task-local user authorization.
 - **Active task status `in_progress`** → Phase 2 step 2.1. Load the step detail:
   ```bash
   python ./.moluoxixi/scripts/get_context.py --mode phase --step 2.1 --platform codex
@@ -60,5 +60,6 @@ From Step 1 you know the current task and status. Check the task directory:
 | Done coding / quality check | `check` |
 | Stuck / fixed same bug multiple times | `break-loop` |
 | Learned something worth capturing | `update-spec` |
+| Review or govern pending knowledge | `spec-review` |
 
 Full rules + anti-rationalization table in `.moluoxixi/workflow.md`.

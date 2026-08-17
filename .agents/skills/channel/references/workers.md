@@ -8,13 +8,13 @@ and translates its output back into channel events.
 ## Spawn
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel create impl-task --by dispatcher --cwd /path/to/repo
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn impl-task --provider codex --as codex-impl --timeout 30m
+node .moluoxixi/runtime/moluoxixi.mjs channel create impl-task --by dispatcher --cwd /path/to/repo
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn impl-task --provider codex --as codex-impl --timeout 30m
 
 echo "Implement the schema for table X per .moluoxixi/.../prd.md" \
-  | node "<skill-root>/scripts/moluoxixi.mjs" channel send impl-task --as dispatcher --to codex-impl --stdin
+  | node .moluoxixi/runtime/moluoxixi.mjs channel send impl-task --as dispatcher --to codex-impl --stdin
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait impl-task --as dispatcher --from codex-impl --kind done --timeout 30m
+node .moluoxixi/runtime/moluoxixi.mjs channel wait impl-task --as dispatcher --from codex-impl --kind done --timeout 30m
 ```
 
 `spawn` forks a `channel __supervisor` worker that emits `spawned`, streams
@@ -92,7 +92,7 @@ Example spawning a check agent against a task directory:
 
 ```bash
 TASK=.moluoxixi/tasks/05-13-example
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-example --agent check --provider codex --as check-cx \
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn cr-example --agent check --provider codex --as check-cx \
   --file "$TASK/prd.md" \
   --file "$TASK/design.md" \
   --file "$TASK/implement.md" \
@@ -115,10 +115,10 @@ Use explicit names when multiple workers or providers participate in one
 channel:
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-feature --agent check --as check-claude
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-feature --agent check --provider codex --as check-cx
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn cr-feature --agent check --as check-claude
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn cr-feature --agent check --provider codex --as check-cx
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait cr-feature --as main \
+node .moluoxixi/runtime/moluoxixi.mjs channel wait cr-feature --as main \
   --from check-claude,check-cx --kind done --all --timeout 15m
 ```
 
@@ -136,7 +136,7 @@ losing its session.
 
 ```bash
 echo "Stop refactoring the parser — switch to fixing the failing test in src/foo.ts" \
-  | node "<skill-root>/scripts/moluoxixi.mjs" channel interrupt impl-task --as dispatcher --to codex-impl --stdin
+  | node .moluoxixi/runtime/moluoxixi.mjs channel interrupt impl-task --as dispatcher --to codex-impl --stdin
 ```
 
 Flags:
@@ -156,7 +156,7 @@ plain tagged message instead:
 
 ```bash
 echo "Check this when you reach the next turn." \
-  | node "<skill-root>/scripts/moluoxixi.mjs" channel send impl-task --as dispatcher --to codex-impl \
+  | node .moluoxixi/runtime/moluoxixi.mjs channel send impl-task --as dispatcher --to codex-impl \
       --stdin --tag question
 ```
 
@@ -169,12 +169,12 @@ writes a `killed` event when SIGKILL is needed so the event log stays
 truthful.
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel kill impl-task --as codex-impl
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn impl-task --as codex-impl --provider codex \
+node .moluoxixi/runtime/moluoxixi.mjs channel kill impl-task --as codex-impl
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn impl-task --as codex-impl --provider codex \
   --resume "$(cat ~/.moluoxixi/channels/<bucket>/impl-task/worker.session-id)"
 
 echo "STOP — new instructions: ..." \
-  | node "<skill-root>/scripts/moluoxixi.mjs" channel send impl-task --as dispatcher --to codex-impl --stdin
+  | node .moluoxixi/runtime/moluoxixi.mjs channel send impl-task --as dispatcher --to codex-impl --stdin
 ```
 
 `kill` flags:
@@ -260,15 +260,15 @@ A typical dispatcher loop:
 ```bash
 # 1. Wake the worker.
 echo "Run the failing test and report." \
-  | node "<skill-root>/scripts/moluoxixi.mjs" channel send impl-task --as dispatcher --to codex-impl --stdin \
+  | node .moluoxixi/runtime/moluoxixi.mjs channel send impl-task --as dispatcher --to codex-impl --stdin \
       --delivery-mode requireRunningWorker
 
 # 2. Block until it finishes.
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait impl-task --as dispatcher \
+node .moluoxixi/runtime/moluoxixi.mjs channel wait impl-task --as dispatcher \
   --from codex-impl --kind done,error --timeout 30m
 
 # 3. Read the final answer.
-node "<skill-root>/scripts/moluoxixi.mjs" channel messages impl-task --from codex-impl --last 1 --raw
+node .moluoxixi/runtime/moluoxixi.mjs channel messages impl-task --from codex-impl --last 1 --raw
 ```
 
 All event-emitting subcommands (`send`, `interrupt`, `post`, `context add` /

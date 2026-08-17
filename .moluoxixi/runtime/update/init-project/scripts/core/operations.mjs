@@ -59,7 +59,9 @@ export function prepareOperations(projectRoot, plan, manifest, force, createNew 
         const merged = previousTemplate
           ? upgradeJson(currentJson, JSON.parse(previousTemplate.toString('utf8')), template)
           : mergeJson(currentJson, template)
-        desired = Buffer.from(`${JSON.stringify(merged, null, 2)}\n`)
+        desired = JSON.stringify(merged) === JSON.stringify(currentJson)
+          ? current
+          : Buffer.from(`${JSON.stringify(merged, null, 2)}\n`)
       }
       else if (current && item.merge === 'config') {
         desired = Buffer.from(mergeConfig(current.toString('utf8'), item.content.toString('utf8'), owned, item.configSections))

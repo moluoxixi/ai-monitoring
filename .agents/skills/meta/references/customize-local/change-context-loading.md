@@ -61,7 +61,7 @@ Context cannot grow without bound. Prefer injecting indexes and paths so the AI 
 First determine which mode the platform uses:
 
 - hook push: edit the `inject-subagent-context` hook.
-- agent pull: edit the read steps in the corresponding `moluoxixi-implement` / `moluoxixi-check` agent file.
+- agent pull: edit the read steps in the corresponding `moluoxixi-implement` / `check` agent file.
 
 In both modes, make sure the agent ultimately reads:
 

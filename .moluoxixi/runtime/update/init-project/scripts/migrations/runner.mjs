@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -12,7 +13,8 @@ export function runVersionMigrations(projectRoot, manifest, currentVersion, targ
   const candidates = selected.flatMap(release => (release.migrations ?? []).map(migration => normalizeMigration(migration, release.version)))
   candidates.push(...findOrphanMigrations(projectRoot, manifests, candidates))
 
-  const classified = classifyMigrations(projectRoot, manifest, candidates)
+  const currentTemplates = options.currentTemplates ?? new Map()
+  const classified = classifyMigrations(projectRoot, manifest, candidates, currentTemplates)
   const configSections = selected.flatMap(release => (release.configSectionsAdded ?? []).map(section => ({
     file: normalizePath(section.file),
     release: release.version,
@@ -39,13 +41,13 @@ export function runVersionMigrations(projectRoot, manifest, currentVersion, targ
 
   if (options.migrate) {
     for (const migration of sortMigrationsForExecution(classified.auto))
-      executeMigration(projectRoot, manifest, migration, false, result)
+      executeMigration(projectRoot, manifest, migration, false, result, currentTemplates)
     for (const migration of classified.confirm) {
       if (options.skipAll) {
         result.skipped.push(migration.from)
         continue
       }
-      executeMigration(projectRoot, manifest, migration, !options.force, result)
+      executeMigration(projectRoot, manifest, migration, !options.force, result, currentTemplates)
     }
   }
   for (const migration of classified.safeDeletes)
@@ -101,13 +103,15 @@ function findOrphanMigrations(projectRoot, manifests, selected) {
   return orphaned
 }
 
-function classifyMigrations(projectRoot, manifest, migrations) {
+function classifyMigrations(projectRoot, manifest, migrations, currentTemplates) {
   const result = { auto: [], confirm: [], conflict: [], safeDeletes: [], skip: [] }
   for (const migration of migrations) {
     if (!migration.from)
       continue
     const source = assertSafeTarget(projectRoot, migration.from)
     if (migration.type === 'safe-file-delete') {
+      if (currentTemplates.has(migration.from))
+        continue
       if (fs.existsSync(source) && isSafeDelete(projectRoot, manifest, migration.from, migration.allowedHashes))
         result.safeDeletes.push(migration)
       continue
@@ -141,7 +145,7 @@ function classifyMigrations(projectRoot, manifest, migrations) {
   return result
 }
 
-function executeMigration(projectRoot, manifest, migration, inlineBackup, result) {
+function executeMigration(projectRoot, manifest, migration, inlineBackup, result, currentTemplates) {
   const source = assertSafeTarget(projectRoot, migration.from)
   if (!fs.existsSync(source))
     return
@@ -167,6 +171,12 @@ function executeMigration(projectRoot, manifest, migration, inlineBackup, result
   }
   else if (migration.type === 'rename-dir' && migration.to) {
     const target = assertSafeTarget(projectRoot, migration.to)
+    if (fs.existsSync(target) && dirMatchesCurrentTemplates(projectRoot, migration.to, currentTemplates)) {
+      fs.rmSync(source, { recursive: true, force: true })
+      dropManifestDirectory(manifest, migration.from)
+      result.applied.push(migration.from)
+      return
+    }
     if (fs.existsSync(target))
       fs.rmSync(target, { recursive: true, force: true })
     fs.mkdirSync(path.dirname(target), { recursive: true })
@@ -238,6 +248,25 @@ function collectDirectoryFiles(root) {
   return files
 }
 
+function dirMatchesCurrentTemplates(projectRoot, relativePath, currentTemplates) {
+  const target = assertSafeTarget(projectRoot, relativePath)
+  const files = collectDirectoryFiles(target)
+  if (!files || files.length === 0)
+    return false
+  return files.every((file) => {
+    const relativeFile = normalizeRelative(projectRoot, file)
+    const template = currentTemplates.get(relativeFile)
+    const content = Buffer.isBuffer(template)
+      ? template
+      : Buffer.isBuffer(template?.content)
+        ? template.content
+        : typeof template === 'string'
+          ? Buffer.from(template)
+          : undefined
+    return content !== undefined && fs.readFileSync(file).equals(content)
+  })
+}
+
 function transferManifestEntry(manifest, from, to) {
   if (!manifest.entries)
     return
@@ -263,6 +292,16 @@ function transferManifestDirectory(manifest, from, to) {
       manifest.entries[suffix ? `${targetPrefix}${suffix}` : to] = value
       delete manifest.entries[key]
     }
+  }
+}
+
+function dropManifestDirectory(manifest, relativePath) {
+  if (!manifest.entries)
+    return
+  const prefix = `${relativePath.replace(/\/$/u, '')}/`
+  for (const key of Object.keys(manifest.entries)) {
+    if (key === relativePath || key.startsWith(prefix))
+      delete manifest.entries[key]
   }
 }
 

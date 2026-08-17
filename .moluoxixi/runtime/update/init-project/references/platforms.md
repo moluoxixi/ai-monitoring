@@ -17,11 +17,15 @@ Pass one or more IDs to `--platform`, separated by commas.
 | `codebuddy` | `.codebuddy/` |
 | `copilot` | `.github/agents`, `.github/copilot`, `.github/hooks`, `.github/prompts`, `.github/skills` |
 | `droid` | `.factory/` |
-| `pi` | `.pi/` |
+| `dsh` | `.dsh/` and `.agents/skills/` |
+| `pi` | `.pi/` and `.agents/skills/` |
 | `reasonix` | `.reasonix/` |
 | `zcode` | `.zcode/` |
 | `trae` | `.trae/` |
 | `omp` | `.omp/` |
+| `grok` | `.grok/` |
+| `kimi` | `.kimi-code/` and `.agents/skills/` |
+| `snow` | `.snow/` |
 
 `claude-code` is accepted as an alias for `claude`. The deprecated upstream ID `windsurf` is accepted as an alias for `devin`. `all` expands to every ID above.
 

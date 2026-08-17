@@ -8,7 +8,7 @@ template / personal habit). When `add_session.py` and `task.py archive` ran
 their auto-commit and `git add` failed with `ignored by .gitignore`, the AI
 agent driving the workflow "fixed" it by retrying with
 `git add -f .moluoxixi/` — which fan-out-included every ignored subtree
-(`.moluoxixi/.backup-*/`, `.moluoxixi/worktrees/`, `.moluoxixi/airules-init-manifest.json`,
+(`.moluoxixi/.backup-*/`, `.moluoxixi/worktrees/`, `.moluoxixi/.template-hashes.json`,
 `.moluoxixi/.runtime/`), committing 548 files / 83474 lines of caches/backups.
 
 Design
@@ -52,7 +52,7 @@ from .paths import (
 MOLUOXIXI_IGNORED_SUBPATHS = (
     ".moluoxixi/.backup-*",
     ".moluoxixi/worktrees/",
-    ".moluoxixi/airules-init-manifest.json",
+    ".moluoxixi/.template-hashes.json",
     ".moluoxixi/.runtime/",
     ".moluoxixi/.cache/",
 )
@@ -77,7 +77,7 @@ def safe_moluoxixi_paths_to_add(
 
     Excluded (intentionally — these must not be staged):
       - .moluoxixi/.backup-*, .moluoxixi/worktrees/,
-        .moluoxixi/airules-init-manifest.json, .moluoxixi/.runtime/, .moluoxixi/.cache/
+        .moluoxixi/.template-hashes.json, .moluoxixi/.runtime/, .moluoxixi/.cache/
 
     Scope contract (see #303 / break-loop analysis): when ``task_name`` is
     passed, the task segment stages ONLY that task directory — it never walks

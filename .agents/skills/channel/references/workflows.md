@@ -9,19 +9,19 @@ Use when the user says "和 codex/claude 讨论一下", "brainstorm", or "拉一
 进来一起看".
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel create brainstorm-storage-layer --by main \
+node .moluoxixi/runtime/moluoxixi.mjs channel create brainstorm-storage-layer --by main \
   --task .moluoxixi/tasks/05-XX-storage-adapter
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn brainstorm-storage-layer \
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn brainstorm-storage-layer \
   --agent architect --provider codex \
   --file .moluoxixi/tasks/05-XX-storage-adapter/prd.md \
   --file .moluoxixi/tasks/05-XX-storage-adapter/design.md \
   --as cx-arch --timeout 30m
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel send brainstorm-storage-layer \
+node .moluoxixi/runtime/moluoxixi.mjs channel send brainstorm-storage-layer \
   --as main --to cx-arch --text-file /tmp/brainstorm-r1.md
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait brainstorm-storage-layer \
+node .moluoxixi/runtime/moluoxixi.mjs channel wait brainstorm-storage-layer \
   --as main --kind done --from cx-arch --timeout 10m
 ```
 
@@ -52,9 +52,9 @@ Use when the user asks to dispatch implementation or review work.
 
 ```bash
 TASK=.moluoxixi/tasks/05-12-foo
-node "<skill-root>/scripts/moluoxixi.mjs" channel create cr-foo --task "$TASK" --by main
+node .moluoxixi/runtime/moluoxixi.mjs channel create cr-foo --task "$TASK" --by main
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-foo \
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn cr-foo \
   --agent check \
   --jsonl "$TASK/check.jsonl" \
   --file "$TASK/prd.md" \
@@ -62,9 +62,9 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-foo \
   --file "$TASK/implement.md" \
   --cwd "$PWD" --timeout 15m
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel send cr-foo --as main --to check --text-file /tmp/cr-brief.md
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait cr-foo --as main --kind done --from check --timeout 15m
-node "<skill-root>/scripts/moluoxixi.mjs" channel messages cr-foo --kind message --from check --tag final_answer
+node .moluoxixi/runtime/moluoxixi.mjs channel send cr-foo --as main --to check --text-file /tmp/cr-brief.md
+node .moluoxixi/runtime/moluoxixi.mjs channel wait cr-foo --as main --kind done --from check --timeout 15m
+node .moluoxixi/runtime/moluoxixi.mjs channel messages cr-foo --kind message --from check --tag final_answer
 ```
 
 For implement work, use `--agent implement` and send an implementation brief.
@@ -76,19 +76,19 @@ already run.
 Use one channel and distinct worker names.
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel create cr-feature --by main --ephemeral
+node .moluoxixi/runtime/moluoxixi.mjs channel create cr-feature --by main --ephemeral
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-feature --agent check \
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn cr-feature --agent check \
   --jsonl "$TASK/check.jsonl" --file "$TASK/prd.md" --file "$TASK/design.md" \
   --timeout 15m
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn cr-feature --agent check --provider codex --as check-cx \
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn cr-feature --agent check --provider codex --as check-cx \
   --jsonl "$TASK/check.jsonl" --file "$TASK/prd.md" --file "$TASK/design.md" \
   --timeout 15m
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel send cr-feature --as main --to check --text-file /tmp/cr-brief.md
-node "<skill-root>/scripts/moluoxixi.mjs" channel send cr-feature --as main --to check-cx --text-file /tmp/cr-brief.md
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait cr-feature --as main --kind done --from check,check-cx --all --timeout 15m
+node .moluoxixi/runtime/moluoxixi.mjs channel send cr-feature --as main --to check --text-file /tmp/cr-brief.md
+node .moluoxixi/runtime/moluoxixi.mjs channel send cr-feature --as main --to check-cx --text-file /tmp/cr-brief.md
+node .moluoxixi/runtime/moluoxixi.mjs channel wait cr-feature --as main --kind done --from check,check-cx --all --timeout 15m
 ```
 
 `--all` means every listed worker must emit a matching event.
@@ -96,8 +96,8 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel wait cr-feature --as main --ki
 ## Pattern D: One-shot Worker
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel run --provider codex --message "say hi in 3 words" --timeout 1m
-node "<skill-root>/scripts/moluoxixi.mjs" channel run --agent plan --message-file /tmp/plan-question.md --timeout 10m
+node .moluoxixi/runtime/moluoxixi.mjs channel run --provider codex --message "say hi in 3 words" --timeout 1m
+node .moluoxixi/runtime/moluoxixi.mjs channel run --agent plan --message-file /tmp/plan-question.md --timeout 10m
 ```
 
 On success, `run` removes the ephemeral channel. On error/timeout/killed, it
@@ -113,10 +113,10 @@ internal changelogs. Read `forum.md` for the full model.
 If the user gives a forum/thread name, restore context yourself:
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel forum <board> --scope global
-node "<skill-root>/scripts/moluoxixi.mjs" channel thread <board> <thread> --scope global --raw
-node "<skill-root>/scripts/moluoxixi.mjs" channel context list <board> --scope global --thread <thread>
-node "<skill-root>/scripts/moluoxixi.mjs" channel messages <board> --scope global --raw --thread <thread>
+node .moluoxixi/runtime/moluoxixi.mjs channel forum <board> --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel thread <board> <thread> --scope global --raw
+node .moluoxixi/runtime/moluoxixi.mjs channel context list <board> --scope global --thread <thread>
+node .moluoxixi/runtime/moluoxixi.mjs channel messages <board> --scope global --raw --thread <thread>
 ```
 
 Output a constraint summary, not a transcript dump:

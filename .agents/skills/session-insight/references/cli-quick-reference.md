@@ -1,6 +1,6 @@
-# `node "<skill-root>/scripts/moluoxixi.mjs" mem` CLI Reference
+# `node .moluoxixi/runtime/moluoxixi.mjs mem` CLI Reference
 
-Full flag reference for the five subcommands. Pin this as the authoritative source — `node "<skill-root>/scripts/moluoxixi.mjs" mem help` prints the same content at runtime, so anything here that drifts is a bug.
+Full flag reference for the five subcommands. Pin this as the authoritative source — `node .moluoxixi/runtime/moluoxixi.mjs mem help` prints the same content at runtime, so anything here that drifts is a bug.
 
 ## Subcommands
 
@@ -34,18 +34,18 @@ Full flag reference for the five subcommands. Pin this as the authoritative sour
 
 ```bash
 # What past sessions discussed "deadlock" anywhere on this machine?
-node "<skill-root>/scripts/moluoxixi.mjs" mem search "deadlock" --global --limit 20
+node .moluoxixi/runtime/moluoxixi.mjs mem search "deadlock" --global --limit 20
 
 # Inside a specific session, surface the top 5 turns that mention "lock contention"
 # plus 2 turns of surrounding context.
-node "<skill-root>/scripts/moluoxixi.mjs" mem context 5842592d --grep "lock contention" --turns 5 --around 2
+node .moluoxixi/runtime/moluoxixi.mjs mem context 5842592d --grep "lock contention" --turns 5 --around 2
 
 # Recover the brainstorm window for a session — useful when continuing a task
 # the user started a week ago.
-node "<skill-root>/scripts/moluoxixi.mjs" mem extract 5842592d --phase brainstorm
+node .moluoxixi/runtime/moluoxixi.mjs mem extract 5842592d --phase brainstorm
 
 # List every project this machine has Moluoxixi sessions for, with counts.
-node "<skill-root>/scripts/moluoxixi.mjs" mem projects
+node .moluoxixi/runtime/moluoxixi.mjs mem projects
 ```
 
 ## Output shapes
@@ -62,4 +62,4 @@ node "<skill-root>/scripts/moluoxixi.mjs" mem projects
 
 ## When you need more than this reference
 
-Run `node "<skill-root>/scripts/moluoxixi.mjs" mem help` in the user's shell. The runtime help is authoritative and will be ahead of this reference during fast-moving beta releases.
+Run `node .moluoxixi/runtime/moluoxixi.mjs mem help` in the user's shell. The runtime help is authoritative and will be ahead of this reference during fast-moving beta releases.

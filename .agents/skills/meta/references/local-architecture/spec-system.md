@@ -87,7 +87,7 @@ Specs should contain executable engineering conventions for the project, not gen
 - Cases that require tests.
 - Project-specific pitfalls and how to avoid them.
 
-When the AI learns a new rule during implementation or debugging, it should use `update-spec` to submit a complete desired-state candidate under `.moluoxixi/spec-proposals/`. A human reviews promote, merge, reject, deduplicate, and delete decisions through `moluoxixi-spec-review`; only approved application changes `.moluoxixi/spec/`.
+When the AI learns a new rule during implementation or debugging, it should use `update-spec` to submit a complete desired-state candidate under `.moluoxixi/spec-proposals/`. A human reviews promote, merge, reject, deduplicate, and delete decisions through `spec-review`; only approved application changes `.moluoxixi/spec/`.
 
 The review audit is event-driven and read-only by default. It becomes due after 30 days without a reviewed audit or when at least 10 proposals are pending. The queue and formal spec are both user data and are preserved by project updates and uninstall.
 

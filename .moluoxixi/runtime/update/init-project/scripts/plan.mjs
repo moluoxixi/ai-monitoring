@@ -5,12 +5,10 @@ import path from 'node:path'
 import process from 'node:process'
 import {
   canonicalSkillName,
-  CORE_ASSET_ROOT,
-  CORE_SKILLS_ROOT,
-  HOST_ASSET_ROOT,
   MOLUOXIXI_VERSION,
   NAMESPACED_SKILL_RENAMES,
-  PROJECT_ASSET_ROOT,
+  OVERLAY_ROOT,
+  PACKAGE_TEMPLATE_ROOT,
   projectPath,
   RUNTIME_ROOT,
   SKILL_ROOT,
@@ -26,6 +24,13 @@ import {
   PLATFORM_DIRECT,
   PLATFORM_SKILLS_ROOT,
 } from './hosts/catalog.mjs'
+import {
+  listTemplateFiles,
+  readAddition,
+  readTemplateFile,
+  readTemplateOrAddition,
+  verifyTemplateSource,
+} from './templates.mjs'
 
 export function requirePython(command) {
   const candidates = command
@@ -67,6 +72,7 @@ function parseCommand(value) {
 }
 
 export function buildPlan(platforms, pythonCommand, withStatusline = false, packages = [], defaultPackage, projectType = 'fullstack', extras = {}) {
+  verifyTemplateSource()
   const plan = new Map()
   const specs = Array.isArray(extras.specs)
     ? extras.specs
@@ -84,7 +90,56 @@ export function buildPlan(platforms, pythonCommand, withStatusline = false, pack
   }
   for (const platform of platforms)
     addPlatform(plan, platform, pythonCommand, platform === 'gemini' && platforms.includes('codex'), withStatusline)
+  preserveCodexAgentModelKeys(plan, extras.projectRoot)
   return plan
+}
+
+export function extractCodexAgentModelKeys(content) {
+  const result = {}
+  let inMultilineString = false
+  for (const rawLine of content.split(/\r?\n/u)) {
+    const trimmed = rawLine.trim()
+    if (inMultilineString) {
+      if (trimmed.includes('"""'))
+        inMultilineString = false
+      continue
+    }
+    if (/^[A-Za-z_][\w-]*\s*=\s*"""/u.test(trimmed)) {
+      if ((trimmed.match(/"""/gu) ?? []).length < 2)
+        inMultilineString = true
+      continue
+    }
+    const match = trimmed.match(/^(model|model_reasoning_effort)\s*=\s*"((?:[^"\\]|\\.)*)"\s*(?:#.*)?$/u)
+    if (match)
+      result[match[1]] = match[2].replaceAll('\\"', '"').replaceAll('\\\\', '\\')
+  }
+  return result
+}
+
+export function applyCodexAgentModelKeys(content, preserved) {
+  const lines = []
+  for (const key of ['model', 'model_reasoning_effort']) {
+    if (preserved[key])
+      lines.push(`${key} = "${preserved[key].replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`)
+  }
+  if (lines.length === 0)
+    return content
+  return content.replace(/^(sandbox_mode\s*=\s*".*"\r?\n)/mu, match => `${match}${lines.join('\n')}\n`)
+}
+
+function preserveCodexAgentModelKeys(plan, projectRoot) {
+  if (!projectRoot)
+    return
+  for (const [target, entry] of plan) {
+    if (!target.startsWith('.codex/agents/moluoxixi-') || !target.endsWith('.toml'))
+      continue
+    try {
+      const existing = fs.readFileSync(path.join(projectRoot, target), 'utf8')
+      const preserved = extractCodexAgentModelKeys(existing)
+      entry.content = Buffer.from(applyCodexAgentModelKeys(entry.content.toString('utf8'), preserved))
+    }
+    catch {}
+  }
 }
 
 function walkFiles(root) {
@@ -122,24 +177,47 @@ function resolveTemplate(content, ctx, pythonCommand, neutral = false) {
   return result
 }
 
+const COMMAND_DESCRIPTIONS = {
+  'continue': 'Resume work on the current task at the correct phase.',
+  'finish-work': 'Wrap up the current session: quality gate, commit reminder, archive, journal.',
+  'spec-review': 'Review proposed project knowledge before promoting it into formal specs.',
+  'start': 'Initialize a Moluoxixi development session.',
+}
+
+const SKILL_DESCRIPTIONS = {
+  'before-dev': 'Discovers and injects project-specific coding guidelines from .moluoxixi/spec/ before implementation begins. Reads spec indexes, pre-development checklists, and shared thinking guides for the target package. Use before writing code or when project conventions need to be refreshed.',
+  'brainstorm': 'Guides collaborative requirements discovery before implementation. Creates task artifacts, asks high-value questions, researches technical choices, and converges on an approved MVP scope.',
+  'break-loop': 'Deep bug analysis to break the fix-forget-repeat cycle. Analyzes root cause, failed fixes, prevention mechanisms, and prepares reusable knowledge for human review.',
+  'check': 'Comprehensive quality verification covering spec compliance, lint, type-checking, tests, cross-layer data flow, reuse, and consistency.',
+  'continue': 'Resume work on the current task at the correct workflow phase and load its step-level context.',
+  'finish-work': 'Wrap up the current session by verifying quality, archiving completed tasks, and recording progress.',
+  'spec-review': 'Review pending project knowledge proposals before they enter .moluoxixi/spec/.',
+  'start': 'Initialize a Moluoxixi development session, classify the incoming task, and route it to the appropriate workflow.',
+  'update-spec': 'Capture executable contracts and coding conventions as human-reviewable proposals without bypassing knowledge approval.',
+}
+
+function wrapSkill(name, content) {
+  const description = SKILL_DESCRIPTIONS[name]
+  if (!description)
+    throw new Error(`Missing skill description: ${name}`)
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\n${content}`
+}
+
 function wrapCommand(name, content) {
-  const description = {
-    'start': 'Initialize a Moluoxixi development session.',
-    'continue': 'Resume work on the current task at the correct phase.',
-    'finish-work': 'Wrap up the current session: quality gate, commit reminder, archive, journal.',
-  }[name.replace(/^moluoxixi-/u, '')]
-  return `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`
+  const base = canonicalSkillName(name)
+  const description = COMMAND_DESCRIPTIONS[base]
+  if (!description)
+    throw new Error(`Missing command description: ${base}`)
+  return `---\nname: ${name}\ndescription: ${JSON.stringify(description)}\n---\n\n${content}`
 }
 
 function wrapOmpCommand(name, content) {
-  const base = name.replace(/^moluoxixi-/u, '')
-  const description = {
-    'start': 'Initialize a Moluoxixi development session.',
-    'continue': 'Resume work on the current task at the correct phase.',
-    'finish-work': 'Wrap up the current session: quality gate, commit reminder, archive, journal.',
-  }[base]
-  const hint = base === 'finish-work' ? '\nargument-hint: [task-name]' : ''
-  return `---\ndescription: ${description}${hint}\n---\n\n${content.replace(/^# [^\n]+\n\n/u, '')}`
+  const base = canonicalSkillName(name)
+  const description = COMMAND_DESCRIPTIONS[base]
+  if (!description)
+    throw new Error(`Missing OMP command description: ${base}`)
+  const hint = base === 'finish-work' ? `\nargument-hint: ${JSON.stringify('[task-name]')}` : ''
+  return `---\ndescription: ${JSON.stringify(description)}${hint}\n---\n\n${content.replace(/^# [^\n]+\n\n/u, '')}`
 }
 
 function addPlan(plan, relativePath, content, options = {}) {
@@ -192,16 +270,44 @@ function addTree(plan, sourceRoot, targetRoot, options = {}) {
   }
 }
 
-function localizeProjectRuntime(relativePath, content) {
+function addTemplateTree(plan, sourceRoot, targetRoot, options = {}) {
+  for (const sourcePath of listTemplateFiles(sourceRoot, { additions: options.additions })) {
+    let relative = path.posix.relative(sourceRoot, sourcePath)
+    if (options.filter && !options.filter(relative))
+      continue
+    if (options.rename)
+      relative = options.rename(relative)
+    const target = path.posix.join(targetRoot, relative)
+    const merge = options.merge ?? (/(^|\/)(settings|hooks)\.json$/u.test(target) || target.endsWith('/package.json') ? 'json' : target.endsWith('/config.toml') ? 'block-hash' : 'replace')
+    const sourceContent = readTemplateOrAddition(sourcePath)
+    const transformed = options.transform ? options.transform(path.posix.relative(sourceRoot, sourcePath), sourceContent) : sourceContent
+    const resolved = options.context || options.python ? resolveTemplate(transformed, options.context, options.python, options.neutral) : transformed
+    addPlan(plan, target, resolved, {
+      executable: target.endsWith('.py') || target.endsWith('.mjs'),
+      force: options.force,
+      managed: options.managed,
+      merge,
+      platform: options.platform,
+      preserveExisting: options.preserveExisting,
+      skipExisting: options.skipExisting,
+    })
+  }
+}
+
+function localizeTemplatePath(relativePath) {
+  return relativePath.replaceAll(UPSTREAM_BRAND, 'moluoxixi')
+}
+
+export function localizeProjectRuntime(relativePath, content) {
   let localized = content
+    .replaceAll(`${UPSTREAM_BRAND[0].toUpperCase()}${UPSTREAM_BRAND.slice(1)}`, 'Moluoxixi')
+    .replaceAll(UPSTREAM_BRAND.toUpperCase(), 'MOLUOXIXI')
+    .replaceAll(UPSTREAM_BRAND, 'moluoxixi')
+    .replaceAll('"run moluoxixi update"', '"run the current init-project skill"')
     .replaceAll('moluoxixi channel', `node ${projectPath('runtime', 'moluoxixi.mjs')} channel`)
     .replaceAll('moluoxixi mem', `node ${projectPath('runtime', 'moluoxixi.mjs')} mem`)
     .replaceAll('moluoxixi workflow', `node ${projectPath('runtime', 'moluoxixi.mjs')} workflow`)
     .replaceAll('moluoxixi update', `node ${projectPath('runtime', 'moluoxixi.mjs')} update`)
-    .replaceAll('.moluoxixi', '.moluoxixi')
-    .replaceAll(UPSTREAM_BRAND, 'moluoxixi')
-    .replaceAll(`${UPSTREAM_BRAND[0].toUpperCase()}${UPSTREAM_BRAND.slice(1)}`, 'Moluoxixi')
-    .replaceAll(UPSTREAM_BRAND.toUpperCase(), 'MOLUOXIXI')
   for (const [namespacedName, canonicalName] of Object.entries(NAMESPACED_SKILL_RENAMES))
     localized = localized.replaceAll(namespacedName, canonicalName)
   localized = localized
@@ -221,12 +327,6 @@ function localizeProjectRuntime(relativePath, content) {
       lines[nameLine] = `name: ${segments[skillsIndex + 1]}`
       localized = lines.join('\n')
     }
-  }
-  if (relativePath === 'common/session_context.py') {
-    localized = localized.replace(
-      /def _fetch_moluoxixi_version_output\(\) -> str \| None:\n[\s\S]*?\n\ndef _extract_available_update_version/u,
-      'def _fetch_moluoxixi_version_output() -> str | None:\n    # AIRules updates are driven by the project-local runtime, never a global CLI.\n    return None\n\n\ndef _extract_available_update_version',
-    )
   }
   return localized
 }
@@ -251,17 +351,17 @@ You may self-fix production code within the assigned scope. Do not edit \`.moluo
 ---
 
 `
-  if (!['codex', 'gemini', 'qoder', 'copilot', 'pi', 'reasonix', 'zcode', 'trae'].includes(platform)) {
+  if (!['codex', 'gemini', 'qoder', 'copilot', 'grok', 'kimi', 'pi', 'reasonix', 'zcode', 'trae'].includes(platform)) {
     return platform === 'kiro'
       ? injectJsonAgentPrelude(transformed, knowledgeBoundary)
       : injectPullBasedPreludeMarkdown(transformed, knowledgeBoundary)
   }
+  if (platform === 'codex')
+    return injectPullBasedPreludeToml(transformed, knowledgeBoundary)
   if (platform === 'copilot')
     transformed = normalizeCopilotAgentFrontmatter(transformed)
   const prelude = `${knowledgeBoundary}${buildPullBasedPrelude(agentType, pythonCommand)}`
-  return platform === 'codex'
-    ? injectPullBasedPreludeToml(transformed, prelude)
-    : injectPullBasedPreludeMarkdown(transformed, prelude)
+  return injectPullBasedPreludeMarkdown(transformed, prelude)
 }
 
 function buildPullBasedPrelude(agentType, pythonCommand) {
@@ -284,10 +384,10 @@ Do not proceed without a task PRD or equivalent user-confirmed requirements.
 }
 
 function detectPullAgentType(relativePath) {
-  const name = path.basename(relativePath).replace(/(?:\.agent)?\.(?:md|toml|json)$/u, '')
-  if (['moluoxixi-implement', 'moluoxixi-frontend', 'moluoxixi-backend', 'moluoxixi-database'].includes(name))
+  const name = path.basename(relativePath).replace(/(?:\.agent)?\.(?:md|toml|json)$/u, '').replace(/^(?:moluoxixi|trellis)-/u, '')
+  if (['implement', 'frontend', 'backend', 'database'].includes(name))
     return 'implement'
-  if (['moluoxixi-check', 'moluoxixi-test', 'moluoxixi-security'].includes(name))
+  if (['check', 'test', 'security'].includes(name))
     return 'check'
   return undefined
 }
@@ -343,26 +443,42 @@ function mapCopilotTool(tool) {
 }
 
 function addProjectCore(plan, pythonCommand, packages, defaultPackage, projectType, workflow, configSections, specSelection) {
-  addTree(plan, path.join(PROJECT_ASSET_ROOT, 'scripts'), projectPath('scripts'), { python: pythonCommand, transform: localizeProjectRuntime })
-  addTree(plan, path.join(PROJECT_ASSET_ROOT, 'agents'), projectPath('agents'), { python: pythonCommand, transform: localizeProjectRuntime })
+  addTemplateTree(plan, 'trellis/scripts', projectPath('scripts'), {
+    python: pythonCommand,
+    rename: localizeTemplatePath,
+    transform: localizeProjectRuntime,
+  })
+  addTemplateTree(plan, 'project/scripts', projectPath('scripts'), {
+    additions: true,
+    python: pythonCommand,
+    transform: localizeProjectRuntime,
+  })
+  addTemplateTree(plan, 'trellis/agents', projectPath('agents'), {
+    python: pythonCommand,
+    rename: localizeTemplatePath,
+    transform: localizeProjectRuntime,
+  })
   addTree(plan, RUNTIME_ROOT, projectPath('runtime'), { merge: 'replace' })
   addTree(plan, SKILL_ROOT, projectPath('runtime', 'update', 'init-project'), { merge: 'replace' })
-  const workflowContent = workflow?.content ?? readProjectText('workflow.md')
+  addTree(plan, PACKAGE_TEMPLATE_ROOT, projectPath('runtime', 'update', 'packages', 'cli', 'src', 'templates'), { merge: 'replace' })
+  addTree(plan, OVERLAY_ROOT, projectPath('runtime', 'update', 'overlays'), { merge: 'replace' })
+  const workflowContent = workflow?.content ?? readTemplateFile('trellis/workflow.md')
   addPlan(plan, projectPath('workflow.md'), resolveTemplate(localizeProjectRuntime('workflow.md', workflowContent), undefined, pythonCommand), {
     managed: workflow?.id === undefined || workflow.id === 'native',
     force: workflow?.force === true,
   })
   addPlan(plan, projectPath('config.yaml'), buildProjectConfig(packages, defaultPackage), { configSections, merge: 'config' })
   addPlan(plan, projectPath('.version'), `${MOLUOXIXI_VERSION}\n`)
-  addPlan(plan, projectPath('.gitignore'), readProjectText('gitignore.txt'))
-  addPlan(plan, projectPath('workspace', 'index.md'), resolveTemplate(localizeProjectRuntime('workspace-index.md', readProjectText('workspace-index.md')), undefined, pythonCommand), { managed: false, preserveExisting: true })
+  addPlan(plan, projectPath('.gitignore'), localizeProjectRuntime('gitignore.txt', readTemplateFile('trellis/gitignore.txt')))
+  addPlan(plan, '.gitattributes', localizeProjectRuntime('gitattributes.txt', readTemplateFile('trellis/gitattributes.txt')), { merge: 'block-hash' })
+  addPlan(plan, projectPath('workspace', 'index.md'), resolveTemplate(localizeProjectRuntime('workspace-index.md', readTemplateFile('markdown/workspace-index.md')), undefined, pythonCommand), { managed: false, preserveExisting: true })
   addPlan(plan, projectPath('tasks', '.gitkeep'), '', { managed: false, preserveExisting: true })
   if (!specSelection.hasSingleProjectSpec)
-    addTree(plan, path.join(PROJECT_ASSET_ROOT, 'spec', 'guides'), projectPath('spec', 'guides'), { managed: false, preserveExisting: true, rename: relative => relative.replace(/\.txt$/u, ''), transform: localizeProjectRuntime })
+    addTemplateTree(plan, 'markdown/spec/guides', projectPath('spec', 'guides'), { managed: false, preserveExisting: true, rename: relative => relative.replace(/\.txt$/u, ''), transform: localizeProjectRuntime })
   if (packages.length === 0 && !specSelection.hasSingleProjectSpec) {
     const sections = projectType === 'frontend' ? ['frontend'] : projectType === 'backend' ? ['backend'] : ['backend', 'frontend']
     for (const section of sections) {
-      addTree(plan, path.join(PROJECT_ASSET_ROOT, 'spec', section), projectPath('spec', section), {
+      addTemplateTree(plan, `markdown/spec/${section}`, projectPath('spec', section), {
         rename: relative => relative.replace(/\.txt$/u, ''),
         managed: false,
         preserveExisting: true,
@@ -375,7 +491,7 @@ function addProjectCore(plan, pythonCommand, packages, defaultPackage, projectTy
       continue
     const sections = pkg.type === 'frontend' ? ['frontend'] : pkg.type === 'backend' ? ['backend'] : ['backend', 'frontend']
     for (const section of sections) {
-      addTree(plan, path.join(PROJECT_ASSET_ROOT, 'spec', section), projectPath('spec', sanitizePackageName(pkg.name), section), {
+      addTemplateTree(plan, `markdown/spec/${section}`, projectPath('spec', sanitizePackageName(pkg.name), section), {
         rename: relative => relative.replace(/\.txt$/u, ''),
         managed: false,
         preserveExisting: true,
@@ -383,8 +499,8 @@ function addProjectCore(plan, pythonCommand, packages, defaultPackage, projectTy
       })
     }
   }
-  addPlan(plan, 'AGENTS.md', fs.readFileSync(path.join(PROJECT_ASSET_ROOT, 'AGENTS.md')), { merge: 'block-moluoxixi' })
-  addPlan(plan, 'README.md', readProjectText('readme-usage.md'), { merge: 'block-html' })
+  addPlan(plan, 'AGENTS.md', localizeProjectRuntime('agents.md', readTemplateFile('markdown/agents.md')), { merge: 'block-moluoxixi' })
+  addPlan(plan, 'README.md', readAddition('project/readme-usage.md'), { merge: 'block-html' })
 }
 
 function addExternalSpec(plan, files, strategy, packageName, projectRoot) {
@@ -414,7 +530,7 @@ function addExternalSpec(plan, files, strategy, packageName, projectRoot) {
 }
 
 function buildProjectConfig(packages, defaultPackage) {
-  let content = localizeProjectRuntime('config.yaml', readProjectText('config.yaml'))
+  let content = localizeProjectRuntime('config.yaml', readTemplateFile('trellis/config.yaml'))
   if (packages.length === 0)
     return content
   content = `${content.replace(/\s*$/u, '')}\n\n# Reviewed package map generated by AIRules init-project.\npackages:\n`
@@ -430,41 +546,85 @@ function buildProjectConfig(packages, defaultPackage) {
   return content
 }
 
-function coreTemplates(platform, pythonCommand) {
-  const ctx = PLATFORM_CONTEXT[platform]
-  const commands = walkFiles(path.join(CORE_ASSET_ROOT, 'commands')).map(file => ({ name: path.basename(file, '.md'), content: localizeProjectRuntime(path.basename(file), resolveTemplate(fs.readFileSync(file, 'utf8'), ctx, pythonCommand)) }))
-  return ctx.agentCapable && ctx.hasHooks && platform !== 'pi' ? commands.filter(command => command.name !== 'start') : commands
+function commonTemplates(kind) {
+  const root = `common/${kind}`
+  return listTemplateFiles(root, { additions: true })
+    .filter(sourcePath => path.posix.dirname(path.posix.relative(root, sourcePath)) === '.' && sourcePath.endsWith('.md'))
+    .map(sourcePath => ({
+      content: readTemplateOrAddition(sourcePath),
+      name: path.posix.basename(sourcePath, '.md'),
+      sourcePath,
+    }))
 }
 
-function addCoreSkills(plan, platform, root, pythonCommand) {
-  for (const entry of fs.readdirSync(CORE_SKILLS_ROOT, { withFileTypes: true }).filter(entry => entry.isDirectory())) {
-    const skillName = canonicalSkillName(entry.name)
-    addTree(plan, path.join(CORE_SKILLS_ROOT, entry.name), path.posix.join(root, skillName), {
-      context: PLATFORM_CONTEXT[platform],
-      platform,
-      python: pythonCommand,
-      transform: (relativePath, content) => localizeProjectRuntime(`skills/${skillName}/${relativePath}`, content),
-    })
+function commonCommands(platform, pythonCommand, options = {}) {
+  const ctx = PLATFORM_CONTEXT[platform]
+  const templates = !options.forceStart && ctx.agentCapable && ctx.hasHooks
+    ? commonTemplates('commands').filter(command => command.name !== 'start')
+    : commonTemplates('commands')
+  return templates.map(command => ({
+    ...command,
+    content: resolveTemplate(localizeProjectRuntime(command.sourcePath, command.content), ctx, pythonCommand, options.neutral),
+  }))
+}
+
+function canonicalTemplateSkillName(name) {
+  return canonicalSkillName(localizeTemplatePath(name))
+}
+
+function bundledSkillNames() {
+  return new Set(listTemplateFiles('common/bundled-skills', { additions: true })
+    .map(sourcePath => path.posix.relative('common/bundled-skills', sourcePath).split('/')[0])
+    .filter(Boolean)
+    .map(canonicalTemplateSkillName))
+}
+
+function addCommonSkills(plan, platform, root, pythonCommand, options = {}) {
+  const ctx = PLATFORM_CONTEXT[platform]
+  const bundledNames = bundledSkillNames()
+  const templates = [...commonTemplates('skills')]
+  if (options.commands) {
+    templates.push(...commonCommands(platform, pythonCommand, { neutral: options.neutral })
+      .filter(command => !bundledNames.has(canonicalTemplateSkillName(command.name))))
+  }
+  for (const template of templates) {
+    const skillName = canonicalTemplateSkillName(template.name)
+    if (options.excludeNames?.has(skillName))
+      continue
+    const content = template.sourcePath.startsWith('common/commands/')
+      ? template.content
+      : resolveTemplate(localizeProjectRuntime(template.sourcePath, template.content), ctx, pythonCommand, options.neutral)
+    addPlan(plan, path.posix.join(root, skillName, 'SKILL.md'), wrapSkill(skillName, content), { platform })
+  }
+
+  for (const sourcePath of listTemplateFiles('common/bundled-skills', { additions: true })) {
+    const relative = path.posix.relative('common/bundled-skills', sourcePath)
+    const [sourceSkillName, ...segments] = relative.split('/')
+    if (!sourceSkillName || segments.length === 0)
+      continue
+    const skillName = canonicalTemplateSkillName(sourceSkillName)
+    const target = path.posix.join(root, skillName, localizeTemplatePath(segments.join('/')))
+    const content = resolveTemplate(localizeProjectRuntime(sourcePath, readTemplateOrAddition(sourcePath)), ctx, pythonCommand, options.neutral)
+    addPlan(plan, target, content, { executable: target.endsWith('.py') || target.endsWith('.mjs'), platform })
   }
 }
 
 function addDirectPlatformAssets(plan, platform, pythonCommand, withStatusline) {
   if (platform === 'copilot') {
-    const root = path.join(HOST_ASSET_ROOT, 'copilot')
-    addPlan(plan, '.github/copilot-instructions.md', localizeProjectRuntime('copilot-instructions.md', resolveTemplate(fs.readFileSync(path.join(root, 'copilot-instructions.md'), 'utf8'), PLATFORM_CONTEXT.copilot, pythonCommand)), { merge: 'block-hash', platform })
-    addTree(plan, path.join(root, 'hooks'), '.github/copilot/hooks', { python: pythonCommand, context: PLATFORM_CONTEXT.copilot, platform, transform: localizeProjectRuntime })
-    const hookConfig = localizeProjectRuntime('hooks.json', resolveTemplate(fs.readFileSync(path.join(root, 'hooks.json'), 'utf8'), PLATFORM_CONTEXT.copilot, pythonCommand))
+    addPlan(plan, '.github/copilot-instructions.md', localizeProjectRuntime('copilot-instructions.md', resolveTemplate(readTemplateFile('copilot/copilot-instructions.md'), PLATFORM_CONTEXT.copilot, pythonCommand)), { merge: 'block-hash', platform })
+    addTemplateTree(plan, 'copilot/hooks', '.github/copilot/hooks', { python: pythonCommand, context: PLATFORM_CONTEXT.copilot, platform, transform: localizeProjectRuntime })
+    const hookConfig = localizeProjectRuntime('hooks.json', resolveTemplate(readTemplateFile('copilot/hooks.json'), PLATFORM_CONTEXT.copilot, pythonCommand))
     addPlan(plan, '.github/copilot/hooks.json', hookConfig, { merge: 'json', platform })
     addPlan(plan, '.github/hooks/moluoxixi.json', hookConfig, { merge: 'json', platform })
-    addTree(plan, path.join(root, 'agents'), '.github/agents', { python: pythonCommand, context: PLATFORM_CONTEXT.copilot, platform, rename: relative => relative.replace(/\.md$/u, '.agent.md'), transform: (relativePath, content) => transformHostAsset('copilot', relativePath, content, pythonCommand) })
+    addTemplateTree(plan, 'cursor/agents', '.github/agents', { python: pythonCommand, context: PLATFORM_CONTEXT.copilot, platform, rename: relative => localizeTemplatePath(relative).replace(/\.md$/u, '.agent.md'), transform: (relativePath, content) => transformHostAsset('copilot', relativePath, content, pythonCommand) })
     return
   }
   if (platform === 'reasonix') {
-    const agents = path.join(HOST_ASSET_ROOT, 'reasonix', 'agents')
-    for (const source of walkFiles(agents)) {
-      const name = path.basename(source, '.md')
-      const sourceContent = resolveTemplate(fs.readFileSync(source, 'utf8'), PLATFORM_CONTEXT.reasonix, pythonCommand)
-      const content = transformHostAsset('reasonix', `agents/${name}.md`, sourceContent, pythonCommand)
+    for (const sourcePath of listTemplateFiles('reasonix/agents')) {
+      const relative = path.posix.relative('reasonix/agents', sourcePath)
+      const name = canonicalTemplateSkillName(path.posix.basename(relative, '.md'))
+      const sourceContent = resolveTemplate(readTemplateFile(sourcePath), PLATFORM_CONTEXT.reasonix, pythonCommand)
+      const content = transformHostAsset('reasonix', relative, sourceContent, pythonCommand)
       addPlan(plan, `.reasonix/skills/${name}/SKILL.md`, content, { platform })
     }
     return
@@ -472,29 +632,75 @@ function addDirectPlatformAssets(plan, platform, pythonCommand, withStatusline) 
   const direct = PLATFORM_DIRECT[platform]
   if (!direct)
     return
-  addTree(plan, path.join(HOST_ASSET_ROOT, direct[0]), direct[1], {
+  addTemplateTree(plan, direct[0], direct[1], {
     python: pythonCommand,
     context: PLATFORM_CONTEXT[platform],
     platform,
     transform: (relativePath, content) => transformHostAsset(platform, relativePath, content, pythonCommand, withStatusline),
-    filter: relative => platform !== 'claude' || relative !== 'hooks/statusline.py' || withStatusline,
-    rename: relative => renameProjectedSkillPath(relative.endsWith('.ts.txt') ? relative.slice(0, -4) : relative),
+    filter: relative => relative !== 'index.ts' && (platform !== 'claude' || relative !== 'hooks/statusline.py' || withStatusline),
+    rename: relative => localizeTemplatePath(relative.endsWith('.ts.txt') ? relative.slice(0, -4) : relative),
   })
 }
 
-function addPlatform(plan, platform, pythonCommand, skipCoreSkills = false, withStatusline = false) {
+function addBoundaryCommandSkills(plan, platform, root, pythonCommand) {
+  for (const command of commonCommands(platform, pythonCommand).filter(entry => ['start', 'continue', 'finish-work'].includes(entry.name)))
+    addPlan(plan, path.posix.join(root, command.name, 'SKILL.md'), wrapSkill(command.name, command.content), { platform })
+}
+
+function addKimiAgentSkills(plan, pythonCommand) {
+  for (const sourcePath of listTemplateFiles('kimi/agents')) {
+    const relative = path.posix.relative('kimi/agents', sourcePath)
+    const name = canonicalTemplateSkillName(path.posix.basename(relative, '.md'))
+    const sourceContent = resolveTemplate(readTemplateFile(sourcePath), PLATFORM_CONTEXT.kimi, pythonCommand)
+    const content = transformHostAsset('kimi', relative, sourceContent, pythonCommand)
+    addPlan(plan, `.kimi-code/skills/${name}/SKILL.md`, content, { platform: 'kimi' })
+  }
+}
+
+function addSnowCommands(plan, pythonCommand) {
+  for (const command of commonCommands('snow', pythonCommand)) {
+    const description = command.name === 'continue'
+      ? 'Resume the current Moluoxixi task at the right workflow phase.'
+      : command.name === 'finish-work'
+        ? 'Wrap up the current Moluoxixi session: archive tasks and record journal.'
+        : `Moluoxixi: ${command.name}`
+    const content = `${JSON.stringify({ type: 'prompt', description, command: command.content, location: 'project' }, null, 2)}\n`
+    addPlan(plan, `.snow/commands/moluoxixi-${command.name}.json`, content, { platform: 'snow' })
+  }
+}
+
+function addPlatform(plan, platform, pythonCommand, skipSharedSkills = false, withStatusline = false) {
   addDirectPlatformAssets(plan, platform, pythonCommand, withStatusline)
   const ctx = PLATFORM_CONTEXT[platform]
-  const commands = coreTemplates(platform, pythonCommand)
+  if (platform === 'dsh') {
+    addCommonSkills(plan, platform, '.agents/skills', pythonCommand, { neutral: true })
+    addBoundaryCommandSkills(plan, platform, '.dsh/skills', pythonCommand)
+    return
+  }
+  if (platform === 'kimi') {
+    addCommonSkills(plan, platform, '.agents/skills', pythonCommand, { neutral: true })
+    addBoundaryCommandSkills(plan, platform, '.kimi-code/skills', pythonCommand)
+    addKimiAgentSkills(plan, pythonCommand)
+    return
+  }
+  if (platform === 'snow') {
+    addCommonSkills(plan, platform, '.snow/skills', pythonCommand, { commands: true })
+    addSnowCommands(plan, pythonCommand)
+    return
+  }
   if (platform === 'codex' || platform === 'kiro' || platform === 'reasonix') {
     const root = platform === 'codex' ? '.agents/skills' : platform === 'kiro' ? '.kiro/skills' : '.reasonix/skills'
-    addCoreSkills(plan, platform, root, pythonCommand)
+    addCommonSkills(plan, platform, root, pythonCommand, {
+      commands: true,
+      excludeNames: platform === 'reasonix' ? new Set(['check', 'implement']) : undefined,
+      neutral: platform === 'codex',
+    })
   }
   else {
     const skillsRoot = PLATFORM_SKILLS_ROOT[platform]
-    if (skillsRoot && !skipCoreSkills)
-      addCoreSkills(plan, platform, skillsRoot, pythonCommand)
-    for (const command of commands) {
+    if (skillsRoot && !skipSharedSkills)
+      addCommonSkills(plan, platform, skillsRoot, pythonCommand, { neutral: platform === 'gemini' || platform === 'pi' })
+    for (const command of commonCommands(platform, pythonCommand, { forceStart: platform === 'pi' })) {
       const target = commandTarget(platform, command.name)
       if (!target)
         continue
@@ -510,19 +716,7 @@ function addPlatform(plan, platform, pythonCommand, skipCoreSkills = false, with
   }
   const hookNames = CORE_HOOKS[platform] ?? []
   for (const hookName of hookNames) {
-    const hook = fs.readFileSync(path.join(CORE_ASSET_ROOT, 'hooks', hookName), 'utf8')
+    const hook = readTemplateFile(`shared-hooks/${hookName}`)
     addPlan(plan, `${HOOK_ROOTS[platform]}/${hookName}`, localizeProjectRuntime(hookName, resolveTemplate(hook, ctx, pythonCommand)), { executable: true, platform })
   }
-}
-
-function readProjectText(...segments) {
-  return fs.readFileSync(path.join(PROJECT_ASSET_ROOT, ...segments), 'utf8')
-}
-
-function renameProjectedSkillPath(relativePath) {
-  const segments = relativePath.split('/')
-  const skillsIndex = segments.indexOf('skills')
-  if (skillsIndex >= 0 && segments[skillsIndex + 1])
-    segments[skillsIndex + 1] = canonicalSkillName(segments[skillsIndex + 1])
-  return segments.join('/')
 }

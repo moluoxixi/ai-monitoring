@@ -1,15 +1,17 @@
 ---
 name: brainstorm
-description: "Guides collaborative requirements discovery before implementation. Creates task directory, seeds PRD, asks high-value questions one at a time, researches technical choices, and converges on MVP scope. Use when requirements are unclear, there are multiple valid approaches, or the user describes a new feature or complex task."
+description: "Guides collaborative requirements discovery before implementation. Creates task artifacts, asks high-value questions, researches technical choices, and converges on an approved MVP scope."
 ---
 
 # Moluoxixi Brainstorm
 
-## Non-Negotiable Interview Contract
+## Non-Negotiable Planning Contract
 
-Interview me relentlessly about every aspect of this plan until we reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your recommended answer.
+A request to build, implement, fix, refactor, or "go ahead" is not approval to leave planning. Task-creation consent is also not implementation approval.
 
-Ask the questions one at a time.
+For every non-trivial task, the user must respond at least once after the initial request before implementation begins. If no clarification is needed, that response must approve the final planning summary.
+
+While any user-owned product, scope, UX, compatibility, risk, or acceptance decision remains unresolved, ask exactly one highest-value question and stop. Do not edit product code, dispatch implementation, or run `task.py start` in that turn.
 
 ## Non-Negotiable Evidence Rule
 
@@ -18,6 +20,8 @@ If a question can be answered by exploring the codebase, explore the codebase in
 This is mandatory. Before asking the user a question, first check whether the answer is already available in code, tests, configs, docs, existing specs, or task history.
 
 Do not ask the user to confirm facts that the repository can answer. Ask only for product intent, preference, scope, risk tolerance, or decisions that remain ambiguous after inspection.
+
+Repository evidence establishes current behavior and technical constraints. It does not decide the user's intended behavior, feature scope, acceptance behavior, or UX preference; existing patterns are evidence for a recommendation, not permission to choose.
 
 ---
 
@@ -49,11 +53,12 @@ Use a concise title from the user's request. Use a slug without a date prefix. `
    - product intent still needed from the user
    - scope or risk decisions still needed from the user
    - likely out-of-scope items
-4. Ask the single highest-value remaining question.
-5. Include your recommended answer with the question.
-6. After each user answer, update `prd.md` before continuing.
-7. For complex tasks, create or update `design.md` and `implement.md` before implementation starts.
-8. Before final review or `task.py start`, run the PRD convergence pass below.
+4. If a user-owned decision remains, ask the single highest-value question with a recommendation and trade-off, then stop without implementation in the same turn.
+5. After each answer, update `prd.md`, recompute the decision inventory, and repeat evidence inspection.
+6. When no user-owned decision remains, create or update `design.md` and `implement.md` for complex tasks.
+7. Run the Requirement Convergence Gate, then the PRD Convergence Pass.
+8. Present the final planning summary and stop. Do not run `task.py start` or edit product code in that turn.
+9. Only a subsequent user message explicitly approving the latest planning summary authorizes `task.py start` and implementation. If artifacts change materially after approval, repeat final review.
 
 Do not invent a project-specific product/spec hierarchy. If the repository already has product, domain, or spec docs, use them. If it does not, proceed with the evidence that exists.
 
@@ -69,6 +74,12 @@ Each question must include:
 - the trade-off if the user chooses differently
 
 Do not ask process questions such as whether to search, inspect files, or continue brainstorming. Do the evidence work directly. Ask the user only when the remaining issue is a product decision, preference, scope boundary, or risk tolerance choice.
+
+Recommendations are not default selections. Do not choose a product decision merely because implementation was requested.
+
+Do not manufacture clarification questions when evidence and the request resolve every decision. Proceed to the final planning summary, which still requires a later explicit approval.
+
+The final review is a phase-transition gate. Task-creation consent, the initial implementation request, and approval given before the latest final summary do not satisfy it.
 
 ## Thinking Framework: First Principles Analysis
 
@@ -112,6 +123,21 @@ For each component of the current plan:
 - Does the solution solve the original problem?
 - What assumptions need verification?
 - What's the simplest experiment to test this?
+
+## Requirement Convergence Gate
+
+Before final review, verify:
+
+- user outcome and product value are explicit
+- in-scope and out-of-scope behavior are explicit
+- acceptance criteria are observable
+- user-owned product, scope, UX, compatibility, and risk decisions are resolved
+- blocking open questions are empty
+- technical unknowns are researched or explicitly deferred without changing MVP behavior
+
+Lightweight tasks may omit `design.md` and `implement.md`; they may not skip evidence inspection, requirement convergence, final review, or fresh implementation approval.
+
+The final planning summary must include Goal, In Scope, Out of Scope, Acceptance Criteria, Key Decisions, relevant Risks or Deferred Items, and artifact status.
 
 ## Artifact Rules
 
@@ -165,9 +191,10 @@ Before declaring planning ready:
 - `prd.md` contains testable acceptance criteria.
 - `prd.md` has passed the PRD convergence pass: no unresolved temporary brainstorm sections, no duplicate facts across sections, and no lost anchors, decisions, or acceptance mappings.
 - Repository-answerable questions have already been answered through inspection.
-- Remaining open questions are genuinely about user intent or scope.
+- Blocking open questions are empty.
 - Complex tasks have `design.md` and `implement.md`.
 - Complex sub-agent-dispatch tasks have real curated entries in both `implement.jsonl` and `check.jsonl`; seed-only manifests are not ready.
-- The user has reviewed the final planning artifacts or explicitly approved proceeding.
+- The latest final planning summary has been presented.
+- In a subsequent message, the user explicitly approved that summary for implementation.
 
-In manual mode, do not run `task.py start --user-approved` until the user approves or asks for implementation. If the user explicitly requests automatic execution for this task, record it with `task.py set-execution-mode <task> auto --user-authorized`; never infer or persist auto mode globally.
+In manual mode, do not run `task.py start --user-approved` until a later user message approves the latest summary. If the user explicitly requests automatic execution for this task, record it with `task.py set-execution-mode <task> auto --user-authorized`; never infer or persist auto mode globally, and do not let auto mode bypass the final-summary approval gate.

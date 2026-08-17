@@ -9,6 +9,7 @@ import { readManifest } from './core/operations.mjs'
 import { runWithEnvProxy } from './core/proxy.mjs'
 import { listWorkflowTemplates, resolveWorkflowTemplate } from './core/registry.mjs'
 import { assertProjectIsNotHome, assertSafeProject, assertSafeTarget } from './core/safety.mjs'
+import { readTemplateFile } from './templates.mjs'
 
 const UPSTREAM_TITLE = `${UPSTREAM_BRAND[0].toUpperCase()}${UPSTREAM_BRAND.slice(1)}`
 const UPSTREAM_UPPER = UPSTREAM_BRAND.toUpperCase()
@@ -29,8 +30,7 @@ async function main() {
   const manifest = readManifest(projectRoot)
   const id = options.template ?? 'native'
   const source = options.marketplace ?? manifest.project?.workflow?.source
-  const nativePath = path.join(projectRoot, PROJECT_ROOT_DIR, 'runtime', 'update', 'init-project', 'assets', 'project', 'workflow.md')
-  const nativeContent = fs.readFileSync(nativePath, 'utf8')
+  const nativeContent = readTemplateFile('trellis/workflow.md')
   const resolved = fs.existsSync(path.resolve(projectRoot, id))
     ? { id, content: fs.readFileSync(path.resolve(projectRoot, id), 'utf8'), source: 'local' }
     : await resolveWorkflowTemplate(id, source, nativeContent)

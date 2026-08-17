@@ -1,6 +1,6 @@
 # Command Reference
 
-Authoritative current command reference for `node "<skill-root>/scripts/moluoxixi.mjs" channel` subcommands,
+Authoritative current command reference for `node .moluoxixi/runtime/moluoxixi.mjs channel` subcommands,
 validated against the source in `packages/cli/src/commands/channel/`
 (`index.ts` Commander wiring and each subcommand handler).
 
@@ -10,7 +10,7 @@ is the default and resolves against the current cwd's project bucket.
 ## Top-level
 
 ```
-node "<skill-root>/scripts/moluoxixi.mjs" channel <subcommand>
+node .moluoxixi/runtime/moluoxixi.mjs channel <subcommand>
 ```
 
 > Multi-agent collaboration runtime — spawn / coordinate / interrupt worker
@@ -23,7 +23,7 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel <subcommand>
 ### `create <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel create <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel create <name>
   [--scope project|global]                # default: project
   [--type chat|forum]                     # default: chat
   [--task <path>]                         # associated Moluoxixi task dir
@@ -50,7 +50,7 @@ Behavior:
 ### `list`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel list
+node .moluoxixi/runtime/moluoxixi.mjs channel list
   [--scope project|global]
   [--json]
   [--project <slug>]                      # substring match on task field
@@ -71,7 +71,7 @@ Behavior:
 ### `send <name> [text]`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel send <name> [text]
+node .moluoxixi/runtime/moluoxixi.mjs channel send <name> [text]
   --as <agent>                            # REQUIRED — author
   [--scope project|global]
   [--to <agents,csv>]                     # default: broadcast
@@ -95,7 +95,7 @@ Behavior:
 ### `messages <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel messages <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel messages <name>
   [--scope project|global]
   [--raw]                                 # one JSON event per line
   [--follow]                              # stream new events
@@ -119,7 +119,7 @@ Behavior:
 ### `wait <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel wait <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel wait <name>
   --as <agent>                            # REQUIRED — self for filter ctx
   [--scope project|global]
   [--timeout <Ns|Nm|Nh|Nms>]              # parsed by parseDuration
@@ -171,7 +171,7 @@ Practical rule for dispatchers waiting on workers:
 - Use `--kind done,turn_finished` for "worker finished a turn" — these are
   system events that the supervisor fires automatically. Do not depend on
   the worker LLM remembering to emit any custom signal.
-- Use `node "<skill-root>/scripts/moluoxixi.mjs" channel interrupt` (the command) only when you actually want
+- Use `node .moluoxixi/runtime/moluoxixi.mjs channel interrupt` (the command) only when you actually want
   mid-turn abort behavior.
 - Do **not** invent user-side tags as completion signals. There is no
   `--tag` filter; a worker writing a custom string into its final message
@@ -180,8 +180,8 @@ Practical rule for dispatchers waiting on workers:
 Long bodies always go through stdin or a file:
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel send T --as A --stdin < /tmp/message.md
-node "<skill-root>/scripts/moluoxixi.mjs" channel send T --as A --text-file /tmp/message.md
+node .moluoxixi/runtime/moluoxixi.mjs channel send T --as A --stdin < /tmp/message.md
+node .moluoxixi/runtime/moluoxixi.mjs channel send T --as A --text-file /tmp/message.md
 ```
 
 ---
@@ -191,7 +191,7 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel send T --as A --text-file /tmp
 ### `interrupt <name> [text]`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel interrupt <name> [text]
+node .moluoxixi/runtime/moluoxixi.mjs channel interrupt <name> [text]
   --as <agent>                            # REQUIRED — caller
   --to <agent>                            # REQUIRED — target worker
   [--scope project|global]
@@ -211,7 +211,7 @@ Behavior:
 ### `spawn <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel spawn <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel spawn <name>
   [--scope project|global]
   [--agent <agent-name>]                  # loads .moluoxixi/agents/<name>.md
   [--provider claude|codex]               # overrides agent file
@@ -249,7 +249,7 @@ Behavior:
 ### `run [name]`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel run [name?]
+node .moluoxixi/runtime/moluoxixi.mjs channel run [name?]
   [--agent <name>]
   [--provider claude|codex]
   [--as <worker-name>]
@@ -274,7 +274,7 @@ Behavior:
 ### `kill <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel kill <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel kill <name>
   --as <agent>                            # REQUIRED — worker agent name
   [--scope project|global]
   [--force]                               # SIGKILL immediately
@@ -289,7 +289,7 @@ Behavior:
 ### `rm <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel rm <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel rm <name>
   [--scope project|global]
 ```
 
@@ -300,7 +300,7 @@ Behavior:
 ### `prune`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel prune
+node .moluoxixi/runtime/moluoxixi.mjs channel prune
   [--scope project|global]                # omitted: scan every project
   [--all | --empty | --idle <Ns|Nm|Nh|Nd> | --ephemeral]   # mutually exclusive
   [--yes]                                 # actually delete (default: dry-run)
@@ -323,7 +323,7 @@ Behavior:
 ### `post <name> <action>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel post <name> <action>
+node .moluoxixi/runtime/moluoxixi.mjs channel post <name> <action>
   --as <agent>                            # REQUIRED
   [--scope project|global]
   [--thread <key>]                        # required except action=opened
@@ -351,7 +351,7 @@ Behavior:
 ### `forum <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel forum <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel forum <name>
   [--scope project|global]
   [--status <status>]
   [--raw]
@@ -364,11 +364,11 @@ Behavior:
 ### `thread <name> <thread>` / `thread rename`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel thread <name> <thread-key>
+node .moluoxixi/runtime/moluoxixi.mjs channel thread <name> <thread-key>
   [--scope project|global]
   [--raw]
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel thread rename <name> <old-thread> <new-thread>
+node .moluoxixi/runtime/moluoxixi.mjs channel thread rename <name> <old-thread> <new-thread>
   --as <agent>                            # REQUIRED
   [--scope project|global]
 ```
@@ -386,7 +386,7 @@ Behavior:
 ### `context add` / `context delete` / `context list`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel context add <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel context add <name>
   [--as <agent>]                          # default: main
   [--scope project|global]
   [--thread <key>]                        # thread-level instead of channel-level
@@ -394,14 +394,14 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel context add <name>
   [--raw <text>]      ...                 # repeatable
                                           # at least one of --file or --raw
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel context delete <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel context delete <name>
   [--as <agent>]                          # default: main
   [--scope project|global]
   [--thread <key>]
   [--file <abs-path>] ...
   [--raw <text>]      ...
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel context list <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel context list <name>
   [--scope project|global]
   [--thread <key>]
   [--raw]                                 # one JSON entry per line
@@ -415,12 +415,12 @@ Behavior:
 ### `title set <name>` / `title clear <name>`
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel title set <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel title set <name>
   --title <text>                          # REQUIRED
   [--as <agent>]                          # default: main
   [--scope project|global]
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel title clear <name>
+node .moluoxixi/runtime/moluoxixi.mjs channel title clear <name>
   [--as <agent>]                          # default: main
   [--scope project|global]
 ```

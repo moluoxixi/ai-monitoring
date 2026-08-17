@@ -1,0 +1,309 @@
+{
+  "schemaVersion": 1,
+  "upstreamRevision": "d8fff53ce4964ed1a3e52fea6b418b27eba093e4",
+  "overrides": [
+    {
+      "source": "common/bundled-skills/trellis-meta/references/customize-local/add-project-local-conventions.md",
+      "sourceSha256": "86009ccb5d0373f399582da0bc570c4e5c6053c3c764857424ff93384f0e04e5",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-meta/references/customize-local/add-project-local-conventions.md",
+      "overlaySha256": "9e4a1ab5e7eb1613e626e55d56ed5826dd71e55c4c4640511304e6fefb64e1d1",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/bundled-skills/trellis-meta/references/customize-local/change-spec-structure.md",
+      "sourceSha256": "31eccaad7097d96e66a45c1b4caea1ba4f2e54b7814184c3ebf82c87dafc4841",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-meta/references/customize-local/change-spec-structure.md",
+      "overlaySha256": "e6c5fc2913aa8c1a9b306b9a826fce18109f4f3ce424669225facccbb7759729",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/bundled-skills/trellis-meta/references/local-architecture/generated-files.md",
+      "sourceSha256": "7eb2d452eddb4f4226f7578c2ec6d5ee0434ed172ba4c36107cc8bdff7554dc6",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-meta/references/local-architecture/generated-files.md",
+      "overlaySha256": "c31fecff8a860b166f40fc44a741bd196e49c437185828463c0e044eb96c1147",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/bundled-skills/trellis-meta/references/local-architecture/spec-system.md",
+      "sourceSha256": "b8d8a6a0888b44a232c8f50161b9e20e903cf621ad7be4021715ab6fab226f47",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-meta/references/local-architecture/spec-system.md",
+      "overlaySha256": "09fde3a8f81e25d6ac3a1a38f32e9bec3ebd00dc94b640ab76845fe12903a826",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/bundled-skills/trellis-meta/SKILL.md",
+      "sourceSha256": "ee7bcfd0023def62688339c4b63c50f2fbeea12a34eb89e8bb63a992b58cb168",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-meta/SKILL.md",
+      "overlaySha256": "113933e8ca02d05898e130ba807430898724fefafaf81b05a7e721588f33f91e",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/bundled-skills/trellis-spec-bootstrap/references/spec-task-planning.md",
+      "sourceSha256": "ef493d028c3b0807a8a534bb71fb92a68129f273db763ad27ceb464a522e799d",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-spec-bootstrap/references/spec-task-planning.md",
+      "overlaySha256": "9fab5875a7ceae8dd408bcf0ce70e12eb496313f03d0639d9dd5500e752a6899",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/bundled-skills/trellis-spec-bootstrap/SKILL.md",
+      "sourceSha256": "97bfa68c06cebb558eb4464bc1b81f7d2d56040d75baa8de1ee5ad90cca0196a",
+      "overlay": "packages/cli/src/templates/overrides/common/bundled-skills/trellis-spec-bootstrap/SKILL.md",
+      "overlaySha256": "0f65d2672d8e9da56675ef73c12cf2eb5295ca814b12ff6c8a2cb2d30d8da7a1",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/commands/continue.md",
+      "sourceSha256": "c92b687afebbb5341cc42b1c8c684434fcd7e21d72fc4b5f8bcf676f07289d49",
+      "overlay": "packages/cli/src/templates/overrides/common/commands/continue.md",
+      "overlaySha256": "30b16d5af5d81c011d970023b3116205ed24b2eb8a2467813a404f2cf4dc568e",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "common/commands/start.md",
+      "sourceSha256": "8a9e59df4e56247ee3eb6e58c594792fe143e978a5da97da3c271b55e1582f75",
+      "overlay": "packages/cli/src/templates/overrides/common/commands/start.md",
+      "overlaySha256": "5e1c806698b85dd716c5ce93f986bcd438d27daa850ea32057e6bbace254e7ce",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "common/skills/brainstorm.md",
+      "sourceSha256": "c6b15b45f3c2edf7492c012a62ffb27de6b91f7ebd96f19f4bdfe39fdfc7586d",
+      "overlay": "packages/cli/src/templates/overrides/common/skills/brainstorm.md",
+      "overlaySha256": "5e5c6bd5cbb8456e1d6f6886644fbba1e98ee9fa833ed529ffa512204b300d83",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "common/skills/break-loop.md",
+      "sourceSha256": "1c31b58974e92c198edaaa137927fa29e5a6f62b26f93a8cd609e45f54f19bbc",
+      "overlay": "packages/cli/src/templates/overrides/common/skills/break-loop.md",
+      "overlaySha256": "d123b10584d2a8b920b104b97de5cde540b7fca99ff39341b126c4b7fd75e789",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/skills/check.md",
+      "sourceSha256": "85005348d14423d34ad4b1df5cf8d270ce603af99399510f7742f2afb5f0e316",
+      "overlay": "packages/cli/src/templates/overrides/common/skills/check.md",
+      "overlaySha256": "c474f35425b31074b103f2ad8d84956a63e23288222df291788538389221bf81",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "common/skills/update-spec.md",
+      "sourceSha256": "6013d2b51abdcabb0fc543ee1f22f683b45dbbcc00bcffe699fbc874ffd3948e",
+      "overlay": "packages/cli/src/templates/overrides/common/skills/update-spec.md",
+      "overlaySha256": "c2d55c6f24306861ec712eaec12377d3e005848faa3cfc68a9de6414f7657067",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "markdown/agents.md",
+      "sourceSha256": "6cacfe99748b435d0660c2463c697bc323d53798aecf3492283ca8eac1b29682",
+      "overlay": "packages/cli/src/templates/overrides/markdown/agents.md",
+      "overlaySha256": "545c75a3c1661b975dcd9fe4ae36a14526e86102b3ab3adab781c030372af007",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "opencode/lib/session-utils.js",
+      "sourceSha256": "86c1c8897f5d291f7d29e942384d7cbe8fb5454c928f6e30803069a4d52393bf",
+      "overlay": "packages/cli/src/templates/overrides/opencode/lib/session-utils.js",
+      "overlaySha256": "416643600890c7cc37c4369152d2941dc91e6c59a3811b509caa3ec33c123545",
+      "capabilities": [
+        "naming"
+      ]
+    },
+    {
+      "source": "opencode/plugins/inject-subagent-context.js",
+      "sourceSha256": "48c2e19d5d9c3fedc006e7ce12eb792bbe5193760290c2a588bed3f9cccacc4f",
+      "overlay": "packages/cli/src/templates/overrides/opencode/plugins/inject-subagent-context.js",
+      "overlaySha256": "c997615dab0d311b6415be9e1ffaead3053959905a162f89441274bd95333476",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "opencode/plugins/inject-workflow-state.js",
+      "sourceSha256": "23e2240d744b6b3aea182f01539b93444566101026154162bc1d3ed1f0e3ef25",
+      "overlay": "packages/cli/src/templates/overrides/opencode/plugins/inject-workflow-state.js",
+      "overlaySha256": "0a92a5deb9877e72cc4c2dad6a6ba2ceb3d80b4e6bde7cf4ad54d68c45f9537b",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "shared-hooks/inject-subagent-context.py",
+      "sourceSha256": "7c2c5640445ea0d98ce6a13126ea105ec4b02ca661ef4a7711240b595efefbbf",
+      "overlay": "packages/cli/src/templates/overrides/shared-hooks/inject-subagent-context.py",
+      "overlaySha256": "07e18512a46c53938431947f23a8be706f7b68c26c2182431aefacf15cc5dab3",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "shared-hooks/inject-workflow-state.py",
+      "sourceSha256": "89cef2b197dd61a731b946114207d2601b240058941ccf28622ee211d9c62eb3",
+      "overlay": "packages/cli/src/templates/overrides/shared-hooks/inject-workflow-state.py",
+      "overlaySha256": "9a66489a42e64275b937ffcea29ca8474a66f3774006716e9bdbdbb88598b17a",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "shared-hooks/session-start.py",
+      "sourceSha256": "176db5b725d4890b201559bba5dce0fb75b5ab6b290c420b691d05f3dc203d3a",
+      "overlay": "packages/cli/src/templates/overrides/shared-hooks/session-start.py",
+      "overlaySha256": "7e6adb230f4a98d8200a7ae2959cccbd4dae9668fb271d75aa014ef91298bd11",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "trellis/agents/check.md",
+      "sourceSha256": "edb4f57361407249a53bf5998ebf91c40d2b969e826a2c5e1b4e813a08bcb175",
+      "overlay": "packages/cli/src/templates/overrides/trellis/agents/check.md",
+      "overlaySha256": "94fce6c451750daa35120a55fa4200f225a0af35248c472399236e44179b7126",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "trellis/config.yaml",
+      "sourceSha256": "a966e6d374e9e6ff283cf761ccd99631323ee1754856cef51ad154ca0afb9dfa",
+      "overlay": "packages/cli/src/templates/overrides/trellis/config.yaml",
+      "overlaySha256": "94a3514c7ca60b17af6cdb4e542d62f0fe9bed61a0b920d0a8be060a690d307b",
+      "capabilities": [
+        "task-classification",
+        "spec-approval"
+      ]
+    },
+    {
+      "source": "trellis/scripts/common/session_context.py",
+      "sourceSha256": "3379ef1766e4e5ca77cbb7c040dbba3883fcca2548580299e3b38dbf22f4f7d5",
+      "overlay": "packages/cli/src/templates/overrides/trellis/scripts/common/session_context.py",
+      "overlaySha256": "c64b49907f628bf66a055c3349bd81f39aca0eb0b102dec74dffcb684c6fcc08",
+      "capabilities": [
+        "task-classification",
+        "naming"
+      ]
+    },
+    {
+      "source": "trellis/scripts/common/task_context.py",
+      "sourceSha256": "6fc3abb9e483043bc8cc3477ae48e5503399402009fbfc58db80809472c5690b",
+      "overlay": "packages/cli/src/templates/overrides/trellis/scripts/common/task_context.py",
+      "overlaySha256": "375d3dc5688d89f94aaa02a2476197b3168399fd77383cb41ba2c7aadf9fa5af",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "trellis/scripts/common/task_store.py",
+      "sourceSha256": "9b05a40113439e2841271f2fc1e616fbef0b6929e7c064dd41350658e4ed203e",
+      "overlay": "packages/cli/src/templates/overrides/trellis/scripts/common/task_store.py",
+      "overlaySha256": "fa2db4a3fc98efb6bdb293d8506e305dc4c2e43e517ae3d19e13609bc6012316",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "trellis/scripts/task.py",
+      "sourceSha256": "152d7298db25b86756583faaba763eacd8611c0070e8f1c176b8257d687102b9",
+      "overlay": "packages/cli/src/templates/overrides/trellis/scripts/task.py",
+      "overlaySha256": "c37b50b3fb6b43cde9bc4dd8f4d97d6ebac0e3dc97b564fb418561f36c733ebf",
+      "capabilities": [
+        "task-classification"
+      ]
+    },
+    {
+      "source": "trellis/workflow.md",
+      "sourceSha256": "c694bb7901d48f224ccad940178cff81e28dda46e6e5b24bad67c83970d67808",
+      "overlay": "packages/cli/src/templates/overrides/trellis/workflow.md",
+      "overlaySha256": "cc3a7fe869d903344f8e0dc346898ad3473111a1f12b2ad235193592cecb206d",
+      "capabilities": [
+        "task-classification"
+      ]
+    }
+  ],
+  "additions": [
+    {
+      "path": "common/bundled-skills/spec-review/agents/openai.yaml",
+      "overlay": "packages/cli/src/templates/additions/common/bundled-skills/spec-review/agents/openai.yaml",
+      "overlaySha256": "0a8b0fbc67f65a2d963cf8c71f2762fccd7462b699231253c344c73aca903fea",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "path": "common/bundled-skills/spec-review/SKILL.md",
+      "overlay": "packages/cli/src/templates/additions/common/bundled-skills/spec-review/SKILL.md",
+      "overlaySha256": "59cec5cf9ba0feac7e1db2c58dff82ec92c25c46cbfbe63464b1aa3145effdb2",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "path": "common/bundled-skills/trellis-meta/references/core/specs.md",
+      "overlay": "packages/cli/src/templates/additions/common/bundled-skills/trellis-meta/references/core/specs.md",
+      "overlaySha256": "bd289be457ffc3435120e7ae085c41beae1b78faad860d1483c5231b1a5fb6b0",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "path": "common/bundled-skills/trellis-meta/references/how-to-modify/add-spec.md",
+      "overlay": "packages/cli/src/templates/additions/common/bundled-skills/trellis-meta/references/how-to-modify/add-spec.md",
+      "overlaySha256": "7d8662344afd1ed3392cb225993d814e1cfb30bb5f12b6e4a887d31c8a686bc2",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "path": "common/commands/spec-review.md",
+      "overlay": "packages/cli/src/templates/additions/common/commands/spec-review.md",
+      "overlaySha256": "57afc20e69d1ff29de36dbf71ec68e23eee2bd4a127c7c80d798d91cc90a79ac",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "path": "project/readme-usage.md",
+      "overlay": "packages/cli/src/templates/additions/project/readme-usage.md",
+      "overlaySha256": "8954ef71b86cbf9a3277674d05197a755f11a514297ca0d9219bb56b75b749e6",
+      "capabilities": [
+        "spec-approval"
+      ]
+    },
+    {
+      "path": "project/scripts/spec-proposals.mjs",
+      "overlay": "packages/cli/src/templates/additions/project/scripts/spec-proposals.mjs",
+      "overlaySha256": "9d158c6e3555d0000e0890da190cfd99e8546135b2a91d643905697a082d2f72",
+      "capabilities": [
+        "spec-approval"
+      ]
+    }
+  ]
+}

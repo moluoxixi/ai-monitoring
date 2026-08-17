@@ -228,9 +228,9 @@ Inline mode: skip jsonl curation; Phase 2 reads artifacts/specs via `before-dev`
 Sub-agent dispatch protocol applies to all platforms and all sub-agents, including class-2 Codex/Gemini/Qoder/Copilot/ZCode/Reasonix/Trae and `moluoxixi-research`: every dispatch prompt starts with `Active task: <task path from task.py current>` before role-specific instructions.
 
 [workflow-state:in_progress]
-Tools: `moluoxixi-research`, `moluoxixi-implement`, and the optional `moluoxixi-frontend|backend|database|test|security` specialists are sub-agent types, not skills. `moluoxixi-check` exists as both; prefer the Agent form for independent verification.
-Flow: implement or selected specialist(s) -> `moluoxixi-check` -> `update-spec` proposal -> commit (Phase 3.4) -> `/moluoxixi:finish-work`.
-Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `moluoxixi-implement`, do NOT spawn another `moluoxixi-implement` or `moluoxixi-check`; if already running as `moluoxixi-check`, do NOT spawn another `moluoxixi-check` or `moluoxixi-implement`. Dispatch is main session only.
+Tools: `moluoxixi-research`, `moluoxixi-implement`, and the optional `moluoxixi-frontend|backend|database|test|security` specialists are sub-agent types, not skills. `check` exists as both; prefer the Agent form for independent verification.
+Flow: implement or selected specialist(s) -> `check` -> `update-spec` proposal -> commit (Phase 3.4) -> `/moluoxixi:finish-work`.
+Main-session default: dispatch implement/check sub-agents. Sub-agent self-exemption: if already running as `moluoxixi-implement`, do NOT spawn another `moluoxixi-implement` or `check`; if already running as `check`, do NOT spawn another `check` or `moluoxixi-implement`. Dispatch is main session only.
 Use specialists only when task scope warrants them: frontend/backend/database for owned implementation slices; test/security for independent review. Language expertise remains a skill loaded by the selected agent.
 Dispatch prompt starts with `Active task: <task path from task.py current>`. Read context: jsonl entries -> `prd.md` -> `design.md if present` -> `implement.md if present`.
 [/workflow-state:in_progress]
@@ -281,7 +281,7 @@ When a user request matches one of these intents inside an active task, route fi
 [Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix, Trae]
 
 - Planning or unclear requirements -> `brainstorm`.
-- `in_progress` implementation/check -> dispatch `moluoxixi-implement` / `moluoxixi-check`.
+- `in_progress` implementation/check -> dispatch `moluoxixi-implement` / `check`.
 - Repeated debugging -> `break-loop`; spec updates -> `update-spec`.
 
 [/Claude Code, Cursor, OpenCode, codex-sub-agent, Kiro, Gemini, Qoder, CodeBuddy, Copilot, Droid, Pi, Oh My Pi, ZCode, Reasonix, Trae]
@@ -498,7 +498,7 @@ Spawn the implement sub-agent:
 
 - **Agent type**: `moluoxixi-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `moluoxixi-implement` sub-agent and must implement directly, not spawn another `moluoxixi-implement` / `moluoxixi-check`.
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `moluoxixi-implement` sub-agent and must implement directly, not spawn another `moluoxixi-implement` / `check`.
 
 The platform hook/plugin auto-handles:
 - Reads `implement.jsonl` and injects referenced spec/research files into the agent prompt
@@ -512,7 +512,7 @@ Spawn the implement sub-agent:
 
 - **Agent type**: `moluoxixi-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then explicitly say the spawned agent is already `moluoxixi-implement` and must implement directly without spawning another `moluoxixi-implement` / `moluoxixi-check`.
+- **Dispatch prompt guard**: The prompt MUST start with `Active task: <task path>`, then explicitly say the spawned agent is already `moluoxixi-implement` and must implement directly without spawning another `moluoxixi-implement` / `check`.
 
 The pull-based sub-agent definition auto-handles the context load requirement:
 - Resolves the active task with `task.py current --source`, then reads `prd.md`, `design.md` if present, and `implement.md` if present
@@ -526,7 +526,7 @@ Spawn the implement sub-agent:
 
 - **Agent type**: `moluoxixi-implement`
 - **Task description**: Implement the reviewed task artifacts, consulting materials under `{TASK_DIR}/research/`; finish by running project lint and type-check
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `moluoxixi-implement` sub-agent and must implement directly, not spawn another `moluoxixi-implement` / `moluoxixi-check`.
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `moluoxixi-implement` sub-agent and must implement directly, not spawn another `moluoxixi-implement` / `check`.
 
 The platform prelude auto-handles the context load requirement:
 - Reads `implement.jsonl` and injects referenced spec/research files into the agent prompt
@@ -550,9 +550,9 @@ The platform prelude auto-handles the context load requirement:
 
 Spawn the check sub-agent:
 
-- **Agent type**: `moluoxixi-check`
+- **Agent type**: `check`
 - **Task description**: Review all code changes against specs and task artifacts; fix any findings directly; ensure lint and type-check pass
-- **Dispatch prompt guard**: Tell the spawned agent it is already the `moluoxixi-check` sub-agent and must review/fix directly, not spawn another `moluoxixi-check` / `moluoxixi-implement`.
+- **Dispatch prompt guard**: Tell the spawned agent it is already the `check` sub-agent and must review/fix directly, not spawn another `check` / `moluoxixi-implement`.
 
 The check agent's job:
 - Review code changes against specs
@@ -609,7 +609,7 @@ Create complete desired-state proposals under `.moluoxixi/spec-proposals/`; do n
 node ./.moluoxixi/scripts/spec-proposals.mjs audit
 ```
 
-If review is due, report the pending count and offer `moluoxixi-spec-review`. Promotion, merge, rejection, and deletion require separate explicit human approval and do not block finishing the current code task.
+If review is due, report the pending count and offer `spec-review`. Promotion, merge, rejection, and deletion require separate explicit human approval and do not block finishing the current code task.
 
 #### 3.4 Commit changes `[required · once]`
 

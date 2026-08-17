@@ -5,9 +5,7 @@ description: Use Moluoxixi channel for live multi-agent collaboration, spawned w
 
 # channel
 
-Resolve `<skill-root>` to this skill's directory before running commands. Always use `scripts/moluoxixi.mjs`; do not install or invoke a global Moluoxixi CLI. The launcher selects the initialized project's `.moluoxixi/runtime` first and falls back to the runtime distributed with the Moluoxixi role.
-
-`node "<skill-root>/scripts/moluoxixi.mjs" channel` is the local multi-agent collaboration runtime. Reach for it when agents need to talk through a durable event log, when a worker should be spawned as a peer process, when an in-flight worker needs interrupt / debugging, or when feedback should be recorded on a durable `--type forum` channel.
+`node .moluoxixi/runtime/moluoxixi.mjs channel` is the local multi-agent collaboration runtime. Reach for it when agents need to talk through a durable event log, when a worker should be spawned as a peer process, when an in-flight worker needs interrupt / debugging, or when feedback should be recorded on a durable `--type forum` channel.
 
 Typical user signals: "和 codex/claude 讨论", "brainstorm with another agent", "spawn an implement/check worker", "let agent review", "open an issue board / changelog forum", "look at this thread", "channel is stuck / no output", "progress was truncated", "how do I write that channel command".
 
@@ -16,18 +14,18 @@ This skill is an index. Load only the reference file for the current job — do 
 ## First Commands
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" --version
-node "<skill-root>/scripts/moluoxixi.mjs" channel --help
-node "<skill-root>/scripts/moluoxixi.mjs" channel list --all
-node "<skill-root>/scripts/moluoxixi.mjs" channel list --scope global --all
+moluoxixi --version
+node .moluoxixi/runtime/moluoxixi.mjs channel --help
+node .moluoxixi/runtime/moluoxixi.mjs channel list --all
+node .moluoxixi/runtime/moluoxixi.mjs channel list --scope global --all
 ```
 
 If the user names a channel or thread, inspect it before asking for background:
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel forum <board> --scope global
-node "<skill-root>/scripts/moluoxixi.mjs" channel thread <board> <thread> --scope global
-node "<skill-root>/scripts/moluoxixi.mjs" channel context list <board> --scope global --thread <thread>
+node .moluoxixi/runtime/moluoxixi.mjs channel forum <board> --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel thread <board> <thread> --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel context list <board> --scope global --thread <thread>
 ```
 
 ## Route By User Intent
@@ -44,7 +42,7 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel context list <board> --scope g
 ## Core Rules
 
 - New forum channels use `--type forum`. A `thread` is one item inside a forum channel.
-- Use `--context-file` / `--context-raw` and `node "<skill-root>/scripts/moluoxixi.mjs" channel context add/delete/list`. `--linked-context-*` is deprecated terminology.
+- Use `--context-file` / `--context-raw` and `node .moluoxixi/runtime/moluoxixi.mjs channel context add/delete/list`. `--linked-context-*` is deprecated terminology.
 - Use `--stdin` or `--text-file` for long messages. Do not put long mixed Chinese/English text in the positional shell argument.
 - Pretty `messages` output is an operator dashboard and may truncate progress. Use `--raw` for audit.
 - `--as` is the speaker or worker handle, depending on the command. Use explicit, stable names when multiple agents or sessions are involved.
@@ -52,7 +50,7 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel context list <board> --scope g
 - For brainstorm, do multiple pressure-test rounds. One answer plus one confirmation is review, not brainstorm.
 - **Dispatcher wait pattern**: use `--kind done` / `--kind turn_finished` (moluoxixi-emitted system events), NOT a user `--tag` as the completion signal. CLI help lists `phase_done` / `question` as `--tag` examples but only `interrupt` is a reserved tag with hardcoded moluoxixi behavior; the others are opaque user labels. Relying on a worker to run `send --tag <my_signal>` is unreliable — LLM workers commonly write the tag string into prose instead of running the actual CLI command. See `references/command-reference.md` "tag vs kind".
 - Forum channels are event-sourced. Do not parse `events.jsonl` first; use `forum`, `thread`, `messages --thread`, and `context list`.
-- The Moluoxixi runtime owns channel/thread state, event append, sequence allocation, context/title projection, reducers, flags, rendering, and worker lifecycle. Its corresponding source ships with the role.
+- `@mindfoldhq/moluoxixi-core` owns reusable channel/thread state, event append, seq allocation, context/title projection, reducers, and task helpers. The CLI owns flags, terminal rendering, prompts, worker lifecycle, and process exits.
 
 ## Reference Files
 
@@ -66,4 +64,4 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel context list <board> --scope g
 
 - One static review where a markdown file and prompt are enough.
 - Replacing normal tool calls with self-logging.
-- Long-term memory retrieval. Use durable forum channels for actionable issues, and `node "<skill-root>/scripts/moluoxixi.mjs" mem` (the `session-insight` skill) for session/history search.
+- Long-term memory retrieval. Use durable forum channels for actionable issues, and `node .moluoxixi/runtime/moluoxixi.mjs mem` (the `session-insight` skill) for session/history search.

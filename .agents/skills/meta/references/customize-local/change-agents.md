@@ -1,6 +1,6 @@
 # Change Local Agents
 
-When the user wants to change `moluoxixi-research`, `moluoxixi-implement`, or `moluoxixi-check` behavior, edit platform agent files in the user project.
+When the user wants to change `moluoxixi-research`, `moluoxixi-implement`, or `check` behavior, edit platform agent files in the user project.
 
 ## Read These Files First
 
@@ -25,7 +25,7 @@ When the user wants to change `moluoxixi-research`, `moluoxixi-implement`, or `m
 | Factory Droid | `.factory/droids/moluoxixi-*.md` |
 | Pi Agent | `.pi/agents/moluoxixi-*.md` |
 | Reasonix | `.reasonix/skills/moluoxixi-*/SKILL.md` (subagent frontmatter) |
-| ZCode | `.zcode/cli/agents/moluoxixi-*.md` |
+| ZCode | `.zcode/agents/moluoxixi-*.md` |
 
 Use the actual paths in the user project as authoritative.
 
@@ -35,7 +35,7 @@ Use the actual paths in the user project as authoritative.
 | --- | --- |
 | Research must write files, not only reply in chat | `moluoxixi-research` |
 | Certain local specs must be read before implementation | `moluoxixi-implement` + `implement.jsonl` configuration rules |
-| Specific commands must run during checking | `moluoxixi-check` |
+| Specific commands must run during checking | `check` |
 | Agent must not modify certain directories | The corresponding agent's write boundary instructions |
 | Agent output format must be fixed | The corresponding agent's final/reporting instructions |
 

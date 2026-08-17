@@ -53,8 +53,8 @@ Planning or review work without a commit can also be recorded by using `--no-com
 | `.moluoxixi/workspace/` | Work records across tasks and sessions. |
 | `.moluoxixi/spec/` | Engineering knowledge preserved as long-term conventions. |
 
-If information is only useful for the current task, put it in the task directory.  
-If information describes what happened in the current session, put it in the workspace journal.  
+If information is only useful for the current task, put it in the task directory.
+If information describes what happened in the current session, put it in the workspace journal.
 If information should be followed every time code is written in the future, put it in spec.
 
 ## Local Customization Points
@@ -68,4 +68,4 @@ If information should be followed every time code is written in the future, put 
 
 ## AI Usage Rules
 
-The AI should not treat workspace as the only source of truth. When resuming a task, read the current task first, then use workspace for background. After a task is complete, record important process notes in workspace; if long-term rules emerged, submit them through `update-spec` for human review.
+The AI should not treat workspace as the only source of truth. When resuming a task, read the current task first, then use workspace for background. After a task is complete, record important process notes in workspace; if long-term rules emerged, update spec.

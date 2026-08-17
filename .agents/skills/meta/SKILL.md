@@ -7,7 +7,7 @@ description: Understand and customize the AIRules-distributed Moluoxixi architec
 
 This skill is for projects initialized with the `init-project` skill. Resolve `<skill-root>` to this skill's directory and use `scripts/moluoxixi.mjs` for channel, memory, workflow, and update commands. Never install or invoke the upstream Moluoxixi CLI.
 
-The migrated v0.6 runtime adds two architectural surfaces on top of the workflow, persistence, and platform model. `node "<skill-root>/scripts/moluoxixi.mjs" channel` coordinates worker processes through project-scoped JSONL event logs at `~/.moluoxixi/channels/<project>/<channel>/events.jsonl`, with worker guards, forum/thread channels, durable idempotency keys, and `.moluoxixi/agents/{check,implement}.md` role definitions. `node "<skill-root>/scripts/moluoxixi.mjs" mem list | search | context | extract | projects` reads local Claude Code, Codex, and Pi JSONL, slices by task phase, and uploads nothing. The role carries the executable bundle and corresponding source; no Moluoxixi npm package is required.
+The migrated v0.6 runtime adds two architectural surfaces on top of the workflow, persistence, and platform model. `node "<skill-root>/scripts/moluoxixi.mjs" channel` coordinates worker processes through project-scoped JSONL event logs at `~/.moluoxixi/channels/<project>/<channel>/events.jsonl`, with worker guards, forum/thread channels, durable idempotency keys, and `.moluoxixi/agents/{check,implement}.md` role definitions. `node "<skill-root>/scripts/moluoxixi.mjs" mem list | search | context | extract | projects` reads local Claude Code, Codex, and Pi JSONL, slices by task phase, and uploads nothing. The role carries complete core/CLI source packages and the executable project bundle; no registry-installed Moluoxixi npm package is required.
 
 The default operating scope is local files in the user project:
 
@@ -17,7 +17,7 @@ The default operating scope is local files in the user project:
 - User-owned channel store outside the project tree: `~/.moluoxixi/channels/<project>/<channel>/events.jsonl`.
 - Raw platform conversation logs queryable via `node "<skill-root>/scripts/moluoxixi.mjs" mem`: `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.pi/agent/sessions/` (OpenCode adapter degraded for the v0.6 line).
 
-Do not assume the user has the upstream Moluoxixi repository. The authoritative deployed runtime is `.moluoxixi/runtime`, and its source/provenance comes from the synchronized Moluoxixi role. Do not modify global npm installs or `node_modules`.
+Do not assume the user has the upstream Moluoxixi repository. The authoritative deployed runtime is `.moluoxixi/runtime`, and its source/provenance comes from the synchronized role's `packages/core` and `packages/cli`. Do not publish or install those packages globally as part of project initialization, and do not modify `node_modules`.
 
 ## How To Use
 
@@ -36,17 +36,17 @@ Do not assume the user has the upstream Moluoxixi repository. The authoritative 
 - `references/local-architecture/workflow.md`: Phases, routing, workflow-state blocks, and reviewed local workflow templates in `.moluoxixi/workflow.md`.
 - `references/local-architecture/task-system.md`: Task directories, active task, JSONL context, parent/child task trees, and task runtime.
 - `references/local-architecture/spec-system.md`: How `.moluoxixi/spec/` is organized, injected, and updated after reviewing external spec sources.
-- `references/local-architecture/workspace-memory.md`: `.moluoxixi/workspace/` journals plus `node "<skill-root>/scripts/moluoxixi.mjs" mem` cross-session recall and the `the Moluoxixi memory runtime source` SDK.
+- `references/local-architecture/workspace-memory.md`: `.moluoxixi/workspace/` journals plus `node "<skill-root>/scripts/moluoxixi.mjs" mem` cross-session recall and the Moluoxixi core SDK.
 - `references/local-architecture/context-injection.md`: Hooks, sub-agent preludes, and channel-runtime worker inbox routing.
 - `references/local-architecture/multi-agent-channel.md`: `node "<skill-root>/scripts/moluoxixi.mjs" channel` subcommands, project-scoped event store, forum/thread channels, worker OOM guard, durable idempotency, and bundled `.moluoxixi/agents/` runtime agents.
-- `references/local-architecture/bundled-skills.md`: Auto-dispatched bundled skills (`meta`, `spec-bootstrap`, `session-insight`) and how `getBundledSkillTemplates()` ships them to every platform skill root.
+- `references/local-architecture/bundled-skills.md`: AIRules role-level skill distribution and how the initializer's `addCoreSkills()` projects project-facing skills to each selected platform root.
 
 ### Platform Files
 
 - `references/platform-files/overview.md`: How shared `.moluoxixi/` files relate to platform directories and the four platform integration modes (hook-driven, agent prelude, main-session workflow, channel runtime).
 - `references/platform-files/platform-map.md`: Platform directories and paths for skills, agents, hooks, and extensions across all 15 supported platforms including Reasonix and Pi's native `moluoxixi_subagent` extension.
 - `references/platform-files/hooks-and-settings.md`: How settings/config files, hooks, plugins, and extensions connect to Moluoxixi; covers `channel.worker_guard.*` and `codex.dispatch_mode`.
-- `references/platform-files/agents.md`: Per-platform `moluoxixi-research` / `moluoxixi-implement` / `moluoxixi-check` sub-agent files plus bundled `.moluoxixi/agents/{check,implement}.md` for the channel runtime.
+- `references/platform-files/agents.md`: Per-platform `moluoxixi-research` / `moluoxixi-implement` / `check` sub-agent files plus bundled `.moluoxixi/agents/{check,implement}.md` for the channel runtime.
 - `references/platform-files/skills-and-commands.md`: Differences between skills, commands, prompts, and workflows, plus how to change them.
 
 ### Local Customization
@@ -69,7 +69,7 @@ Do not assume the user has the upstream Moluoxixi repository. The authoritative 
 - `.moluoxixi/spec-proposals/` stores pending knowledge candidates, approval records, audit history, and per-target backups. AI task workflows propose here; only explicit human review promotes content into `.moluoxixi/spec/`.
 - `.moluoxixi/tasks/` stores task PRDs, design notes, implement plans, research files, and JSONL context. Tasks form parent/child trees: `task.py create --parent <slug>`, `task.py add-subtask <parent> <child>`, `task.py remove-subtask <parent> <child>`, and `task.py list-context <task>`. `task.py create` rejects a slug already present in `.moluoxixi/tasks/archive/**`.
 - `.moluoxixi/workspace/` stores **deliberately written** developer journals. Raw cross-session dialogue is **not** stored here — it lives on disk under `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.pi/agent/sessions/` and is recovered via `node "<skill-root>/scripts/moluoxixi.mjs" mem search|extract|context`. The bundled `session-insight` skill teaches when to reach for `mem`.
-- `.moluoxixi/agents/{check,implement}.md` are bundled, platform-agnostic channel runtime agent definitions loaded by `node "<skill-root>/scripts/moluoxixi.mjs" channel spawn --agent <name>`. Editable; `node "<skill-root>/scripts/moluoxixi.mjs" update` backfills missing ones. Editing the per-platform `moluoxixi-implement.md` / `moluoxixi-check.md` does **not** change channel-runtime worker behavior.
+- `.moluoxixi/agents/{check,implement}.md` are bundled, platform-agnostic channel runtime agent definitions loaded by `node "<skill-root>/scripts/moluoxixi.mjs" channel spawn --agent <name>`. Editable; `node "<skill-root>/scripts/moluoxixi.mjs" update` backfills missing ones. Editing the per-platform `moluoxixi-implement.md` / `check.md` does **not** change channel-runtime worker behavior.
 - `~/.moluoxixi/channels/<project>/<channel>/events.jsonl` is the channel runtime event log per project per channel. User-owned, file-locked sequence numbering, durable `idempotencyKey` support; never under `.moluoxixi/`.
 - Bundled multi-file skills are sourced from `roles/moluoxixi/skills/` and copied to every selected platform by `init-project`. Project-local update assets keep the same trees available for later refreshes.
 - Platform settings/config files decide which hooks, agents, skills, commands, prompts, and workflows actually run. Reasonix has no settings file — behavior is encoded inside skill frontmatter.
@@ -81,6 +81,6 @@ Do not assume the user has the upstream Moluoxixi repository. The authoritative 
 - Do not install or modify a global Moluoxixi package. Customize the generated project files or the Moluoxixi role source, according to the user's scope.
 - Do not overwrite user-modified local files with default templates; check `.moluoxixi/airules-init-manifest.json` first and prefer `.new` sidecar files over destructive overwrites.
 - Do not put team-private project rules into any public bundled skill (`meta`, `spec-bootstrap`, `session-insight`, `channel`); put project rules in `.moluoxixi/spec/`, a project-local skill, the current task, or the workspace journal — `node "<skill-root>/scripts/moluoxixi.mjs" update` will overwrite anything inside a bundled skill directory.
-- Do not hand-edit `~/.moluoxixi/channels/<project>/<channel>/events.jsonl`; sequence numbers are assigned under a file lock and replay-safe writes go through the `node "<skill-root>/scripts/moluoxixi.mjs" channel` CLI or the `the Moluoxixi runtime source/channel` SDK.
+- Do not hand-edit `~/.moluoxixi/channels/<project>/<channel>/events.jsonl`; sequence numbers are assigned under a file lock and replay-safe writes go through the `node "<skill-root>/scripts/moluoxixi.mjs" channel` CLI or the Moluoxixi core channel SDK.
 - Do not edit `.claude/agents/moluoxixi-implement.md` (or any other per-platform sub-agent file) when the goal is to change channel runtime worker behavior — edit `.moluoxixi/agents/<name>.md` instead.
 - Do not describe removed or never-shipped mechanisms as current Moluoxixi behavior; cross-check against the local `.moluoxixi/config.yaml` and the installed CLI's `moluoxixi --help` before claiming a knob exists.

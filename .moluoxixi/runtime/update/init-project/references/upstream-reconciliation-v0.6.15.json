@@ -1,0 +1,1182 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "name": "Trellis",
+    "source": "https://github.com/mindfold-ai/Trellis.git",
+    "from": {
+      "tag": "v0.6.7",
+      "revision": "e7c5ead4d0dfd717d11a40b6bc0c80d8af94c49a"
+    },
+    "to": {
+      "tag": "v0.6.15",
+      "revision": "d8fff53ce4964ed1a3e52fea6b418b27eba093e4"
+    },
+    "history": {
+      "order": "reverse",
+      "excludeMerges": true,
+      "commitCount": 122
+    }
+  },
+  "statusDefinitions": {
+    "adapted": "The upstream behavior is present in the distributed Moluoxixi role and localEvidence identifies the implementation.",
+    "retained-local": "The upstream change was reviewed, but Moluoxixi retains a different local contract identified by localEvidence.",
+    "reviewed-no-change": "The commit was reviewed and requires no role asset change because it is test-only or reverted within the audited range.",
+    "not-applicable": "The commit changes a surface outside the distributed Moluoxixi role or supported host contract."
+  },
+  "entries": [
+    {
+      "hash": "200365b45a2afa68ff55c66a93d004303332f616",
+      "subject": "hooks & mem",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/core/src/mem/sessions.ts",
+          "symbol": "listAll and extractDialogue"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/zcode/config.json",
+          "symbol": "ZCode hook configuration"
+        }
+      ]
+    },
+    {
+      "hash": "044390c10280f78a6e8af9e11d21bc8f8d2a33fd",
+      "subject": "hooks & mem",
+      "status": "reviewed-no-change",
+      "reason": "Upstream changes only its update integration test expectation."
+    },
+    {
+      "hash": "69017e67d77957d374a249de435042cde561a56f",
+      "subject": "hooks & mem",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/core/src/mem/internal/sqlite-readonly.ts",
+          "symbol": "SqliteReadOnly"
+        }
+      ]
+    },
+    {
+      "hash": "04f78e0d1f6aa290e139ec9bf9db4c66d2a1ecfe",
+      "subject": "chore: refresh WeChat group QR to 十群 (valid until 2026-07-22) (#432)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "5c28b8edf35c70838c7efae57ccd0b34da370538",
+      "subject": "feat(cli): add Grok Build platform support (#433)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "986500cfc42d9463c53a1fa8d5a5f5b4afaa50d1",
+      "subject": "chore: bump marketplace submodule to sync Grok workflow mirror (#435)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "0bd859cace62ac3db061e44d27ee43347ed634c9",
+      "subject": "chore: run full test suite in pre-commit, hardened against git-env leaks (#436)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "2d395e2a24d5ab0fa1a449f2e77b8f462f189bbf",
+      "subject": "fix(configurators): quote YAML frontmatter descriptions to survive embedded colons (#437)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/plan.mjs",
+          "symbol": "wrapCommand and wrapOmpCommand JSON-quoted YAML scalars"
+        },
+        {
+          "path": "roles/moluoxixi/__test__/professional-agents.test.mjs",
+          "symbol": "quotes generated command frontmatter that contains YAML-significant colons"
+        }
+      ]
+    },
+    {
+      "hash": "4d1e2c67a1d59c46d215604cd6250c8f1c95b650",
+      "subject": "fix(update): preserve reintroduced templates (#425)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/migrations/runner.mjs",
+          "symbol": "classifyMigrations currentTemplates guard"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/init-project.mjs",
+          "symbol": "currentTemplates plan handoff"
+        }
+      ]
+    },
+    {
+      "hash": "4a20e4b51ad0e74f23d03da4f43e842eacef30fa",
+      "subject": "fix(omp): bridge session context into bash env (#424)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/omp/extensions/moluoxixi/index.ts.txt",
+          "symbol": "MOLUOXIXI_CONTEXT_ID shell environment bridge"
+        }
+      ]
+    },
+    {
+      "hash": "b72bbf137b8d8a5b04098e1a2da7da54a91ec371",
+      "subject": "fix(brainstorm): require explicit planning approval (#416)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/skills/brainstorm/SKILL.md.txt",
+          "symbol": "explicit post-planning implementation approval"
+        }
+      ]
+    },
+    {
+      "hash": "c6f85dc796dc0306016444ecc8d5a71e6219a6a9",
+      "subject": "fix: 0.6.7 fleet review batch — task boundary, atomic write, activation diagnostics, OpenCode start.md (#438)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/io.py",
+          "symbol": "write_json"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/task_utils.py",
+          "symbol": "is_within_tasks_dir"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/task_store.py",
+          "symbol": "activation diagnostics"
+        }
+      ]
+    },
+    {
+      "hash": "51a5674ce6ce5a12cb585c5dcb21e7b76a51bdbc",
+      "subject": "docs: correct Codex inline-default rationale (issue #434) (#440)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-workflow-state.py",
+          "symbol": "_codex_mode_banner and resolve_breadcrumb_key local auto-mode rationale"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/config.yaml",
+          "symbol": "Codex dispatch behavior policy comment"
+        }
+      ]
+    },
+    {
+      "hash": "c0b206577d3145968beb4cbed8a4608c45bcdc0c",
+      "subject": "fix(hooks): adapt SessionStart acknowledgment language (#439)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/session-start.py",
+          "symbol": "SessionStart acknowledgement instruction"
+        }
+      ]
+    },
+    {
+      "hash": "4edfa66065ea7d26f0399014aacbc611c8866056",
+      "subject": "feat(codex): enable native subagent dispatch (#445)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/codex/hooks.json",
+          "symbol": "SubagentStart"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/codex/config.toml",
+          "symbol": "native agent configuration"
+        }
+      ]
+    },
+    {
+      "hash": "c3275dece44b7ed22bf639ab4c2d075a08048aef",
+      "subject": "fix(cli): drop preferOffline for registry template downloads (#383)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "8d53fcbf178e023d3dae5cd1fd8c73a6555f4157",
+      "subject": "feat(channel): allow overriding Codex worker sandbox mode (#413)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/adapters/codex.ts",
+          "symbol": "parseCodexSandboxMode"
+        },
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/index.ts",
+          "symbol": "--sandbox option"
+        }
+      ]
+    },
+    {
+      "hash": "31a36d3a1ab9d6a0c77056f83aece00ad6157ac8",
+      "subject": "fix(pi): write shared skills to .agents/skills/ instead of a private .pi/skills/ root (#447)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/hosts/catalog.mjs",
+          "symbol": "PLATFORM_SKILLS_ROOT.pi"
+        }
+      ]
+    },
+    {
+      "hash": "5dbebd69d05e98150402a495daf0472d3c442408",
+      "subject": "feat(cli): add `trellis platforms --json` machine-readable platform state (#396)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "4d420b51b77e7b696df9cf3f6a01962a019894d0",
+      "subject": "feat(scripts): add --json output to task.py list/current (#395)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/task.py",
+          "symbol": "cmd_current and cmd_list --json"
+        }
+      ]
+    },
+    {
+      "hash": "113bc5fb5824bc9eeb679bb0416092afbbcceb2e",
+      "subject": "fix(scripts): stamp base_branch from repo default, warn on stale task branches (#399)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/git.py",
+          "symbol": "resolve_default_branch"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/task_store.py",
+          "symbol": "base_branch resolution"
+        }
+      ]
+    },
+    {
+      "hash": "ccf95fcf877441b10ebb6d3990ea4fb2f94286db",
+      "subject": "docs(spec): refresh contracts for #439/#445/#448 merge batch",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "ccd29ac5d733327056c4242518b3e2717aee2f48",
+      "subject": "fix(codex): pin agents.max_depth=1 in project config.toml",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/codex/config.toml",
+          "symbol": "agents.max_depth"
+        }
+      ]
+    },
+    {
+      "hash": "9846fe662e05e7da494066874e7961a465f23d56",
+      "subject": "fix(task): warn on base_branch fallback + add --base-branch override (#399)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/task.py",
+          "symbol": "create --base-branch"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/task_store.py",
+          "symbol": "base branch fallback warning"
+        }
+      ]
+    },
+    {
+      "hash": "3d0aaea57457447f9feb8fb57ffbd29112191067",
+      "subject": "refactor(hooks): extract shared codex dispatch-mode normalization",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-workflow-state.py",
+          "symbol": "get_codex_dispatch_mode"
+        }
+      ]
+    },
+    {
+      "hash": "39ca6b9126467b1e32ed6888ffd6a74a73d72b1b",
+      "subject": "fix(channel): keep sandbox value typed through the spawn path",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/spawn.ts",
+          "symbol": "SpawnOptions.sandbox"
+        },
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/supervisor.ts",
+          "symbol": "SupervisorConfig.sandbox"
+        }
+      ]
+    },
+    {
+      "hash": "a56ebbd327d715983bbf54afb55284cd79d2a5c6",
+      "subject": "fix(update): rename-dir merge must not clobber canonical target with stale source bytes (#447)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/migrations/runner.mjs",
+          "symbol": "dirMatchesCurrentTemplates"
+        }
+      ]
+    },
+    {
+      "hash": "65785cf09fddf06596c7033b9c19da3ea39f3898",
+      "subject": "fix(cli): shorten Pi's display name in ai-tools registry",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "bfa7f99d6db10dba650cf4eb7f72b18d26540e23",
+      "subject": "feat(cli): add Kimi Code support (#452)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "65a83d7d28b75547e35e28d78763f63ec269cbb0",
+      "subject": "ci: build before test so CLI integration tests find dist/ (#453)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "26ca25f85a957e30a22f6ae28e5edc2349c98c3f",
+      "subject": "release: 0.6.8 manifest changelog + docs-site changelog pointer",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "c9011ae0b28523a1bbbbf79609c53aee3442c788",
+      "subject": "0.6.8",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "dc68f5a92a68489b681c511f4a784e413d724e85",
+      "subject": "ci: build before test in publish workflow (same fix as #453)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "ea399def505f26331919915753ae2c0f21ea6b00",
+      "subject": "feat(hooks): cap sub-agent context injection with configurable limits (#441)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/config.py",
+          "symbol": "get_context_injection_limits"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-subagent-context.py",
+          "symbol": "bounded context injection"
+        }
+      ]
+    },
+    {
+      "hash": "e2076418f4f268201c9c3d71db5c73c639fc5c1a",
+      "subject": "chore(task): archive 07-22-subagent-context-limits",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "2c1b3761cc9fb639360fd4b6863af1ac451d9b88",
+      "subject": "chore: record journal",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "5dedc208884b41f4b4c2dd35e2f4afb131b7e21b",
+      "subject": "chore(task): archive 06-21-fix-kiro-workflow-injection",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "d31772fc90ea35c30932a4c69b62218392b36217",
+      "subject": "chore(task): archive 06-24-issue-292-jsonl-gate",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "7a7bebe1431db783abddd2010b92464f13d9808f",
+      "subject": "chore(task): archive 06-18-brainstorm-prd-dedup",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "63684b5f19f9cfc1df2d63890e39738c72d8b2eb",
+      "subject": "chore(task): archive 06-18-channel-driven-workflow-ux-bugs",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "64df8759b4d62584eea5b41a20204b050be965db",
+      "subject": "feat(hooks): no-trellis skip keyword mutes per-turn context injection (#427)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/config.py",
+          "symbol": "DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-workflow-state.py",
+          "symbol": "per-turn skip keyword"
+        }
+      ]
+    },
+    {
+      "hash": "9fa034f27c2e4cff3c51d270239c5ece0e111b1e",
+      "subject": "chore(task): archive 07-22-no-trellis-skip",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "5d14195d2067aceb6f23f7030fe3971ecefeb5f4",
+      "subject": "chore: record journal",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "53a29d414a2a92949865a5d9ed1f493c2ae0fd7b",
+      "subject": "feat(scripts): journal structured flags, task-tree orphan fallback, meta access (#394, #402)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/task.py",
+          "symbol": "set-meta and orphan task rendering"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/add_session.py",
+          "symbol": "--change --test --next-step"
+        }
+      ]
+    },
+    {
+      "hash": "e04babf5ab0d469d4e9b276f1fbbb608be7a2787",
+      "subject": "chore(task): archive 07-22-script-qol-batch",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "dfcb9262f66def6a45105ee71e929ebeaf4cb73c",
+      "subject": "chore: record journal",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "2d6382303dfdb2ede5478abb130fc887d6fd1a1f",
+      "subject": "docs(spec): document core task schema vs Python scripts boundary",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "ee4bffccf9b25359c1c3f6bbe884b1e26ebcbf5f",
+      "subject": "feat(codex): preserve user-set sub-agent model keys across update (#459)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/plan.mjs",
+          "symbol": "extractCodexModelKeys and preserveCodexModelKeys"
+        }
+      ]
+    },
+    {
+      "hash": "3dc7ba07af13d8df14101c0571f1c7fcb8787b4e",
+      "subject": "feat(cli): add Snow CLI as class-1 Trellis platform (#443)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "88b20f90ce52e494c009c164c630fb1a1e209b77",
+      "subject": "chore: refresh WeChat 十群 QR (valid until 2026-07-30) (#463)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "530d2091c740af0670fe2ce74307d2bbb8941cf3",
+      "subject": "feat(channel): trusted context dirs for symlinked Trellis workspaces (#414)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/context-trust.ts",
+          "symbol": "resolveTrustedRoots"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/config.yaml",
+          "symbol": "channel.trusted_context_dirs"
+        }
+      ]
+    },
+    {
+      "hash": "95fab3e4eafe874757f9997d25b19b78551722b0",
+      "subject": "chore(task): archive 07-23-channel-trusted-context-dirs",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "2d96142decca4ec970d96cc48a5b9e39ef3e04df",
+      "subject": "chore: record journal",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "a53748643d259f0e7fbf5ffed76115e6785c6ce4",
+      "subject": "feat(workspace): journal merge=union + index.md conflict guidance (#415 quick-fix)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/gitattributes.txt",
+          "symbol": "journal merge=union"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/add_session.py",
+          "symbol": "worktree journal warning"
+        }
+      ]
+    },
+    {
+      "hash": "12f9a3db1131ab5474a69314aed7662e8a1389c9",
+      "subject": "chore(task): archive 07-24-journal-merge-union",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "402653bdc5dee324512b820237c562ae01ee9eac",
+      "subject": "chore(codex): update recommended sub-agent model hint to gpt-5.6-terra/high",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/codex/agents/moluoxixi-implement.toml",
+          "symbol": "gpt-5.6-terra/high model hint"
+        }
+      ]
+    },
+    {
+      "hash": "bc36a0ed0b857769f92628e4de9b327c97e847c9",
+      "subject": "fix(cli): cap OpenCode sub-agent context injection (#441 follow-up) (#456)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/lib/moluoxixi-context.js",
+          "symbol": "DEFAULT_CONTEXT_INJECTION_LIMITS"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/plugins/inject-subagent-context.js",
+          "symbol": "bounded buildPrompt"
+        }
+      ]
+    },
+    {
+      "hash": "7df965f0f83c5ffe060098c9a7f061a05f94996b",
+      "subject": "fix(kimi): persist research through coder subagent (#457)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "f7d8c32fb98b42cc7e13261fe90bab5596bef43c",
+      "subject": "fix(cli): skip binary context files (#471)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/lib/moluoxixi-context.js",
+          "symbol": "isBinaryContent"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/pi/extensions/moluoxixi/index.ts.txt",
+          "symbol": "isBinaryContent"
+        }
+      ]
+    },
+    {
+      "hash": "4a5a8df3da295a84fde7ef626fa6cd710c94e1f6",
+      "subject": "release: 0.6.9 manifest changelog + docs-site changelog pointer",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "12e279a8af00456b1d0d4e3d0f7f59e7b702202e",
+      "subject": "0.6.9",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "621435d143d352ac1db4ab077d682716fd6d5afd",
+      "subject": "fix: resolve post-0.6.9 task and Codex regressions (#477)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/active_task.py",
+          "symbol": "clear_active_task resolved context key"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/codex/agents/moluoxixi-implement.toml",
+          "symbol": "Full hook output truncation recovery"
+        }
+      ]
+    },
+    {
+      "hash": "c45f12defb449f88cc160f4b2162035f07127866",
+      "subject": "chore: prepare v0.6.10 release (#480)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "c94d6fc289b7a6fdd9480bdfae4d4639c9ac2d4c",
+      "subject": "0.6.10",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "6d8bd3c0ff78ce866a0c87d3cd00e353e7b179ce",
+      "subject": "fix(pi): inherit parent model for subagents (#494)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/pi/extensions/moluoxixi/index.ts.txt",
+          "symbol": "contextModelRef and resolveRunCfg inheritedModel fallback"
+        }
+      ]
+    },
+    {
+      "hash": "13862313c9dc879db0230ec69b46ca321edcec14",
+      "subject": "fix(channel): surface Codex turn failures (#495)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/adapters/codex.ts",
+          "symbol": "failed turn and terminal error handling"
+        }
+      ]
+    },
+    {
+      "hash": "5ba35f68130acdfb312bda018d7e26cbacc2138b",
+      "subject": "fix(channel): enforce idle timeout after completed turns (#496)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/cli/src/commands/channel/supervisor/idle.ts",
+          "symbol": "scheduleSupervisorIdleTimer"
+        }
+      ]
+    },
+    {
+      "hash": "aef8ea56a7365fcc13ecc61fb7df264a60591d13",
+      "subject": "fix(scripts): bound polyrepo Git context scan (#497)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/git.py",
+          "symbol": "bounded run_git"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/session_context.py",
+          "symbol": "_discover_child_git_repos"
+        }
+      ]
+    },
+    {
+      "hash": "e4ed585e1450657f9e3c0ee23f0a823dd7ab9ad3",
+      "subject": "fix(hooks): decode stdin as UTF-8 (#498)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-subagent-context.py",
+          "symbol": "_stdin_reconfigure UTF-8 JSON decoding"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-shell-session-context.py",
+          "symbol": "_stdin_reconfigure UTF-8 JSON decoding"
+        }
+      ]
+    },
+    {
+      "hash": "c3596dd95f821ab23f50209bef60a5e6ab9f9569",
+      "subject": "feat(workflow): per-task workflow selection via .trellis/workflows library (#467)",
+      "status": "reviewed-no-change",
+      "reason": "The feature is reverted later in the same upstream range by c143c260678f5803d4f321a7a5d5099af6acfeb3."
+    },
+    {
+      "hash": "a5f81d9af14d458598b99bd1f953163d1fdcbc15",
+      "subject": "fix(pi): support max thinking for subagents (#499)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/pi/extensions/moluoxixi/index.ts.txt",
+          "symbol": "splitModelThinking, resolveRunCfg, and tool schema max thinking support"
+        }
+      ]
+    },
+    {
+      "hash": "c41c8bd7cf51c81cba72cf8cb4c8837ce9783ce3",
+      "subject": "fix(cli): detect Trellis-owned platform configs (#501)",
+      "status": "retained-local",
+      "reason": "Moluoxixi keeps its manifest-driven full-role distribution contract for this surface.",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/init-project.mjs",
+          "symbol": "manifest.platforms plus explicit options.platforms"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/core/transaction.mjs",
+          "symbol": "persisted manifest platforms"
+        }
+      ]
+    },
+    {
+      "hash": "89f25a8eb532231e174f7fe1afdb8d5dd8952b27",
+      "subject": "ci: validate all Python scripts on 3.9 (#502)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "c143c260678f5803d4f321a7a5d5099af6acfeb3",
+      "subject": "revert: keep per-task workflow selection on beta (#504)",
+      "status": "reviewed-no-change",
+      "reason": "This revert leaves the stable upstream range without per-task workflow selection."
+    },
+    {
+      "hash": "76aeae50dde00f66038d60b6da9a397ac4bb38e9",
+      "subject": "chore(release): prepare v0.6.11 (#505)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "a82d4d4c75abf85c6200c4528f750798d531a70f",
+      "subject": "0.6.11",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "dd442c330a250444b569c2b344d7d754d28ab62d",
+      "subject": "docs: refresh WeChat community QR code (#509)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "58f51a04a2fd2583519b6d4be7d632c18179289d",
+      "subject": "fix(pi): isolate Trellis context by native session (#513)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/pi/extensions/moluoxixi/index.ts.txt",
+          "symbol": "contextKey native session identity and getKey without cross-session adoption"
+        }
+      ]
+    },
+    {
+      "hash": "43e822390826ddb87ced8092b2eb664403cd5749",
+      "subject": "chore(release): prepare v0.6.12",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "516b34e3591001b28fda5e2d4df3f717e82f5785",
+      "subject": "0.6.12",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "e3c91ba019a4ed4668ec92729b6f3a57d5e00b1e",
+      "subject": "fix(cli): validate archived task context paths (#519)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/task_context.py",
+          "symbol": "_resolve_context_path"
+        }
+      ]
+    },
+    {
+      "hash": "82fc41a2c0874121d146b83f710226b3662ba72f",
+      "subject": "chore(templates): remove unused codex skills directory",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/skills/before-dev/SKILL.md.txt",
+          "symbol": "canonical shared skill source"
+        },
+        {
+          "path": "roles/moluoxixi/__test__/professional-agents.test.mjs",
+          "symbol": "Codex projection excludes .codex/skills"
+        }
+      ]
+    },
+    {
+      "hash": "57ea914bf91a2f6f5eaf40580a8c809a2ad83196",
+      "subject": "chore(templates): drop dead getAllCodexSkills loader",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/plan.mjs",
+          "symbol": "addCoreSkills projects Codex skills to .agents/skills"
+        },
+        {
+          "path": "roles/moluoxixi/__test__/professional-agents.test.mjs",
+          "symbol": "all-host core skill projection matrix"
+        }
+      ]
+    },
+    {
+      "hash": "c5465d042c3fe25756311f4497498c7e026c87b0",
+      "subject": "fix(hooks): stop env-file bloat and surface the update reminder",
+      "status": "adapted",
+      "reason": "Moluoxixi retains the official session-scoped update reminder across supported context paths, replacing the unavailable global CLI probe with the synchronized AIRules role version and directing users to the current init-project skill.",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/session-start.py",
+          "symbol": "_resolve_update_hint and _build_first_reply_notice"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/session_context.py",
+          "symbol": "get_update_hint with context_key propagation"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/plan.mjs",
+          "symbol": "localizeProjectRuntime reads the synchronized role version and localizes the upgrade instruction"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/lib/session-utils.js",
+          "symbol": "resolveUpdateHint and buildFirstReplyNotice in OpenCode SessionStart context"
+        }
+      ]
+    },
+    {
+      "hash": "cb3d0396f2be25b4e6e52d59f4a09ebfc479e9dd",
+      "subject": "chore(task): session identity audit across 21 platforms",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "8ab47a770374cb39760533800a6d5910de499fbb",
+      "subject": "fix(scripts): drop invented platform session env var names",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/active_task.py",
+          "symbol": "_ENV_SESSION_KEYS and resolve_context_key"
+        }
+      ]
+    },
+    {
+      "hash": "7b17052d7e3a116c523abb0c210829a26ab6aa56",
+      "subject": "chore(dogfood): regenerate platform config from templates (0.6.2 -> 0.6.12)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "2e90b1495dd5d9b96dcaeebee50f15700a958b34",
+      "subject": "feat(hooks): generalize the shell-ticket session bridge to six platforms",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-shell-session-context.py",
+          "symbol": "_write_ticket"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/active_task.py",
+          "symbol": "_lookup_shell_ticket_context_key"
+        }
+      ]
+    },
+    {
+      "hash": "5f80c9c2b1af18835a92c1307eb3f52d88516264",
+      "subject": "chore(dogfood): sync cursor shell-ticket hook after migrate",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "6ddd94125465cafe57206dc8fa6d8df733608ac0",
+      "subject": "refactor(configurators): describe each platform's file set once",
+      "status": "retained-local",
+      "reason": "Moluoxixi keeps its manifest-driven full-role distribution contract for this surface.",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/hosts/catalog.mjs",
+          "symbol": "single Moluoxixi platform file-set catalog"
+        }
+      ]
+    },
+    {
+      "hash": "599455b747aeea07cacf5ece6bd925fd9745d4a9",
+      "subject": "fix(skills): correct shipped docs that describe deleted machinery",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/skills/meta/SKILL.md.txt",
+          "symbol": "addCoreSkills project-facing distribution contract"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-workflow-state.py",
+          "symbol": "CORE_HOOKS and buildPlan projection documentation"
+        }
+      ]
+    },
+    {
+      "hash": "2deb5a5f4f4fe926ac83c09b5bbcce670903ad8e",
+      "subject": "chore(release): add 0.6.13 migration manifest",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "e575dcca843c6790d847e6681ab3d906b7a8d9ba",
+      "subject": "chore(release): prepare v0.6.13",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "370699c1853d27d7fbf943e4ac1f8e4a8f7e537b",
+      "subject": "chore: pre-release updates",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "7a821367b48693bbe96409d73bf0fd658dca6c84",
+      "subject": "0.6.13",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "f6f51ffa77da4bd4d3498b72069ff94eff4eefc1",
+      "subject": "fix(release): refuse to release from the wrong branch",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "a1d2ae75d200d80cb254036b0daab7633401c3df",
+      "subject": "fix(hooks): stop hosts that set CLAUDE_PROJECT_DIR being detected as claude",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/session-start.py",
+          "symbol": "_detect_platform"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-subagent-context.py",
+          "symbol": "_detect_platform"
+        }
+      ]
+    },
+    {
+      "hash": "08d43351044eee01155dac9779c45bc0285fea97",
+      "subject": "feat(mem): recover conversations hidden behind compaction; add Grok",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/packages/core/src/mem/adapters/codex.ts",
+          "symbol": "compaction history recovery"
+        },
+        {
+          "path": "roles/moluoxixi/packages/core/src/mem/adapters/grok.ts",
+          "symbol": "Grok session adapter"
+        }
+      ]
+    },
+    {
+      "hash": "9aae24cd8e5574b01b2c034fbc2eeaa55a1c056b",
+      "subject": "chore(release): add 0.6.14 migration manifest",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "4ee34b051c33748a640f5de161b547847cd6e896",
+      "subject": "chore(release): point docs-site at v0.6.14 changelog",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "8102a3ebabc12fb07e5b587ad2e6a615495dbe5b",
+      "subject": "chore(release): plain-language changelog for 0.6.14",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "ede06b9bd56c7db5116ad0ee79c009439db41f0f",
+      "subject": "chore(release): backfill the 0.7.0-beta.2 manifest",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "e4b8bb3bb6876e1345dc6adf8a47afbdcba7a31b",
+      "subject": "chore(release): point docs-site at updated mem-recall page",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "02e6068a9f55c1e27bb4b1f4551e549e3eef373a",
+      "subject": "chore(release): point docs-site at updated mem-recall page",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "18c028c2b6303fd468685c6fe1c99d79df62cadf",
+      "subject": "0.6.14",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "8b7a304d52b8d788e23636126c92469052ccf921",
+      "subject": "chore: bump marketplace for mem-recall grok support",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "276309648f3af628e5521855f1bd390977db4bf4",
+      "subject": "chore: bump marketplace for mem-recall cleanup",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "ca92175f0b4efd37dfe149c592063954eb306a2e",
+      "subject": "docs: sync platform coverage with the registry, and guard it",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/references/platforms.md",
+          "symbol": "supported platform table"
+        },
+        {
+          "path": "roles/moluoxixi/__test__/moluoxixi-source.test.ts",
+          "symbol": "nativeCapabilityCounts guard"
+        }
+      ]
+    },
+    {
+      "hash": "60554aed8837fec805c1b14641694377131e646b",
+      "subject": "docs: refresh WeChat group QR to 第十一群",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "38bfabc88f028fcdda3a46da7fec83c787645055",
+      "subject": "feat(cli): install trellis sub-agents for Kimi Code platform (#529)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "30394f4f6caf0a459af07674def7f4d307f6c4b4",
+      "subject": "fix(hooks): recognize CodeBuddy subagent_name in context injection (#528)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-subagent-context.py",
+          "symbol": "_extract_subagent_name subagent_name support"
+        }
+      ]
+    },
+    {
+      "hash": "d7d73bceef4eba95dd0ff1f6d997c7839bf276ec",
+      "subject": "fix(hooks): probe the Claude alias last in inject-subagent-context too",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/hooks/inject-subagent-context.py",
+          "symbol": "_detect_platform Claude alias order"
+        }
+      ]
+    },
+    {
+      "hash": "c8e327a99d8ae7bfcb67523ab89b0ca8c721e63a",
+      "subject": "fix(opencode): persist synthetic context outside user messages (#524)",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/lib/context-visibility.js",
+          "symbol": "insertSyntheticTextPart"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/plugins/inject-workflow-state.js",
+          "symbol": "synthetic context insertion"
+        }
+      ]
+    },
+    {
+      "hash": "7b3c7fc6b2e9386ab023d5354dba830a104c7aac",
+      "subject": "fix(skills): keep check inside the task's scope, and state it before dev",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/skills/before-dev/SKILL.md.txt",
+          "symbol": "task scope declaration"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/core/skills/check/SKILL.md.txt",
+          "symbol": "task-scoped validation"
+        }
+      ]
+    },
+    {
+      "hash": "26a7e697608425d3776870ff77036747dceb192e",
+      "subject": "docs: point at the qoder ide/cli commands clarification",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "7677aa22cec941b85033c3f70ef6f088c91e7901",
+      "subject": "fix(task): keep the active-task pointer inside the project",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/project/scripts/common/active_task.py",
+          "symbol": "normalize_task_ref and resolve_task_ref"
+        }
+      ]
+    },
+    {
+      "hash": "592e93ef22c822bc62ef83a6552d5906072e067d",
+      "subject": "fix(extensions): contain the task pointer in the OMP, Pi and OpenCode readers",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/omp/extensions/moluoxixi/index.ts.txt",
+          "symbol": "task root containment"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/pi/extensions/moluoxixi/index.ts.txt",
+          "symbol": "task root containment"
+        },
+        {
+          "path": "roles/moluoxixi/skills/init-project/assets/hosts/opencode/lib/moluoxixi-context.js",
+          "symbol": "task root containment"
+        }
+      ]
+    },
+    {
+      "hash": "ad28698fa7e0f383ed4a687d76467750e1c624ce",
+      "subject": "fix(update): give each template download its own temp directory",
+      "status": "adapted",
+      "localEvidence": [
+        {
+          "path": "roles/moluoxixi/skills/init-project/scripts/core/registry.mjs",
+          "symbol": "per-download fs.mkdtempSync roots"
+        }
+      ]
+    },
+    {
+      "hash": "8484838c5e5499c22527f46f61bc340694ca8c48",
+      "subject": "feat(cli): add DeepSeek Harness (dsh) as an init platform (#547)",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "f7d8bcb4c09c34fc406c1ec84186caf300a8246b",
+      "subject": "chore(docs): point at the v0.6.15 changelog",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "28ec3efef734e11487c9c0ede74a1399fbb22378",
+      "subject": "chore(release): sync the 0.7.0-beta.3 manifest to main",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    },
+    {
+      "hash": "d8fff53ce4964ed1a3e52fea6b418b27eba093e4",
+      "subject": "0.6.15",
+      "status": "not-applicable",
+      "reason": "This commit changes a Trellis repository, release, CLI-only, marketplace, task-journal, documentation-site, or unsupported-host surface outside the distributed Moluoxixi role contract."
+    }
+  ]
+}

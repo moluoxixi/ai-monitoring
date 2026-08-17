@@ -1,6 +1,6 @@
 ---
 name: finish-work
-description: "Wrap up the current session: verify quality gate passed, remind user to commit, archive completed tasks, and record session progress to the developer journal. Use when done coding and ready to end the session."
+description: "Wrap up the current session by verifying quality, archiving completed tasks, and recording progress."
 ---
 
 # Finish Work

@@ -1,6 +1,6 @@
 ---
 name: update-spec
-description: "Captures executable contracts and coding conventions as human-reviewable proposals for .moluoxixi/spec/. Use when learning something valuable from debugging, implementing, or discussion that should be preserved for future sessions without bypassing knowledge review."
+description: "Capture executable contracts and coding conventions as human-reviewable proposals without bypassing knowledge approval."
 ---
 
 # Update Code-Spec - Capture Executable Contracts
@@ -342,7 +342,7 @@ Before finishing your knowledge proposal:
 - [ ] Does it duplicate existing content?
 - [ ] Would a new team member understand it?
 - [ ] Was it submitted to `spec-proposals` without directly editing `spec/`?
-- [ ] Did you leave approval and promotion to `moluoxixi-spec-review` and the user?
+- [ ] Did you leave approval and promotion to `spec-review` and the user?
 
 ---
 

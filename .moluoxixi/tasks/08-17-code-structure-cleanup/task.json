@@ -1,0 +1,40 @@
+{
+  "id": "code-structure-cleanup",
+  "name": "code-structure-cleanup",
+  "title": "代码结构优化与清理",
+  "description": "",
+  "status": "in_progress",
+  "complexity": {
+    "level": "complex",
+    "signals": [
+      "cross-module"
+    ],
+    "reason": "跨 4 个事件解析模块、共享工具测试与前端构建配置，需分别验证行为兼容和服务重启"
+  },
+  "executionApproval": {
+    "mode": "manual",
+    "granted": true,
+    "source": "explicit_user",
+    "grantedAt": "2026-08-17T02:12:24.433905Z",
+    "reason": "Final planning artifacts approved before start"
+  },
+  "dev_type": null,
+  "scope": "apps/server/src/events, apps/server/test, apps/web Vite config",
+  "package": null,
+  "priority": "P2",
+  "creator": "wl",
+  "assignee": "wl",
+  "createdAt": "2026-08-17",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -1,6 +1,6 @@
 # Local Moluoxixi Architecture Overview
 
-`meta` is for user projects initialized by the `init-project` skill. The project contains the generated Moluoxixi files and `.moluoxixi/runtime`; no npm-installed Moluoxixi command is required.
+`meta` is for user projects that have already run `moluoxixi init`. The user's machine usually has only the npm-installed `moluoxixi` command plus the Moluoxixi files generated inside the project; it may not have the Moluoxixi CLI source code.
 
 Therefore, when an AI uses this skill, the default customization target is local files inside the user project:
 
@@ -8,7 +8,7 @@ Therefore, when an AI uses this skill, the default customization target is local
 - Platform directories: `.claude/`, `.codex/`, `.cursor/`, `.opencode/`, `.kiro/`, `.gemini/`, `.qoder/`, `.codebuddy/`, `.github/`, `.factory/`, `.pi/`, `.kilocode/`, `.agent/`, `.devin/`, `.reasonix/`, `.zcode/`, and similar directories.
 - Shared skill layer: `.agents/skills/`.
 
-Do not default to guiding the user to fork Moluoxixi. Treat `roles/moluoxixi/` as the distribution source only when the user explicitly wants to change the AIRules role; otherwise work in the initialized project.
+Do not default to guiding the user to fork the Moluoxixi CLI repository. Treat upstream source code as the operating target only when the user explicitly says they want to change Moluoxixi upstream source, publish an npm package, or contribute a PR.
 
 ## Local System Model
 
@@ -31,12 +31,12 @@ All three layers live inside the user project, so an AI can read and modify them
 | `.moluoxixi/workspace/` | Per-developer journals and cross-session memory. |
 | `.moluoxixi/scripts/` | Local Python runtime used by commands, hooks, and context injection. |
 | `.moluoxixi/.runtime/` | Session-level runtime state, such as the current task pointer. |
-| `.moluoxixi/airules-init-manifest.json` | Template hashes for Moluoxixi-managed files, used by update to determine whether local files were modified by the user. |
+| `.moluoxixi/.template-hashes.json` | Template hashes for Moluoxixi-managed files, used by update to determine whether local files were modified by the user. |
 
 ## AI Customization Principles
 
 1. **Find the local source of truth first**: Do not edit from memory. Read `.moluoxixi/workflow.md`, `.moluoxixi/config.yaml`, the relevant platform directory, and related task files first.
-2. **Edit the user project, not the role runtime**: Modify generated files inside the project and leave `.moluoxixi/runtime` alone unless the request is specifically about runtime implementation.
+2. **Edit the user project, not the npm package cache**: Modify generated files inside the project, not `node_modules` or the global npm install directory.
 3. **Keep platform files aligned with `.moluoxixi/`**: If workflow routing changes, also check whether platform skills or commands still describe the same flow.
 4. **Put project-specific rules in `.moluoxixi/spec/` or a local skill**: Do not put team conventions into `meta`.
 5. **Preserve user changes**: If a file was already modified locally, work from the current content instead of overwriting it with a default template.

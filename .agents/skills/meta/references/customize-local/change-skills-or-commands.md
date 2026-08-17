@@ -4,8 +4,8 @@ When the user wants to change AI entry points, auto-trigger rules, or explicit c
 
 Before editing, classify the skill you are about to touch:
 
-- **Bundled role skill** — `meta`, `spec-bootstrap`, `session-insight`, `channel`. Source of truth lives under `roles/moluoxixi/skills/<name>/`; `init-project` and the project-local updater copy it to each selected platform. Local edits are tracked by `.moluoxixi/airules-init-manifest.json` and preserved as conflicts on update.
-- **Project-local skill** — anything else under `.{platform}/skills/`. Owned by the user; not refreshed by `node "<skill-root>/scripts/moluoxixi.mjs" update`.
+- **Bundled upstream skill** — `meta`, `spec-bootstrap`, `session-insight`, `channel`. Source of truth lives in the Moluoxixi CLI repo under `packages/cli/src/templates/common/bundled-skills/<name>/`; auto-dispatched to every platform's skill root by `getBundledSkillTemplates()` on `moluoxixi init` / `node .moluoxixi/runtime/moluoxixi.mjs update`. Local edits here are tracked by `.moluoxixi/.template-hashes.json` and will be flagged on the next update.
+- **Project-local skill** — anything else under `.{platform}/skills/`. Owned by the user; not refreshed by `node .moluoxixi/runtime/moluoxixi.mjs update`.
 
 The remainder of this file uses "skill" for the local file; the override and conflict rules differ between the two cases.
 
@@ -15,7 +15,7 @@ The remainder of this file uses "skill" for the local file; the override and con
 2. Target platform skill/command/prompt/workflow directory
 3. Related agent or hook files
 4. Whether project rules already exist in `.moluoxixi/spec/`
-5. `.moluoxixi/airules-init-manifest.json` — confirms whether the skill you are about to edit is upstream-owned (entry present) or project-local (entry absent)
+5. `.moluoxixi/.template-hashes.json` — confirms whether the skill you are about to edit is upstream-owned (entry present) or project-local (entry absent)
 
 ## Which Entry Type To Choose
 
@@ -23,9 +23,9 @@ The remainder of this file uses "skill" for the local file; the override and con
 | --- | --- |
 | AI should automatically know a capability | Add or modify a skill. |
 | User wants to trigger manually with a command | Add or modify a command/prompt/workflow. |
-| Team project conventions | Prefer a reviewed `.moluoxixi/spec/` proposal or a project-local skill — never a bundled skill directory. |
-| Tweak a bundled skill (`meta` et al.) for the user's own project | Create a project-local sibling skill (different name) that overrides intent, or submit an `update-spec` proposal. Edits inside the bundled skill directory survive only until the next `node "<skill-root>/scripts/moluoxixi.mjs" update` and will need a "keep" choice each time. |
-| Change role-wide behavior | Edit `roles/moluoxixi/skills/<name>/` and add role-specific tests. |
+| Team project conventions | Prefer `.moluoxixi/spec/` or a project-local skill — never a bundled skill directory. |
+| Tweak a bundled skill (`meta` et al.) for the user's own project | Create a project-local sibling skill (different name) that overrides intent, or edit `.moluoxixi/spec/`. Edits inside the bundled skill directory survive only until the next `node .moluoxixi/runtime/moluoxixi.mjs update` and will need a "keep" choice each time. |
+| Contribute the change back upstream | Edit `packages/cli/src/templates/common/bundled-skills/<name>/` in the Moluoxixi CLI repo, not the deployed copy. |
 | Change Moluoxixi flow semantics | Synchronize `.moluoxixi/workflow.md`. |
 
 ## Modify A Skill
@@ -54,9 +54,9 @@ The same directory shape is used by two very different ownership models:
 
 | Aspect | Bundled (`meta`, `spec-bootstrap`, `session-insight`, `channel`) | Project-local |
 | --- | --- | --- |
-| Source of truth | `roles/moluoxixi/skills/<name>/` in AIRules | Inside the user project itself |
-| Dispatch | Copied to selected platform skill roots by `init-project` and project-local update | Created by the user and never moved |
-| Hash tracking | Every file recorded in `.moluoxixi/airules-init-manifest.json`; conflict prompt on update | Not tracked |
+| Source of truth | `packages/cli/src/templates/common/bundled-skills/<name>/` in Moluoxixi CLI repo | Inside the user project itself |
+| Dispatch | Auto-dispatched to every platform skill root by `getBundledSkillTemplates()` (`packages/cli/src/templates/common/index.ts`) on `moluoxixi init` / `node .moluoxixi/runtime/moluoxixi.mjs update` | Created by the user (or another skill) and never moved |
+| Hash tracking | Every file recorded in `.moluoxixi/.template-hashes.json`; conflict prompt on update | Not tracked |
 | Editing locally | Allowed but will be marked "modified by user" on next update | Free editing |
 | The right way to customize | Add a *new* project-local skill with a *different* name that supplements (or supersedes) the bundled one | Edit the file directly |
 
@@ -87,19 +87,19 @@ If a command only repeats workflow rules, prefer making it reference/read `.molu
 | CodeBuddy | `.codebuddy/skills/`, `.codebuddy/commands/` |
 | GitHub Copilot | `.github/skills/`, `.github/prompts/` |
 | Factory Droid | `.factory/skills/`, `.factory/commands/` |
-| Pi Agent | `.pi/skills/` |
+| Pi Agent | `.agents/skills/` |
 | Reasonix | `.reasonix/skills/` (no separate commands dir; slash commands built into the platform) |
-| ZCode | `.agents/skills/`, `.zcode/commands/` |
+| ZCode | `.zcode/skills/`, `.zcode/commands/` |
 | Kilo / Antigravity / Devin | workflows + skills |
 
-Every directory above is a deploy target for the four bundled skills. Each platform receives a full copy from the `init-project` skill and refresh on `node "<skill-root>/scripts/moluoxixi.mjs" update`; nothing has to be wired by hand.
+Every directory above is a deploy target for the four bundled skills. Each platform receives a full copy on `moluoxixi init` and refresh on `node .moluoxixi/runtime/moluoxixi.mjs update`; nothing has to be wired by hand.
 
 ## Add A Project-Local Skill
 
-If the user wants to document team-private customizations, create a project-local skill — never put project-private content into a bundled skill directory, since `node "<skill-root>/scripts/moluoxixi.mjs" update` will overwrite it.
+If the user wants to document team-private customizations, create a project-local skill — never put project-private content into a bundled skill directory, since `node .moluoxixi/runtime/moluoxixi.mjs update` will overwrite it.
 
 ```text
-.claude/skills/project-local/
+.claude/skills/project-moluoxixi-local/
 └── SKILL.md
 ```
 
@@ -112,12 +112,12 @@ Pick a name that does **not** collide with the bundled set:
 - `session-insight`
 - `channel`
 
-A reused name collides with a managed skill on the next update. Prefix project-local skills with the project name, such as `acme-moluoxixi-deploy` or `acme-moluoxixi-onboarding`.
+A reused name causes `getBundledSkillTemplates()` to overwrite the project-local copy on the next update. A common convention is to prefix the project name: `acme-moluoxixi-deploy`, `acme-moluoxixi-onboarding`.
 
 ## Notes
 
 - Do not mix every platform's syntax into one file.
 - Do not change only one platform entry point while claiming all platforms are supported.
-- Do not hide long-term engineering conventions inside a command; submit them through `update-spec` for human review.
-- Do not hand-edit files inside `meta/`, `spec-bootstrap/`, `session-insight/`, or `channel/` under any `.{platform}/skills/` directory expecting the change to persist — they are bundled and refreshed by `node "<skill-root>/scripts/moluoxixi.mjs" update`. Either contribute upstream or add a project-local skill that complements them.
-- After `node "<skill-root>/scripts/moluoxixi.mjs" update` reports a "modified by you" conflict on a bundled skill file, choose **keep** only if you accept maintaining the divergence by hand; otherwise accept the overwrite and re-apply the intent as a project-local skill.
+- Do not hide long-term engineering conventions inside a command; write them to `.moluoxixi/spec/`.
+- Do not hand-edit files inside `meta/`, `spec-bootstrap/`, `session-insight/`, or `channel/` under any `.{platform}/skills/` directory expecting the change to persist — they are bundled and refreshed by `node .moluoxixi/runtime/moluoxixi.mjs update`. Either contribute upstream or add a project-local skill that complements them.
+- After `node .moluoxixi/runtime/moluoxixi.mjs update` reports a "modified by you" conflict on a bundled skill file, choose **keep** only if you accept maintaining the divergence by hand; otherwise accept the overwrite and re-apply the intent as a project-local skill.

@@ -22,7 +22,7 @@ Both types share the same scope model (`--scope project` is the default;
 ## Create A Forum Channel
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel create design-feedback \
+node .moluoxixi/runtime/moluoxixi.mjs channel create design-feedback \
   --type forum \
   --scope global \
   --description "Cross-project design feedback board." \
@@ -40,7 +40,7 @@ Threads live inside a forum channel. Each thread is identified by a stable
 a thread is `opened`; everything afterwards uses the same `--thread` key.
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel post design-feedback opened \
+node .moluoxixi/runtime/moluoxixi.mjs channel post design-feedback opened \
   --scope global \
   --as main \
   --thread login-empty-state \
@@ -50,19 +50,19 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel post design-feedback opened \
   --context-raw "Spotted during the 0.4 release review." \
   --text-file /tmp/thread-open.md
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel post design-feedback comment \
+node .moluoxixi/runtime/moluoxixi.mjs channel post design-feedback comment \
   --scope global \
   --as reviewer \
   --thread login-empty-state \
   --text-file /tmp/review.md
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel post design-feedback status \
+node .moluoxixi/runtime/moluoxixi.mjs channel post design-feedback status \
   --scope global \
   --as main \
   --thread login-empty-state \
   --status closed
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel post design-feedback summary \
+node .moluoxixi/runtime/moluoxixi.mjs channel post design-feedback summary \
   --scope global \
   --as main \
   --thread login-empty-state \
@@ -87,10 +87,10 @@ required in practice — there is no anonymous thread).
 ## Read A Forum
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel messages design-feedback --scope global
-node "<skill-root>/scripts/moluoxixi.mjs" channel forum design-feedback --scope global --status open
-node "<skill-root>/scripts/moluoxixi.mjs" channel thread design-feedback login-empty-state --scope global
-node "<skill-root>/scripts/moluoxixi.mjs" channel messages design-feedback --scope global --raw --thread login-empty-state
+node .moluoxixi/runtime/moluoxixi.mjs channel messages design-feedback --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel forum design-feedback --scope global --status open
+node .moluoxixi/runtime/moluoxixi.mjs channel thread design-feedback login-empty-state --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel messages design-feedback --scope global --raw --thread login-empty-state
 ```
 
 If a peer says "I commented on the forum", run `channel forum` first to see
@@ -111,12 +111,12 @@ that fold into the canonical `--context-file` / `--context-raw`.
 
 ```bash
 # Channel-level context (whole forum)
-node "<skill-root>/scripts/moluoxixi.mjs" channel context add design-feedback \
+node .moluoxixi/runtime/moluoxixi.mjs channel context add design-feedback \
   --scope global \
   --raw "Upstream feedback board; please link tasks before opening threads."
 
 # Thread-level context (one thread)
-node "<skill-root>/scripts/moluoxixi.mjs" channel context add design-feedback \
+node .moluoxixi/runtime/moluoxixi.mjs channel context add design-feedback \
   --scope global \
   --thread login-empty-state \
   --file "$PWD/.moluoxixi/tasks/05-13-login-redesign/design.md"
@@ -131,8 +131,8 @@ node "<skill-root>/scripts/moluoxixi.mjs" channel context add design-feedback \
 ### List Context
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel context list design-feedback --scope global
-node "<skill-root>/scripts/moluoxixi.mjs" channel context list design-feedback --scope global --thread login-empty-state --raw
+node .moluoxixi/runtime/moluoxixi.mjs channel context list design-feedback --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel context list design-feedback --scope global --thread login-empty-state --raw
 ```
 
 `--raw` on `list` emits one JSON entry per line (useful for piping); without
@@ -142,7 +142,7 @@ An empty store prints `(no context)`.
 ### Delete Context
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel context delete design-feedback \
+node .moluoxixi/runtime/moluoxixi.mjs channel context delete design-feedback \
   --scope global \
   --thread login-empty-state \
   --raw "stale note"
@@ -168,11 +168,11 @@ continue with the remaining data — do not fabricate the content.
 storage address. The channel `name` you pass to every command stays the same.
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel title set design-feedback \
+node .moluoxixi/runtime/moluoxixi.mjs channel title set design-feedback \
   --scope global \
   --title "Design feedback board"
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel title clear design-feedback --scope global
+node .moluoxixi/runtime/moluoxixi.mjs channel title clear design-feedback --scope global
 ```
 
 - `title set` requires `--title`.
@@ -187,7 +187,7 @@ wrong key (typo, wrong slug convention, etc.). Threads do not support hard
 deletion — rename is the supported corrective action.
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel thread rename design-feedback old-key new-key \
+node .moluoxixi/runtime/moluoxixi.mjs channel thread rename design-feedback old-key new-key \
   --scope global \
   --as main
 ```
@@ -212,14 +212,14 @@ A common use of a global forum channel is an internal release / runtime
 changelog. One thread per notable change keeps history searchable:
 
 ```bash
-node "<skill-root>/scripts/moluoxixi.mjs" channel create release-notes \
+node .moluoxixi/runtime/moluoxixi.mjs channel create release-notes \
   --type forum \
   --scope global \
   --description "Internal release and runtime changelog." \
   --context-raw "One thread per notable change; close when shipped." \
   --by main
 
-node "<skill-root>/scripts/moluoxixi.mjs" channel post release-notes opened \
+node .moluoxixi/runtime/moluoxixi.mjs channel post release-notes opened \
   --scope global \
   --as main \
   --thread release-2026-q1 \

@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 import { parseArgs, printHelp } from './cli.mjs'
-import { MANIFEST_PATH, MOLUOXIXI_VERSION, PROJECT_ASSET_ROOT } from './constants.mjs'
+import { MANIFEST_PATH, MOLUOXIXI_VERSION } from './constants.mjs'
 import { createPersistentBackup } from './core/backup.mjs'
 import { applyLifecycle, captureLifecycleState, detectGitDeveloper, readDeveloper } from './core/lifecycle.mjs'
 import { prepareOperations, readManifest } from './core/operations.mjs'
@@ -16,6 +16,7 @@ import { commit } from './core/transaction.mjs'
 import { normalizePlatforms } from './hosts/catalog.mjs'
 import { compareVersions, runVersionMigrations } from './migrations/runner.mjs'
 import { buildPlan, requirePython } from './plan.mjs'
+import { readTemplateFile } from './templates.mjs'
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
@@ -31,13 +32,9 @@ async function main() {
   const currentVersion = readVersion(projectRoot)
   if (!options.allowDowngrade && currentVersion && compareVersions(currentVersion, MOLUOXIXI_VERSION) > 0)
     throw new Error(`Project version ${currentVersion} is newer than this updater; use --allow-downgrade to continue`)
-  const migrationPreview = currentVersion
+  const migrationConfig = currentVersion
     ? runVersionMigrations(projectRoot, manifest, currentVersion, MOLUOXIXI_VERSION, { dryRun: true, force: options.force, migrate: options.migrate, skipAll: options.skipAll })
     : { applied: [], conflicts: [], pending: [], proposed: [] }
-  let backup = !options.dryRun && currentVersion && migrationPreview.pending?.length > 0 ? createPersistentBackup(projectRoot, manifest) : undefined
-  const migrations = options.dryRun || !currentVersion
-    ? migrationPreview
-    : runVersionMigrations(projectRoot, manifest, currentVersion, MOLUOXIXI_VERSION, { dryRun: false, force: options.force, migrate: options.migrate, skipAll: options.skipAll })
   const platforms = normalizePlatforms([...(manifest.platforms ?? []), ...options.platforms])
   const withStatusline = options.withStatusline || manifest.features?.claudeStatusline === true
   const detectedMonorepo = detectMonorepo(projectRoot)
@@ -68,11 +65,18 @@ async function main() {
   const strategy = options.overwrite ? 'overwrite' : options.append ? 'append' : manifest.project?.registry?.strategy ?? 'skip'
   const registrySelection = await resolveSpecSelections(packages, options, manifest.project?.registry, strategy)
   const plan = buildPlan(platforms, pythonCommand, withStatusline, packages, defaultPackage, projectType, {
-    configSections: migrations.configSections,
+    configSections: migrationConfig.configSections,
     projectRoot,
     specs: registrySelection.specs,
     workflow: workflow ? { ...workflow, force: options.force } : undefined,
   })
+  const migrationPreview = currentVersion
+    ? runVersionMigrations(projectRoot, manifest, currentVersion, MOLUOXIXI_VERSION, { currentTemplates: plan, dryRun: true, force: options.force, migrate: options.migrate, skipAll: options.skipAll })
+    : migrationConfig
+  let backup = !options.dryRun && currentVersion && migrationPreview.pending?.length > 0 ? createPersistentBackup(projectRoot, manifest) : undefined
+  const migrations = options.dryRun || !currentVersion
+    ? migrationPreview
+    : runVersionMigrations(projectRoot, manifest, currentVersion, MOLUOXIXI_VERSION, { currentTemplates: plan, dryRun: false, force: options.force, migrate: options.migrate, skipAll: options.skipAll })
   const prepared = prepareOperations(projectRoot, plan, manifest, options.force, options.createNew && !options.skipAll)
   const registryConflict = prepared.result.conflicts.some(relativePath => [...(plan.externalSpecRoots ?? [])].some(root => relativePath === root || relativePath.startsWith(`${root}/`)))
   const effectiveRegistry = registryConflict ? manifest.project?.registry : registrySelection.metadata
@@ -119,7 +123,7 @@ async function main() {
 }
 
 function readProjectWorkflow() {
-  return fs.readFileSync(path.join(PROJECT_ASSET_ROOT, 'workflow.md'), 'utf8')
+  return readTemplateFile('trellis/workflow.md')
 }
 
 function readVersion(projectRoot) {

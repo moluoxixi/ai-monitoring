@@ -41,7 +41,7 @@ If the formal Phase 1 flow also needs to change, synchronize the Phase 1 section
 
 ## Example: One Platform Does Not Use Sub-Agents
 
-If the user wants only one platform to avoid sub-agents, first confirm whether that platform has a separate group in the workflow. Then change Phase 2 routing for that platform group instead of deleting all `moluoxixi-implement` / `moluoxixi-check` instructions across platforms.
+If the user wants only one platform to avoid sub-agents, first confirm whether that platform has a separate group in the workflow. Then change Phase 2 routing for that platform group instead of deleting all `moluoxixi-implement` / `check` instructions across platforms.
 
 ## `/moluoxixi:continue` Route Table
 
@@ -54,7 +54,7 @@ If the user wants only one platform to avoid sub-agents, first confirm whether t
 | `planning` | complex task missing `design.md` or `implement.md` | complete missing planning artifacts |
 | `planning` | complex task has `prd.md`, `design.md`, and `implement.md` | ask for start review, then run `task.py start` |
 | `in_progress` | no implementation in conversation history | Phase 2.1 (`moluoxixi-implement`) |
-| `in_progress` | implementation done, no `moluoxixi-check` run | Phase 2.2 (`moluoxixi-check`) |
+| `in_progress` | implementation done, no `check` run | Phase 2.2 (`check`) |
 | `in_progress` | check passed | Phase 3.3 (spec update) → 3.4 (commit) |
 | `completed` | task is still in active tree | Phase 3.5 (run `/moluoxixi:finish-work` to archive) |
 

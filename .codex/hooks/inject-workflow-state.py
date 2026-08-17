@@ -17,12 +17,13 @@ missing or a tag is absent, the breadcrumb degrades to a generic
 "Refer to workflow.md for current step." line so users see (and fix)
 the broken state instead of the hook silently masking it.
 
-Shared across all hook-capable platforms (Claude, Cursor, Codex, Qoder,
-CodeBuddy, Droid, Gemini, Copilot, Kiro). Kiro wires this via the CLI
+Which platforms receive this hook is defined by ``CORE_HOOKS`` in
+``scripts/hosts/catalog.mjs``. The initializer projects this canonical file
+through ``buildPlan()`` instead of duplicating per-host implementations. Kiro
+wires it via the CLI
 custom agent's ``hooks.userPromptSubmit`` and the IDE ``.kiro.hook``
 ``promptSubmit`` event; its output branch emits a plain-text breadcrumb
-(Kiro adds hook stdout directly to the conversation context). Written to
-each platform's hooks directory via writeSharedHooks() at init time.
+(Kiro adds hook stdout directly to the conversation context).
 
 Silent exit 0 cases (no output):
   - No .moluoxixi/ directory found (not a Moluoxixi project)
@@ -93,7 +94,7 @@ def _detect_platform(input_data: dict) -> str | None:
     if isinstance(input_data.get("cursor_version"), str):
         return "cursor"
     env_map = {
-        "CLAUDE_PROJECT_DIR": "claude",
+        "ZCODE_PROJECT_DIR": "zcode",
         "CURSOR_PROJECT_DIR": "cursor",
         "CODEBUDDY_PROJECT_DIR": "codebuddy",
         "FACTORY_PROJECT_DIR": "droid",
@@ -102,6 +103,8 @@ def _detect_platform(input_data: dict) -> str | None:
         "KIRO_PROJECT_DIR": "kiro",
         "COPILOT_PROJECT_DIR": "copilot",
         "TRAE_PROJECT_DIR": "trae",
+        # Compatibility alias shared by several hosts; check it last.
+        "CLAUDE_PROJECT_DIR": "claude",
     }
     for env_name, platform in env_map.items():
         if os.environ.get(env_name):
@@ -219,27 +222,52 @@ def _read_moluoxixi_config(root: Path) -> dict:
     except Exception:
         return {}
 
+DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD = "no-moluoxixi"
+
+def _resolve_skip_keyword(config: dict) -> str:
+    """Read ``prompt_injection.skip_keyword`` from parsed project config."""
+    if isinstance(config, dict):
+        section = config.get("prompt_injection")
+        if isinstance(section, dict):
+            raw = section.get("skip_keyword", DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD)
+            if isinstance(raw, str):
+                return raw
+    return DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD
+
+def prompt_has_skip_keyword(prompt: str, keyword: str) -> bool:
+    """Match a case-insensitive standalone keyword; an empty value disables it."""
+    if not keyword or not isinstance(prompt, str):
+        return False
+    pattern = r"(?<![\w-])" + re.escape(keyword) + r"(?![\w-])"
+    return re.search(pattern, prompt, re.IGNORECASE) is not None
+
 def _codex_mode_banner(config: dict) -> str:
     """Emit a `<codex-mode>` banner for the additionalContext payload.
 
-    Reads `codex.dispatch_mode` from .moluoxixi/config.yaml; defaults to
-    `inline` when missing or invalid because Codex sub-agents run with
-    `fork_turns="none"` isolation and can't inherit the parent session's
-    task context. The banner makes the active mode explicit to Codex AI
-    per turn, complementing the workflow-state body which is per-status.
-    Mode tells AI which dispatch protocol to follow; workflow-state tells
-    AI what step it's at.
+    Reads `codex.dispatch_mode` from .moluoxixi/config.yaml. Moluoxixi defaults
+    to `auto` because its native SubagentStart hook supplies task context;
+    `inline` is the explicit opt-out and `sub-agent` is a compatibility alias
+    for `auto`. Invalid explicit values fail closed to `inline`. The banner
+    makes the active mode explicit to Codex AI per turn, complementing the
+    workflow-state body which is per-status.
     """
-    mode = "inline"
+    mode = "auto"
     if isinstance(config, dict):
         codex_cfg = config.get("codex")
-        if isinstance(codex_cfg, dict):
-            cfg_mode = codex_cfg.get("dispatch_mode")
-            if cfg_mode in ("inline", "sub-agent"):
-                mode = cfg_mode
-    if mode == "sub-agent":
+        if codex_cfg is not None:
+            if not isinstance(codex_cfg, dict):
+                mode = "inline"
+            else:
+                cfg_mode = str(codex_cfg.get("dispatch_mode", mode)).strip().lower()
+                if cfg_mode == "inline":
+                    mode = "inline"
+                elif cfg_mode in ("auto", "sub-agent"):
+                    mode = "auto"
+                else:
+                    mode = "inline"
+    if mode == "auto":
         meaning = (
-            "sub-agent: implement/check work defaults to Moluoxixi sub-agents; "
+            "auto: implement/check work defaults to Moluoxixi sub-agents; "
             "the main session still coordinates, clarifies, updates specs, commits, and finishes."
         )
     else:
@@ -254,23 +282,29 @@ def resolve_breadcrumb_key(
 ) -> str:
     """Pick the breadcrumb tag key based on Codex dispatch_mode.
 
-    Codex defaults to ``inline`` because sub-agents run with ``fork_turns="none"``
-    isolation and can't inherit the parent session's task context. Users can
-    opt into ``codex.dispatch_mode: sub-agent`` in ``.moluoxixi/config.yaml``
-    to use the parallel ``<status>-inline`` tag → ``<status>`` flip. Invalid
-    or missing values fall back to inline.
+    Codex defaults to ``auto`` because Moluoxixi's native SubagentStart hook
+    supplies task context. ``inline`` is an explicit opt-out and ``sub-agent``
+    is a backwards-compatible alias for ``auto``. Invalid explicit values fall
+    back to inline.
 
     Non-codex platforms return the plain status unchanged.
     """
     if platform == "codex":
-        mode = "inline"
+        mode = "auto"
         if isinstance(config, dict):
             codex_cfg = config.get("codex")
-            if isinstance(codex_cfg, dict):
-                cfg_mode = codex_cfg.get("dispatch_mode")
-                if cfg_mode in ("inline", "sub-agent"):
-                    mode = cfg_mode
-        return f"{status}-inline" if mode == "inline" else status
+            if codex_cfg is not None:
+                if not isinstance(codex_cfg, dict):
+                    mode = "inline"
+                else:
+                    cfg_mode = str(codex_cfg.get("dispatch_mode", mode)).strip().lower()
+                    if cfg_mode == "inline":
+                        mode = "inline"
+                    elif cfg_mode in ("auto", "sub-agent"):
+                        mode = "auto"
+                    else:
+                        mode = "inline"
+        return status if mode == "auto" else f"{status}-inline"
     return status
 
 def build_breadcrumb(
@@ -349,9 +383,12 @@ def main() -> int:
     if root is None:
         return 0  # not a Moluoxixi project
 
+    config = _read_moluoxixi_config(root)
+    if prompt_has_skip_keyword(data.get("prompt", ""), _resolve_skip_keyword(config)):
+        return 0
+
     templates = load_breadcrumbs(root)
     platform = _detect_platform(data)
-    config = _read_moluoxixi_config(root)
     task = get_active_task(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward

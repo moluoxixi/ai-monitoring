@@ -24,7 +24,7 @@ Each phase contains numbered steps, such as `1.3 Configure context`. These numbe
 
 `workflow.md` separates routing by platform capability:
 
-- Platforms with sub-agent support: dispatch `moluoxixi-implement` by default for implementation and `moluoxixi-check` for checking.
+- Platforms with sub-agent support: dispatch `moluoxixi-implement` by default for implementation and `check` for checking.
 - Platforms without sub-agent support: the main session reads skills such as `before-dev`, then executes directly.
 
 When changing local AI behavior, update the routing descriptions in `workflow.md` first, then check whether the corresponding platform skill, command, or agent files need to stay in sync.

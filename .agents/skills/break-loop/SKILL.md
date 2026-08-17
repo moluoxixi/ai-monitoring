@@ -1,6 +1,6 @@
 ---
 name: break-loop
-description: "Deep bug analysis to break the fix-forget-repeat cycle. Analyzes root cause category, why fixes failed, prevention mechanisms, and captures knowledge into specs. Use after fixing a bug to prevent the same class of bugs."
+description: "Deep bug analysis to break the fix-forget-repeat cycle. Analyzes root cause, failed fixes, prevention mechanisms, and prepares reusable knowledge for human review."
 ---
 
 # Break the Loop - Deep Bug Analysis

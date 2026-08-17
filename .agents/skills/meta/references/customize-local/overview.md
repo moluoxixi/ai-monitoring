@@ -1,6 +1,6 @@
 # Local Customization Overview
 
-This directory is for an AI working in a project initialized by the `init-project` skill. Modify generated `.moluoxixi/` and platform directories inside the project; do not install or edit an upstream Moluoxixi package.
+This directory is for local AI working in a user project where Moluoxixi was installed through npm and `moluoxixi init` has already been run. The AI should modify generated `.moluoxixi/` and platform directories inside the project, not Moluoxixi CLI upstream source code.
 
 ## First Determine What The User Actually Wants To Change
 
@@ -37,17 +37,19 @@ This directory is for an AI working in a project initialized by the `init-projec
 
 ## Things Not To Do By Default
 
-- Do not edit `.moluoxixi/runtime/` unless the request is specifically about runtime implementation.
+- Do not edit the global npm install directory.
+- Do not edit `node_modules/@mindfoldhq/moluoxixi`.
 - Do not assume the user has the Moluoxixi GitHub repository.
 - Do not overwrite local files already modified by the user with default templates.
 - Do not put team project rules into public `meta`; project rules belong in `.moluoxixi/spec/` or a local skill.
 
-## When To Inspect Role Source
+## When To Inspect Upstream Source
 
 Switch to an upstream source-code perspective only when the user explicitly expresses one of these goals:
 
-- "I want to change the Moluoxixi role"
-- "I want to modify init-project or update generation"
-- "I want to change the migrated channel or memory runtime"
+- "I want to open a PR to Moluoxixi"
+- "I want to change npm package publish contents"
+- "I want to fork Moluoxixi"
+- "I want to modify the generation logic for `moluoxixi init/update`"
 
 Otherwise, default to modifying local Moluoxixi files inside the user project.

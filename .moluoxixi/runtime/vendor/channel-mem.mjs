@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { createRequire as __airulesCreateRequire } from 'node:module'; const require = __airulesCreateRequire(import.meta.url);
+import { createRequire } from "node:module"; const require = createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -965,8 +965,8 @@ var require_command = __commonJS({
   "node_modules/.pnpm/commander@12.1.0/node_modules/commander/lib/command.js"(exports) {
     var EventEmitter = __require("node:events").EventEmitter;
     var childProcess = __require("node:child_process");
-    var path21 = __require("node:path");
-    var fs29 = __require("node:fs");
+    var path23 = __require("node:path");
+    var fs33 = __require("node:fs");
     var process3 = __require("node:process");
     var { Argument: Argument2, humanReadableArgName } = require_argument();
     var { CommanderError: CommanderError2 } = require_error();
@@ -1898,11 +1898,11 @@ Expecting one of '${allowedValues.join("', '")}'`);
         let launchWithNode = false;
         const sourceExt = [".js", ".ts", ".tsx", ".mjs", ".cjs"];
         function findFile(baseDir, baseName) {
-          const localBin = path21.resolve(baseDir, baseName);
-          if (fs29.existsSync(localBin)) return localBin;
-          if (sourceExt.includes(path21.extname(baseName))) return void 0;
+          const localBin = path23.resolve(baseDir, baseName);
+          if (fs33.existsSync(localBin)) return localBin;
+          if (sourceExt.includes(path23.extname(baseName))) return void 0;
           const foundExt = sourceExt.find(
-            (ext) => fs29.existsSync(`${localBin}${ext}`)
+            (ext) => fs33.existsSync(`${localBin}${ext}`)
           );
           if (foundExt) return `${localBin}${foundExt}`;
           return void 0;
@@ -1914,21 +1914,21 @@ Expecting one of '${allowedValues.join("', '")}'`);
         if (this._scriptPath) {
           let resolvedScriptPath;
           try {
-            resolvedScriptPath = fs29.realpathSync(this._scriptPath);
+            resolvedScriptPath = fs33.realpathSync(this._scriptPath);
           } catch (err) {
             resolvedScriptPath = this._scriptPath;
           }
-          executableDir = path21.resolve(
-            path21.dirname(resolvedScriptPath),
+          executableDir = path23.resolve(
+            path23.dirname(resolvedScriptPath),
             executableDir
           );
         }
         if (executableDir) {
           let localFile = findFile(executableDir, executableFile);
           if (!localFile && !subcommand._executableFile && this._scriptPath) {
-            const legacyName = path21.basename(
+            const legacyName = path23.basename(
               this._scriptPath,
-              path21.extname(this._scriptPath)
+              path23.extname(this._scriptPath)
             );
             if (legacyName !== this._name) {
               localFile = findFile(
@@ -1939,7 +1939,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
           }
           executableFile = localFile || executableFile;
         }
-        launchWithNode = sourceExt.includes(path21.extname(executableFile));
+        launchWithNode = sourceExt.includes(path23.extname(executableFile));
         let proc;
         if (process3.platform !== "win32") {
           if (launchWithNode) {
@@ -2779,7 +2779,7 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @return {Command}
        */
       nameFromFilename(filename) {
-        this._name = path21.basename(filename, path21.extname(filename));
+        this._name = path23.basename(filename, path23.extname(filename));
         return this;
       }
       /**
@@ -2793,9 +2793,9 @@ Expecting one of '${allowedValues.join("', '")}'`);
        * @param {string} [path]
        * @return {(string|null|Command)}
        */
-      executableDir(path22) {
-        if (path22 === void 0) return this._executableDir;
-        this._executableDir = path22;
+      executableDir(path24) {
+        if (path24 === void 0) return this._executableDir;
+        this._executableDir = path24;
         return this;
       }
       /**
@@ -3392,9 +3392,9 @@ function stringEncaseCRLFWithFirstIndex(string, prefix, postfix, index) {
 
 // node_modules/.pnpm/chalk@5.6.2/node_modules/chalk/source/index.js
 var { stdout: stdoutColor, stderr: stderrColor } = supports_color_default;
-var GENERATOR = Symbol("GENERATOR");
-var STYLER = Symbol("STYLER");
-var IS_EMPTY = Symbol("IS_EMPTY");
+var GENERATOR = /* @__PURE__ */ Symbol("GENERATOR");
+var STYLER = /* @__PURE__ */ Symbol("STYLER");
+var IS_EMPTY = /* @__PURE__ */ Symbol("IS_EMPTY");
 var levelMapping = [
   "ansi",
   "ansi",
@@ -3537,7 +3537,7 @@ var chalk = createChalk();
 var chalkStderr = createChalk({ level: stderrColor ? stderrColor.level : 0 });
 var source_default = chalk;
 
-// packages/cli/src/commands/channel/adapters/claude.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/adapters/claude.ts
 function summarizeInput(input, max = 120) {
   if (input === null || input === void 0) return "";
   let s;
@@ -3706,13 +3706,14 @@ function buildClaudeArgs(opts) {
   return args;
 }
 
-// packages/cli/src/commands/channel/adapters/codex.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/adapters/codex.ts
 function createCodexCtx() {
   return {
     pending: /* @__PURE__ */ new Map(),
     items: /* @__PURE__ */ new Map(),
     finalMessageSeen: false,
     pendingDone: false,
+    terminalErrorSeen: false,
     nextId: 1
   };
 }
@@ -3843,13 +3844,49 @@ function handleNotification(msg, ctx) {
       return handleItemCompleted(msg, ctx);
     case "item/agentMessage/delta":
       return handleAgentMessageDelta(msg, ctx);
-    case "turn/completed":
+    case "turn/completed": {
+      const turn = isObject(msg.params?.turn) ? msg.params.turn : void 0;
+      if (turn?.status === "failed") {
+        ctx.pendingDone = false;
+        if (ctx.terminalErrorSeen) return { events: [] };
+        ctx.terminalErrorSeen = true;
+        return {
+          events: [
+            {
+              kind: "error",
+              payload: {
+                message: errorMessage(turn.error, "Codex turn failed")
+              }
+            }
+          ]
+        };
+      }
+      if (ctx.terminalErrorSeen) return { events: [] };
       if (ctx.finalMessageSeen) {
         ctx.pendingDone = false;
         return { events: [{ kind: "done", payload: {} }] };
       }
       ctx.pendingDone = true;
       return { events: [] };
+    }
+    case "error": {
+      const params = msg.params ?? {};
+      const message = errorMessage(params.error, "Codex app-server error");
+      if (params.willRetry === true) {
+        return {
+          events: [
+            {
+              kind: "progress",
+              payload: { detail: { kind: "warning", message } }
+            }
+          ]
+        };
+      }
+      if (ctx.terminalErrorSeen) return { events: [] };
+      ctx.terminalErrorSeen = true;
+      ctx.pendingDone = false;
+      return { events: [{ kind: "error", payload: { message } }] };
+    }
     case "turn/aborted":
       return {
         events: [{ kind: "error", payload: { message: "turn aborted" } }]
@@ -4123,6 +4160,13 @@ function classifyAgentMessageDelta(meta) {
 function isObject(x) {
   return typeof x === "object" && x !== null && !Array.isArray(x);
 }
+function errorMessage(error, fallback) {
+  if (typeof error === "string" && error.trim()) return error;
+  if (isObject(error) && typeof error.message === "string" && error.message.trim()) {
+    return error.message;
+  }
+  return fallback;
+}
 function encodeCodexRequest(ctx, method, params, label = "other") {
   const id = ctx.nextId++;
   ctx.pending.set(id, label);
@@ -4137,6 +4181,7 @@ function encodeCodexUserMessage(ctx, text) {
   }
   ctx.finalMessageSeen = false;
   ctx.pendingDone = false;
+  ctx.terminalErrorSeen = false;
   return encodeCodexRequest(
     ctx,
     "turn/start",
@@ -4158,12 +4203,28 @@ function buildCodexArgs(opts) {
   if (opts.model) args.push("-c", `model="${opts.model}"`);
   return args;
 }
-function buildCodexThreadStartParams(cwd, systemPrompt) {
+var CODEX_SANDBOX_MODES = /* @__PURE__ */ new Set([
+  "read-only",
+  "workspace-write",
+  "danger-full-access"
+]);
+function parseCodexSandboxMode(v) {
+  if (v === void 0) return void 0;
+  if (!CODEX_SANDBOX_MODES.has(v)) {
+    throw new Error(
+      `Invalid --sandbox '${v}'. Must be one of: ${[...CODEX_SANDBOX_MODES].join(", ")}`
+    );
+  }
+  return v;
+}
+function buildCodexThreadStartParams(cwd, systemPrompt, sandbox) {
   const params = {
     cwd,
     // MVP: aggressive permissive defaults to avoid getting stuck mid-turn.
     approvalPolicy: "never",
-    sandbox: "workspace-write",
+    // Default stays workspace-write; callers (channel spawn --sandbox) may
+    // override to match the user's main-session Codex permissions (#413).
+    sandbox: sandbox ?? "workspace-write",
     // Disable codex native multi-agent so spawned worker can't recurse into
     // its own sub-agents (would conflict with channel's collaboration layer
     // and reproduce issue #234/#237 recursion).
@@ -4180,7 +4241,7 @@ function buildCodexThreadStartParams(cwd, systemPrompt) {
   return params;
 }
 
-// packages/cli/src/commands/channel/adapters/index.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/adapters/index.ts
 var claudeAdapter = {
   provider: "claude",
   buildArgs(view) {
@@ -4219,7 +4280,7 @@ var codexAdapter = {
       ctx,
       "initialize",
       {
-        clientInfo: { name: "channel", version: "0.1" },
+        clientInfo: { name: "moluoxixi-channel", version: "0.1" },
         capabilities: {}
       },
       "initialize"
@@ -4229,7 +4290,7 @@ var codexAdapter = {
     const ts = encodeCodexRequest(
       ctx,
       "thread/start",
-      buildCodexThreadStartParams(view.cwd, view.systemPrompt),
+      buildCodexThreadStartParams(view.cwd, view.systemPrompt, view.sandbox),
       "thread/start"
     );
     child.stdin.write(ts.line);
@@ -4279,7 +4340,7 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// packages/core/dist/channel/internal/store/schema.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/schema.ts
 import path from "node:path";
 var GLOBAL_PROJECT_KEY = "_global";
 var INBOX_POLICIES = /* @__PURE__ */ new Set([
@@ -4287,10 +4348,11 @@ var INBOX_POLICIES = /* @__PURE__ */ new Set([
   "broadcastAndExplicit"
 ]);
 function parseInboxPolicy(v) {
-  if (v === void 0)
-    return void 0;
+  if (v === void 0) return void 0;
   if (!INBOX_POLICIES.has(v)) {
-    throw new Error(`Invalid inbox policy '${v}'. Must be one of: ${[...INBOX_POLICIES].join(", ")}`);
+    throw new Error(
+      `Invalid inbox policy '${v}'. Must be one of: ${[...INBOX_POLICIES].join(", ")}`
+    );
   }
   return v;
 }
@@ -4314,16 +4376,14 @@ var EVENT_ORIGINS = /* @__PURE__ */ new Set([
   "worker"
 ]);
 function parseChannelScope(v) {
-  if (v === void 0)
-    return void 0;
+  if (v === void 0) return void 0;
   if (v !== "project" && v !== "global") {
     throw new Error("Invalid --scope. Must be one of: project, global");
   }
   return v;
 }
 function parseChannelType(v) {
-  if (v === void 0)
-    return "chat";
+  if (v === void 0) return "chat";
   if (v === "thread" || v === "threads") {
     throw new Error(`Invalid --type '${v}'. Use '--type forum'.`);
   }
@@ -4334,24 +4394,28 @@ function parseChannelType(v) {
 }
 function parseThreadAction(v) {
   if (!THREAD_ACTIONS.has(v)) {
-    throw new Error(`Invalid thread action '${v}'. Must be one of: ${[...THREAD_ACTIONS].join(", ")}`);
+    throw new Error(
+      `Invalid thread action '${v}'. Must be one of: ${[...THREAD_ACTIONS].join(", ")}`
+    );
   }
   return v;
 }
 function parseEventOrigin(v) {
-  if (v === void 0)
-    return void 0;
+  if (v === void 0) return void 0;
   if (!EVENT_ORIGINS.has(v)) {
-    throw new Error(`Invalid origin '${v}'. Must be one of: ${[...EVENT_ORIGINS].join(", ")}`);
+    throw new Error(
+      `Invalid origin '${v}'. Must be one of: ${[...EVENT_ORIGINS].join(", ")}`
+    );
   }
   return v;
 }
 function normalizeThreadKey(v) {
   const trimmed = v.trim();
-  if (!trimmed)
-    throw new Error("Thread key must not be empty");
+  if (!trimmed) throw new Error("Thread key must not be empty");
   if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) {
-    throw new Error("Thread key may only contain letters, numbers, '.', '_' and '-'");
+    throw new Error(
+      "Thread key may only contain letters, numbers, '.', '_' and '-'"
+    );
   }
   return trimmed;
 }
@@ -4373,21 +4437,16 @@ function buildContextEntries(files, raw) {
   return entries.length > 0 ? entries : void 0;
 }
 function asStringArray(value) {
-  if (!Array.isArray(value))
-    return void 0;
+  if (!Array.isArray(value)) return void 0;
   return value.filter((item) => typeof item === "string");
 }
 function asContextEntries(value) {
-  if (!Array.isArray(value))
-    return void 0;
+  if (!Array.isArray(value)) return void 0;
   const entries = value.filter((entry) => {
-    if (!entry || typeof entry !== "object")
-      return false;
+    if (!entry || typeof entry !== "object") return false;
     const candidate = entry;
-    if (candidate.type === "file")
-      return typeof candidate.path === "string";
-    if (candidate.type === "raw")
-      return typeof candidate.text === "string";
+    if (candidate.type === "file") return typeof candidate.path === "string";
+    if (candidate.type === "raw") return typeof candidate.text === "string";
     return false;
   });
   return entries.length > 0 ? entries : void 0;
@@ -4396,11 +4455,11 @@ function contextEntryKey(entry) {
   return entry.type === "file" ? `file:${entry.path}` : `raw:${entry.text}`;
 }
 
-// packages/core/dist/channel/internal/store/events.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/events.ts
 import fs4 from "node:fs";
 import fsp2 from "node:fs/promises";
 
-// packages/core/dist/channel/internal/store/lock.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/lock.ts
 import fs from "node:fs";
 import path2 from "node:path";
 var DEFAULT_RETRY_INTERVAL_MS = 25;
@@ -4416,13 +4475,13 @@ async function acquireLock(lockFile, opts = {}) {
       fs.closeSync(fd);
       return;
     } catch (err) {
-      if (err.code !== "EEXIST")
-        throw err;
+      if (err.code !== "EEXIST") throw err;
     }
-    if (await checkAndStealStale(lockFile))
-      continue;
+    if (await checkAndStealStale(lockFile)) continue;
     if (Date.now() >= deadline) {
-      throw new Error(`Failed to acquire lock ${lockFile} within ${opts.maxWaitMs ?? DEFAULT_MAX_WAIT_MS}ms`);
+      throw new Error(
+        `Failed to acquire lock ${lockFile} within ${opts.maxWaitMs ?? DEFAULT_MAX_WAIT_MS}ms`
+      );
     }
     await sleep2(interval);
   }
@@ -4454,8 +4513,10 @@ async function checkAndStealStale(lockFile) {
   if (!holderPid || !pidAlive(holderPid)) {
     try {
       fs.unlinkSync(lockFile);
-      process.stderr.write(`[channel lock] stale lock from dead pid ${holderPid} stolen at ${lockFile}
-`);
+      process.stderr.write(
+        `[channel lock] stale lock from dead pid ${holderPid} stolen at ${lockFile}
+`
+      );
       return true;
     } catch {
       return false;
@@ -4475,14 +4536,13 @@ function sleep2(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// packages/core/dist/channel/internal/store/paths.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/paths.ts
 import fs2 from "node:fs";
 import os2 from "node:os";
 import path3 from "node:path";
 function channelRoot() {
   const env2 = process.env.MOLUOXIXI_CHANNEL_ROOT;
-  if (env2 && env2.length > 0)
-    return path3.resolve(env2);
+  if (env2 && env2.length > 0) return path3.resolve(env2);
   return path3.join(os2.homedir(), ".moluoxixi", "channels");
 }
 function projectKey(cwd) {
@@ -4492,8 +4552,7 @@ function projectKey(cwd) {
 }
 function currentProjectKey() {
   const env2 = process.env.MOLUOXIXI_CHANNEL_PROJECT;
-  if (env2 && env2.length > 0)
-    return env2;
+  if (env2 && env2.length > 0) return env2;
   return projectKey(process.cwd());
 }
 function projectDir(project = currentProjectKey()) {
@@ -4506,7 +4565,9 @@ function isSafeName(name) {
 }
 function assertSafeName(name, kind = "channel") {
   if (!isSafeName(name)) {
-    throw new Error(`Invalid ${kind} name: ${JSON.stringify(name)}. Names may only contain letters, digits, '.', '_' and '-'.`);
+    throw new Error(
+      `Invalid ${kind} name: ${JSON.stringify(name)}. Names may only contain letters, digits, '.', '_' and '-'.`
+    );
   }
 }
 function channelDir(name, project = currentProjectKey()) {
@@ -4524,8 +4585,7 @@ function lockPath(name, project = currentProjectKey()) {
 }
 function migrateLegacyChannels() {
   const root = channelRoot();
-  if (!fs2.existsSync(root))
-    return;
+  if (!fs2.existsSync(root)) return;
   const legacy = path3.join(root, "_legacy");
   let moved = 0;
   let entries;
@@ -4535,8 +4595,7 @@ function migrateLegacyChannels() {
     return;
   }
   for (const entry of entries) {
-    if (entry === "_legacy" || entry === "_default")
-      continue;
+    if (entry === "_legacy" || entry === "_default") continue;
     const dir = path3.join(root, entry);
     let stat;
     try {
@@ -4544,27 +4603,28 @@ function migrateLegacyChannels() {
     } catch {
       continue;
     }
-    if (!stat.isDirectory())
-      continue;
-    if (fs2.existsSync(path3.join(dir, BUCKET_MARKER)))
-      continue;
-    if (!fs2.existsSync(path3.join(dir, "events.jsonl")))
-      continue;
+    if (!stat.isDirectory()) continue;
+    if (fs2.existsSync(path3.join(dir, BUCKET_MARKER))) continue;
+    if (!fs2.existsSync(path3.join(dir, "events.jsonl"))) continue;
     fs2.mkdirSync(legacy, { recursive: true });
     const target = path3.join(legacy, entry);
     try {
       fs2.renameSync(dir, target);
       moved++;
     } catch (err) {
-      process.stderr.write(`[channel migrate] failed to move ${entry} to _legacy/: ${err instanceof Error ? err.message : err}
-`);
+      process.stderr.write(
+        `[channel migrate] failed to move ${entry} to _legacy/: ${err instanceof Error ? err.message : err}
+`
+      );
     }
   }
   if (moved > 0) {
     fs2.mkdirSync(legacy, { recursive: true });
     fs2.writeFileSync(path3.join(legacy, BUCKET_MARKER), "");
-    process.stderr.write(`[channel migrate] moved ${moved} legacy channel(s) to ${legacy}
-`);
+    process.stderr.write(
+      `[channel migrate] moved ${moved} legacy channel(s) to ${legacy}
+`
+    );
   }
 }
 function ensureBucketMarker(project) {
@@ -4577,14 +4637,12 @@ function ensureBucketMarker(project) {
 }
 function listProjects() {
   const root = channelRoot();
-  if (!fs2.existsSync(root))
-    return [];
+  if (!fs2.existsSync(root)) return [];
   const out = [];
   for (const entry of fs2.readdirSync(root)) {
     const dir = path3.join(root, entry);
     try {
-      if (!fs2.statSync(dir).isDirectory())
-        continue;
+      if (!fs2.statSync(dir).isDirectory()) continue;
     } catch {
       continue;
     }
@@ -4609,7 +4667,9 @@ function resolveExistingChannelRef(name, opts = {}) {
   if (opts.scope) {
     const project = opts.scope === "global" ? GLOBAL_PROJECT_KEY : opts.cwd ? projectKey(opts.cwd) : currentProjectKey();
     if (!fs2.existsSync(eventsPath(name, project))) {
-      throw new Error(`Channel '${name}' not found in ${opts.scope} scope (${project})`);
+      throw new Error(
+        `Channel '${name}' not found in ${opts.scope} scope (${project})`
+      );
     }
     process.env.MOLUOXIXI_CHANNEL_PROJECT = project;
     return { name, scope: opts.scope, project, dir: channelDir(name, project) };
@@ -4618,7 +4678,9 @@ function resolveExistingChannelRef(name, opts = {}) {
   const projectMatches = listProjects().filter((project) => project !== GLOBAL_PROJECT_KEY).filter((project) => fs2.existsSync(eventsPath(name, project)));
   const globalExists = fs2.existsSync(eventsPath(name, GLOBAL_PROJECT_KEY));
   if (globalExists && projectMatches.length > 0) {
-    throw new Error(`Channel '${name}' exists in global and project scopes. Use --scope global or --scope project.`);
+    throw new Error(
+      `Channel '${name}' exists in global and project scopes. Use --scope global or --scope project.`
+    );
   }
   if (globalExists) {
     process.env.MOLUOXIXI_CHANNEL_PROJECT = GLOBAL_PROJECT_KEY;
@@ -4648,30 +4710,30 @@ function resolveExistingChannelRef(name, opts = {}) {
     };
   }
   if (projectMatches.length > 1) {
-    throw new Error(`Channel '${name}' exists in multiple project buckets: ${projectMatches.join(", ")}. Run from the owning project cwd or use --scope.`);
+    throw new Error(
+      `Channel '${name}' exists in multiple project buckets: ${projectMatches.join(", ")}. Run from the owning project cwd or use --scope.`
+    );
   }
-  throw new Error(`Channel '${name}' not found in current project bucket (${current}) or any known scope`);
+  throw new Error(
+    `Channel '${name}' not found in current project bucket (${current}) or any known scope`
+  );
 }
 
-// packages/core/dist/channel/internal/store/seq.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/seq.ts
 import fs3 from "node:fs";
 import fsp from "node:fs/promises";
 import path4 from "node:path";
 var READ_TAIL_BYTES = 4096;
 function parseSidecar(text) {
   const trimmed = text.trim();
-  if (!trimmed)
-    return null;
-  if (!/^[0-9]+$/.test(trimmed))
-    return null;
+  if (!trimmed) return null;
+  if (!/^[0-9]+$/.test(trimmed)) return null;
   const n = Number(trimmed);
-  if (!Number.isFinite(n) || n < 0)
-    return null;
+  if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
 async function readSidecar(sidecarPath) {
-  if (!fs3.existsSync(sidecarPath))
-    return null;
+  if (!fs3.existsSync(sidecarPath)) return null;
   try {
     const text = await fsp.readFile(sidecarPath, "utf-8");
     return parseSidecar(text);
@@ -4680,23 +4742,20 @@ async function readSidecar(sidecarPath) {
   }
 }
 async function readLastJsonlSeq(jsonlPath) {
-  if (!fs3.existsSync(jsonlPath))
-    return 0;
+  if (!fs3.existsSync(jsonlPath)) return 0;
   let stat;
   try {
     stat = await fsp.stat(jsonlPath);
   } catch {
     return 0;
   }
-  if (stat.size === 0)
-    return 0;
+  if (stat.size === 0) return 0;
   const seqFromBuffer = (buf) => {
     const text2 = buf.toString("utf-8");
     const lines = text2.split("\n");
     for (let i = lines.length - 1; i >= 0; i--) {
       const line = lines[i].trim();
-      if (!line)
-        continue;
+      if (!line) continue;
       try {
         const parsed = JSON.parse(line);
         if (typeof parsed.seq === "number" && Number.isFinite(parsed.seq)) {
@@ -4720,16 +4779,14 @@ async function readLastJsonlSeq(jsonlPath) {
     }
     if (usable.length > 0) {
       const found2 = seqFromBuffer(usable);
-      if (found2 !== null)
-        return found2;
+      if (found2 !== null) return found2;
     }
   } finally {
     await fh.close();
   }
   const text = await fsp.readFile(jsonlPath, "utf-8");
   const found = seqFromBuffer(Buffer.from(text));
-  if (found !== null)
-    return found;
+  if (found !== null) return found;
   if (text.split("\n").some((line) => line.trim() !== "")) {
     throw new Error(`Unable to recover channel seq from ${jsonlPath}`);
   }
@@ -4752,7 +4809,7 @@ async function writeSidecar(sidecarPath, seq) {
   await fsp.rename(tmp, sidecarPath);
 }
 
-// packages/core/dist/channel/internal/store/events.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/events.ts
 var CHANNEL_EVENT_KINDS = /* @__PURE__ */ new Set([
   "create",
   "join",
@@ -4777,27 +4834,24 @@ var CHANNEL_EVENT_KINDS = /* @__PURE__ */ new Set([
   "supervisor_warning"
 ]);
 function parseChannelKind(v) {
-  if (v === void 0)
-    return void 0;
+  if (v === void 0) return void 0;
   if (!CHANNEL_EVENT_KINDS.has(v)) {
-    throw new Error(`Invalid --kind '${v}'. Must be one of: ${[...CHANNEL_EVENT_KINDS].join(", ")}`);
+    throw new Error(
+      `Invalid --kind '${v}'. Must be one of: ${[...CHANNEL_EVENT_KINDS].join(", ")}`
+    );
   }
   return v;
 }
 function parseChannelKinds(v) {
-  if (v === void 0)
-    return void 0;
+  if (v === void 0) return void 0;
   const parts = v.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
-  if (parts.length === 0)
-    return void 0;
+  if (parts.length === 0) return void 0;
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   for (const part of parts) {
     const parsed = parseChannelKind(part);
-    if (parsed === void 0)
-      continue;
-    if (seen.has(parsed))
-      continue;
+    if (parsed === void 0) continue;
+    if (seen.has(parsed)) continue;
     seen.add(parsed);
     out.push(parsed);
   }
@@ -4827,8 +4881,7 @@ async function appendEvent(name, partial, project) {
   const sidecar = seqSidecarPath(name, project);
   return withLock(lockPath(name, project), async () => {
     const existing = findIdempotentEvent(jsonl, partial);
-    if (existing !== void 0)
-      return existing;
+    if (existing !== void 0) return existing;
     const lastSeq = await reconcileSeq(jsonl, sidecar);
     const event = {
       ...partial,
@@ -4842,13 +4895,13 @@ async function appendEvent(name, partial, project) {
 }
 function findIdempotentEvent(file, partial) {
   const key = partial.idempotencyKey;
-  if (key === void 0)
-    return void 0;
+  if (key === void 0) return void 0;
   for (const ev of readAllEvents(file)) {
-    if (ev.idempotencyKey !== key)
-      continue;
+    if (ev.idempotencyKey !== key) continue;
     if (ev.kind !== partial.kind) {
-      throw new Error(`Idempotency key '${key}' was already used for ${ev.kind}; cannot reuse it for ${partial.kind}`);
+      throw new Error(
+        `Idempotency key '${key}' was already used for ${ev.kind}; cannot reuse it for ${partial.kind}`
+      );
     }
     return ev;
   }
@@ -4870,13 +4923,11 @@ function validateEventBase(partial) {
 }
 var DEFAULT_CURSOR_PAGE_SIZE = 200;
 function readAllEvents(file) {
-  if (!fs4.existsSync(file))
-    return [];
+  if (!fs4.existsSync(file)) return [];
   const text = fs4.readFileSync(file, "utf-8");
   const events = [];
   for (const line of text.split("\n")) {
-    if (!line.trim())
-      continue;
+    if (!line.trim()) continue;
     try {
       events.push(JSON.parse(line));
     } catch {
@@ -4893,7 +4944,9 @@ async function readChannelEvents(name, project, pagination) {
   }
   const { afterSeq, beforeSeq, limit } = pagination;
   if (afterSeq !== void 0 && beforeSeq !== void 0) {
-    throw new Error("readChannelEvents: pass only one of afterSeq / beforeSeq");
+    throw new Error(
+      "readChannelEvents: pass only one of afterSeq / beforeSeq"
+    );
   }
   if (limit !== void 0 && (!Number.isInteger(limit) || limit < 0)) {
     throw new Error("readChannelEvents: limit must be a non-negative integer");
@@ -4911,25 +4964,21 @@ async function readChannelEvents(name, project, pagination) {
   return limit !== void 0 ? all.slice(Math.max(0, all.length - limit)) : all;
 }
 
-// packages/core/dist/channel/internal/store/inbox.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/inbox.ts
 var DEFAULT_INBOX_POLICY = "explicitOnly";
 function toList(to) {
-  if (to === void 0)
-    return [];
+  if (to === void 0) return [];
   return Array.isArray(to) ? to : [to];
 }
 function matchesInboxPolicy(ev, workerId, policy) {
-  if (ev.kind !== "message")
-    return false;
-  if (ev.by === workerId)
-    return false;
+  if (ev.kind !== "message") return false;
+  if (ev.by === workerId) return false;
   const targets = toList(ev.to);
-  if (targets.length > 0)
-    return targets.includes(workerId);
+  if (targets.length > 0) return targets.includes(workerId);
   return policy === "broadcastAndExplicit";
 }
 
-// packages/core/dist/channel/internal/store/worker-state.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/worker-state.ts
 var TERMINAL_LIFECYCLES = /* @__PURE__ */ new Set([
   "done",
   "error",
@@ -4959,8 +5008,7 @@ function identifyWorker(ev) {
     }
     case "killed": {
       const explicit = strField(ev, "worker") ?? strField(ev, "as");
-      if (explicit)
-        return { id: explicit, canCreate: true };
+      if (explicit) return { id: explicit, canCreate: true };
       const by = ev.by;
       if (by.startsWith("supervisor:")) {
         return { id: by.slice("supervisor:".length), canCreate: true };
@@ -4970,8 +5018,7 @@ function identifyWorker(ev) {
     case "done":
     case "error": {
       const explicit = strField(ev, "worker") ?? strField(ev, "as");
-      if (explicit)
-        return { id: explicit, canCreate: true };
+      if (explicit) return { id: explicit, canCreate: true };
       const by = ev.by;
       if (by.startsWith("supervisor:")) {
         return { id: by.slice("supervisor:".length), canCreate: true };
@@ -4999,12 +5046,10 @@ function reduceWorkerRegistry(events, channel) {
   const acc = /* @__PURE__ */ new Map();
   for (const ev of events) {
     const ident = identifyWorker(ev);
-    if (!ident)
-      continue;
+    if (!ident) continue;
     let w = acc.get(ident.id);
     if (!w) {
-      if (!ident.canCreate)
-        continue;
+      if (!ident.canCreate) continue;
       w = blankWorker(ident.id, ev);
       acc.set(ident.id, w);
     }
@@ -5109,10 +5154,8 @@ function reduceWorkerRegistry(events, channel) {
     }
     let pending = 0;
     for (const ev of events) {
-      if (ev.seq <= w.consumedInputSeq)
-        continue;
-      if (matchesInboxPolicy(ev, w.workerId, w.inboxPolicy))
-        pending++;
+      if (ev.seq <= w.consumedInputSeq) continue;
+      if (matchesInboxPolicy(ev, w.workerId, w.inboxPolicy)) pending++;
     }
     w.pendingMessageCount = pending;
   }
@@ -5120,8 +5163,7 @@ function reduceWorkerRegistry(events, channel) {
   for (const w of acc.values()) {
     const { consumedInputSeq: _drop, ...state } = w;
     void _drop;
-    if (channel)
-      state.channel = channel;
+    if (channel) state.channel = channel;
     workers.push(state);
   }
   workers.sort((a, b) => a.workerId.localeCompare(b.workerId));
@@ -5131,23 +5173,23 @@ function isTerminalLifecycle(lifecycle) {
   return TERMINAL_LIFECYCLES.has(lifecycle);
 }
 
-// packages/core/dist/channel/internal/store/delivery.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/delivery.ts
 var DELIVERY_MODES = /* @__PURE__ */ new Set([
   "appendOnly",
   "requireKnownWorker",
   "requireRunningWorker"
 ]);
 function parseDeliveryMode(v) {
-  if (v === void 0)
-    return void 0;
+  if (v === void 0) return void 0;
   if (!DELIVERY_MODES.has(v)) {
-    throw new Error(`Invalid delivery mode '${v}'. Must be one of: ${[...DELIVERY_MODES].join(", ")}`);
+    throw new Error(
+      `Invalid delivery mode '${v}'. Must be one of: ${[...DELIVERY_MODES].join(", ")}`
+    );
   }
   return v;
 }
 function classifyDelivery(registry, targets, mode) {
-  if (mode === "appendOnly" || targets.length === 0)
-    return [];
+  if (mode === "appendOnly" || targets.length === 0) return [];
   const byId = new Map(registry.workers.map((w) => [w.workerId, w]));
   const failed = [];
   for (const target of targets) {
@@ -5163,7 +5205,7 @@ function classifyDelivery(registry, targets, mode) {
   return failed;
 }
 
-// packages/core/dist/channel/internal/store/filter.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/filter.ts
 var MEANINGFUL_EVENT_KINDS = /* @__PURE__ */ new Set([
   "create",
   "join",
@@ -5179,58 +5221,44 @@ var MEANINGFUL_EVENT_KINDS = /* @__PURE__ */ new Set([
   "error"
 ]);
 function matchesKind(evKind, filterKind) {
-  if (filterKind === void 0)
-    return true;
-  if (typeof filterKind === "string")
-    return evKind === filterKind;
-  if (filterKind.length === 0)
-    return true;
+  if (filterKind === void 0) return true;
+  if (typeof filterKind === "string") return evKind === filterKind;
+  if (filterKind.length === 0) return true;
   return filterKind.includes(evKind);
 }
 function matchesEventFilter(ev, filter) {
-  if (filter.self && ev.by === filter.self)
-    return false;
+  if (filter.self && ev.by === filter.self) return false;
   const hasExplicitKind = filter.kind !== void 0 && (typeof filter.kind === "string" || filter.kind.length > 0);
   if (!filter.includeNonMeaningful && !hasExplicitKind && !MEANINGFUL_EVENT_KINDS.has(ev.kind)) {
     return false;
   }
-  if (!filter.includeProgress && ev.kind === "progress")
-    return false;
-  if (!matchesKind(ev.kind, filter.kind))
-    return false;
+  if (!filter.includeProgress && ev.kind === "progress") return false;
+  if (!matchesKind(ev.kind, filter.kind)) return false;
   if (filter.thread !== void 0) {
-    if (!isThreadEvent(ev))
-      return false;
-    if (ev.thread !== filter.thread)
-      return false;
+    if (!isThreadEvent(ev)) return false;
+    if (ev.thread !== filter.thread) return false;
   }
   if (filter.action !== void 0) {
-    if (!isThreadEvent(ev))
-      return false;
-    if (ev.action !== filter.action)
-      return false;
+    if (!isThreadEvent(ev)) return false;
+    if (ev.action !== filter.action) return false;
   }
   if (filter.from && filter.from.length > 0) {
-    if (!filter.from.includes(ev.by))
-      return false;
+    if (!filter.from.includes(ev.by)) return false;
   }
   if (filter.to) {
     const evTo = ev.to;
     if (filter.to === "exclusive") {
-      if (!evTo)
-        return false;
+      if (!evTo) return false;
     } else {
-      if (!evTo)
-        return true;
-      if (Array.isArray(evTo))
-        return evTo.includes(filter.to);
+      if (!evTo) return true;
+      if (Array.isArray(evTo)) return evTo.includes(filter.to);
       return evTo === filter.to;
     }
   }
   return true;
 }
 
-// packages/core/dist/channel/internal/store/channel-metadata.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/channel-metadata.ts
 function reduceChannelMetadata(events) {
   let type = "chat";
   let description;
@@ -5238,15 +5266,13 @@ function reduceChannelMetadata(events) {
   let title;
   const contextMap = /* @__PURE__ */ new Map();
   const addEntries = (entries) => {
-    if (!entries)
-      return;
+    if (!entries) return;
     for (const entry of entries) {
       contextMap.set(contextEntryKey(entry), entry);
     }
   };
   const deleteEntries = (entries) => {
-    if (!entries)
-      return;
+    if (!entries) return;
     for (const entry of entries) {
       contextMap.delete(contextEntryKey(entry));
     }
@@ -5254,8 +5280,7 @@ function reduceChannelMetadata(events) {
   for (const ev of events) {
     if (isCreateEvent(ev)) {
       type = normalizeChannelType(ev.type);
-      if (typeof ev.description === "string")
-        description = ev.description;
+      if (typeof ev.description === "string") description = ev.description;
       labels = asStringArray(ev.labels) ?? labels;
       const initial = asContextEntries(ev.context) ?? asContextEntries(ev.linkedContext);
       contextMap.clear();
@@ -5264,18 +5289,14 @@ function reduceChannelMetadata(events) {
     }
     if (isContextEvent(ev) && ev.target === "channel") {
       const entries = asContextEntries(ev.context);
-      if (ev.action === "add")
-        addEntries(entries);
-      else if (ev.action === "delete")
-        deleteEntries(entries);
+      if (ev.action === "add") addEntries(entries);
+      else if (ev.action === "delete") deleteEntries(entries);
       continue;
     }
     if (isChannelMetadataEvent(ev) && ev.action === "title") {
       const next = ev.title;
-      if (typeof next === "string" && next.length > 0)
-        title = next;
-      else if (next === null || next === "")
-        title = void 0;
+      if (typeof next === "string" && next.length > 0) title = next;
+      else if (next === null || next === "") title = void 0;
       continue;
     }
   }
@@ -5289,12 +5310,11 @@ function reduceChannelMetadata(events) {
   };
 }
 function normalizeChannelType(value) {
-  if (value === "forum")
-    return "forum";
+  if (value === "forum") return "forum";
   return "chat";
 }
 
-// packages/core/dist/channel/internal/store/thread-state.js
+// roles/moluoxixi/packages/core/src/channel/internal/store/thread-state.ts
 function buildThreadAliasResolver(events) {
   const aliasToCurrent = /* @__PURE__ */ new Map();
   const aliasesByCurrent = /* @__PURE__ */ new Map();
@@ -5308,23 +5328,19 @@ function buildThreadAliasResolver(events) {
     return cur;
   };
   for (const ev of events) {
-    if (!isThreadEvent(ev) || ev.action !== "rename")
-      continue;
+    if (!isThreadEvent(ev) || ev.action !== "rename") continue;
     const newKey = typeof ev.newThread === "string" ? ev.newThread.trim() : void 0;
     const oldKey = ev.thread;
-    if (!newKey || !oldKey || newKey === oldKey)
-      continue;
+    if (!newKey || !oldKey || newKey === oldKey) continue;
     const oldCurrent = currentFor(oldKey);
     const targetCurrent = currentFor(newKey);
-    if (oldCurrent === targetCurrent)
-      continue;
+    if (oldCurrent === targetCurrent) continue;
     const movingAliases = aliasesByCurrent.get(oldCurrent) ?? /* @__PURE__ */ new Set();
     movingAliases.add(oldCurrent);
     aliasesByCurrent.delete(oldCurrent);
     const targetAliases = aliasesByCurrent.get(targetCurrent) ?? /* @__PURE__ */ new Set();
     for (const alias of movingAliases) {
-      if (alias !== targetCurrent)
-        targetAliases.add(alias);
+      if (alias !== targetCurrent) targetAliases.add(alias);
       aliasToCurrent.set(alias, targetCurrent);
     }
     aliasesByCurrent.set(targetCurrent, targetAliases);
@@ -5344,8 +5360,7 @@ function reduceThreads(events) {
   const states = /* @__PURE__ */ new Map();
   const ensure = (key, seq) => {
     const current = states.get(key);
-    if (current)
-      return current;
+    if (current) return current;
     const fresh = {
       thread: key,
       status: "open",
@@ -5363,8 +5378,7 @@ function reduceThreads(events) {
     if (isThreadEvent(ev)) {
       const current = resolver.resolve(ev.thread);
       const state = ensure(current, ev.seq);
-      if (typeof ev.ts === "string")
-        state.updatedAt = ev.ts;
+      if (typeof ev.ts === "string") state.updatedAt = ev.ts;
       if (!state.openedAt && typeof ev.ts === "string") {
         state.openedAt = ev.ts;
       }
@@ -5375,11 +5389,9 @@ function reduceThreads(events) {
     if (isContextEvent(ev) && ev.target === "thread" && ev.thread) {
       const current = resolver.resolve(ev.thread);
       const state = states.get(current);
-      if (!state)
-        continue;
+      if (!state) continue;
       const entries = asContextEntries(ev.context);
-      if (!entries)
-        continue;
+      if (!entries) continue;
       if (ev.action === "add") {
         for (const entry of entries) {
           state.contextMap.set(contextEntryKey(entry), entry);
@@ -5389,8 +5401,7 @@ function reduceThreads(events) {
           state.contextMap.delete(contextEntryKey(entry));
         }
       }
-      if (typeof ev.ts === "string")
-        state.updatedAt = ev.ts;
+      if (typeof ev.ts === "string") state.updatedAt = ev.ts;
       state.lastSeq = ev.seq;
       continue;
     }
@@ -5420,8 +5431,7 @@ function applyThreadAction(current, ev) {
   switch (ev.action) {
     case "opened":
       current.status = typeof ev.status === "string" ? ev.status : "open";
-      if (typeof ev.title === "string")
-        current.title = ev.title;
+      if (typeof ev.title === "string") current.title = ev.title;
       if (typeof ev.description === "string") {
         current.description = ev.description;
       }
@@ -5441,8 +5451,7 @@ function applyThreadAction(current, ev) {
       current.comments += 1;
       return;
     case "status":
-      if (typeof ev.status === "string")
-        current.status = ev.status;
+      if (typeof ev.status === "string") current.status = ev.status;
       return;
     case "labels":
       current.labels = asStringArray(ev.labels) ?? current.labels;
@@ -5451,8 +5460,7 @@ function applyThreadAction(current, ev) {
       current.assignees = asStringArray(ev.assignees) ?? current.assignees;
       return;
     case "summary":
-      if (typeof ev.summary === "string")
-        current.summary = ev.summary;
+      if (typeof ev.summary === "string") current.summary = ev.summary;
       return;
     case "processed":
       current.status = typeof ev.status === "string" ? ev.status : "processed";
@@ -5470,23 +5478,21 @@ function collectThreadTimeline(events, threadKey) {
   const out = [];
   for (const ev of events) {
     if (isThreadEvent(ev)) {
-      if (aliases.has(ev.thread))
-        out.push(ev);
+      if (aliases.has(ev.thread)) out.push(ev);
       continue;
     }
     if (isContextEvent(ev) && ev.target === "thread" && ev.thread) {
-      if (aliases.has(ev.thread))
-        out.push(ev);
+      if (aliases.has(ev.thread)) out.push(ev);
     }
   }
   return out;
 }
 
-// packages/core/dist/channel/api/create.js
+// roles/moluoxixi/packages/core/src/channel/api/create.ts
 import fs5 from "node:fs";
 import path5 from "node:path";
 
-// packages/core/dist/channel/api/resolve.js
+// roles/moluoxixi/packages/core/src/channel/api/resolve.ts
 function resolveChannelRef(opts) {
   if (opts.projectKey) {
     const project = opts.projectKey;
@@ -5509,7 +5515,7 @@ function resolveChannelRef(opts) {
   });
 }
 
-// packages/core/dist/channel/api/create.js
+// roles/moluoxixi/packages/core/src/channel/api/create.ts
 async function createChannel(opts) {
   const ref = resolveChannelRef({
     channel: opts.channel,
@@ -5522,28 +5528,34 @@ async function createChannel(opts) {
   const events = eventsPath(opts.channel, ref.project);
   const dir = ref.dir;
   if (fs5.existsSync(events) && !opts.force) {
-    throw new Error(`Channel '${opts.channel}' already exists at ${dir}. Use --force to overwrite.`);
+    throw new Error(
+      `Channel '${opts.channel}' already exists at ${dir}. Use --force to overwrite.`
+    );
   }
   if (opts.force && fs5.existsSync(dir)) {
     await forceCleanChannel(opts.channel, ref.project);
   }
   ensureBucketMarker(ref.project);
   const cwd = opts.cwd ?? process.cwd();
-  const event = await appendEvent(opts.channel, {
-    kind: "create",
-    by: opts.by,
-    cwd,
-    scope: ref.scope,
-    type: channelType,
-    ...opts.task ? { task: opts.task } : {},
-    ...opts.project ? { project: opts.project } : {},
-    ...opts.labels && opts.labels.length > 0 ? { labels: opts.labels } : {},
-    ...opts.description ? { description: opts.description } : {},
-    ...opts.context && opts.context.length > 0 ? { context: opts.context } : {},
-    ...opts.ephemeral ? { ephemeral: true } : {},
-    ...opts.origin ? { origin: opts.origin } : {},
-    ...opts.meta ? { meta: opts.meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    opts.channel,
+    {
+      kind: "create",
+      by: opts.by,
+      cwd,
+      scope: ref.scope,
+      type: channelType,
+      ...opts.task ? { task: opts.task } : {},
+      ...opts.project ? { project: opts.project } : {},
+      ...opts.labels && opts.labels.length > 0 ? { labels: opts.labels } : {},
+      ...opts.description ? { description: opts.description } : {},
+      ...opts.context && opts.context.length > 0 ? { context: opts.context } : {},
+      ...opts.ephemeral ? { ephemeral: true } : {},
+      ...opts.origin ? { origin: opts.origin } : {},
+      ...opts.meta ? { meta: opts.meta } : {}
+    },
+    ref.project
+  );
   return event;
 }
 async function forceCleanChannel(name, project) {
@@ -5555,8 +5567,7 @@ async function forceCleanChannel(name, project) {
     return;
   }
   for (const f of entries) {
-    if (!f.endsWith(".pid"))
-      continue;
+    if (!f.endsWith(".pid")) continue;
     const pidFile = path5.join(dir, f);
     let pid = 0;
     try {
@@ -5571,8 +5582,7 @@ async function forceCleanChannel(name, project) {
         while (pidAlive2(pid) && Date.now() < deadline) {
           await sleep3(50);
         }
-        if (pidAlive2(pid))
-          process.kill(pid, "SIGKILL");
+        if (pidAlive2(pid)) process.kill(pid, "SIGKILL");
       } catch {
       }
     }
@@ -5580,8 +5590,10 @@ async function forceCleanChannel(name, project) {
   try {
     fs5.rmSync(dir, { recursive: true, force: true });
   } catch (err) {
-    process.stderr.write(`[channel create --force] warning: failed to fully clean ${dir}: ${err instanceof Error ? err.message : err}
-`);
+    process.stderr.write(
+      `[channel create --force] warning: failed to fully clean ${dir}: ${err instanceof Error ? err.message : err}
+`
+    );
   }
 }
 function pidAlive2(pid) {
@@ -5596,7 +5608,7 @@ function sleep3(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// packages/core/dist/channel/api/send.js
+// roles/moluoxixi/packages/core/src/channel/api/send.ts
 async function sendMessage(opts) {
   const ref = resolveChannelRef({
     channel: opts.channel,
@@ -5604,15 +5616,19 @@ async function sendMessage(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const event = await appendEvent(opts.channel, {
-    kind: "message",
-    by: opts.by,
-    ...opts.idempotencyKey !== void 0 ? { idempotencyKey: opts.idempotencyKey } : {},
-    text: opts.text,
-    ...opts.to !== void 0 ? { to: opts.to } : {},
-    ...opts.origin !== void 0 ? { origin: opts.origin } : {},
-    ...opts.meta !== void 0 ? { meta: opts.meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    opts.channel,
+    {
+      kind: "message",
+      by: opts.by,
+      ...opts.idempotencyKey !== void 0 ? { idempotencyKey: opts.idempotencyKey } : {},
+      text: opts.text,
+      ...opts.to !== void 0 ? { to: opts.to } : {},
+      ...opts.origin !== void 0 ? { origin: opts.origin } : {},
+      ...opts.meta !== void 0 ? { meta: opts.meta } : {}
+    },
+    ref.project
+  );
   const mode = opts.deliveryMode ?? "appendOnly";
   if (mode !== "appendOnly" && event.to !== void 0) {
     const targets = Array.isArray(event.to) ? event.to : [event.to];
@@ -5620,34 +5636,40 @@ async function sendMessage(opts) {
     const registry = reduceWorkerRegistry(events);
     const failures = classifyDelivery(registry, targets, mode);
     for (const failure of failures) {
-      await appendEvent(opts.channel, {
-        kind: "undeliverable",
-        by: opts.by,
-        ...opts.idempotencyKey !== void 0 ? {
-          idempotencyKey: `${opts.idempotencyKey}:undeliverable:${failure.targetWorker}`
-        } : {},
-        targetWorker: failure.targetWorker,
-        messageSeq: event.seq,
-        reason: failure.reason,
-        ...opts.origin !== void 0 ? { origin: opts.origin } : {},
-        ...opts.meta !== void 0 ? { meta: opts.meta } : {}
-      }, ref.project);
+      await appendEvent(
+        opts.channel,
+        {
+          kind: "undeliverable",
+          by: opts.by,
+          ...opts.idempotencyKey !== void 0 ? {
+            idempotencyKey: `${opts.idempotencyKey}:undeliverable:${failure.targetWorker}`
+          } : {},
+          targetWorker: failure.targetWorker,
+          messageSeq: event.seq,
+          reason: failure.reason,
+          ...opts.origin !== void 0 ? { origin: opts.origin } : {},
+          ...opts.meta !== void 0 ? { meta: opts.meta } : {}
+        },
+        ref.project
+      );
     }
   }
   return event;
 }
 
-// packages/core/dist/channel/api/assert.js
+// roles/moluoxixi/packages/core/src/channel/api/assert.ts
 async function readForumChannelEvents(channel, project, operation) {
   const events = await readChannelEvents(channel, project);
   const metadata = reduceChannelMetadata(events);
   if (metadata.type !== "forum") {
-    throw new Error(`Channel '${channel}' is type '${metadata.type}'. '${operation}' requires a forum channel.`);
+    throw new Error(
+      `Channel '${channel}' is type '${metadata.type}'. '${operation}' requires a forum channel.`
+    );
   }
   return events;
 }
 
-// packages/core/dist/channel/api/post-thread.js
+// roles/moluoxixi/packages/core/src/channel/api/post-thread.ts
 var VALID_ACTIONS = /* @__PURE__ */ new Set([
   "opened",
   "comment",
@@ -5665,34 +5687,38 @@ async function postThread(opts) {
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
   if (!VALID_ACTIONS.has(opts.action)) {
-    throw new Error(`Invalid thread action '${opts.action}'. Must be one of: ${[...VALID_ACTIONS].join(", ")}`);
+    throw new Error(
+      `Invalid thread action '${opts.action}'. Must be one of: ${[...VALID_ACTIONS].join(", ")}`
+    );
   }
   await readForumChannelEvents(opts.channel, ref.project, "post");
   const thread = resolveThreadKey(opts.action, opts.thread);
-  const event = await appendEvent(opts.channel, {
-    kind: "thread",
-    by: opts.by,
-    ...opts.idempotencyKey !== void 0 ? { idempotencyKey: opts.idempotencyKey } : {},
-    action: opts.action,
-    thread,
-    ...opts.title !== void 0 ? { title: opts.title } : {},
-    ...opts.text !== void 0 ? { text: opts.text } : {},
-    ...opts.description !== void 0 ? { description: opts.description } : {},
-    ...opts.status !== void 0 ? { status: opts.status } : {},
-    ...opts.labels !== void 0 ? { labels: opts.labels } : {},
-    ...opts.assignees !== void 0 ? { assignees: opts.assignees } : {},
-    ...opts.summary !== void 0 ? { summary: opts.summary } : {},
-    ...opts.context !== void 0 && opts.context.length > 0 ? { context: opts.context } : {},
-    ...opts.origin !== void 0 ? { origin: opts.origin } : {},
-    ...opts.meta !== void 0 ? { meta: opts.meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    opts.channel,
+    {
+      kind: "thread",
+      by: opts.by,
+      ...opts.idempotencyKey !== void 0 ? { idempotencyKey: opts.idempotencyKey } : {},
+      action: opts.action,
+      thread,
+      ...opts.title !== void 0 ? { title: opts.title } : {},
+      ...opts.text !== void 0 ? { text: opts.text } : {},
+      ...opts.description !== void 0 ? { description: opts.description } : {},
+      ...opts.status !== void 0 ? { status: opts.status } : {},
+      ...opts.labels !== void 0 ? { labels: opts.labels } : {},
+      ...opts.assignees !== void 0 ? { assignees: opts.assignees } : {},
+      ...opts.summary !== void 0 ? { summary: opts.summary } : {},
+      ...opts.context !== void 0 && opts.context.length > 0 ? { context: opts.context } : {},
+      ...opts.origin !== void 0 ? { origin: opts.origin } : {},
+      ...opts.meta !== void 0 ? { meta: opts.meta } : {}
+    },
+    ref.project
+  );
   return event;
 }
 function resolveThreadKey(action, value) {
-  if (value)
-    return normalizeThreadKey(value);
-  if (action === "opened")
-    return `thread-${Date.now().toString(36)}`;
+  if (value) return normalizeThreadKey(value);
+  if (action === "opened") return `thread-${Date.now().toString(36)}`;
   throw new Error("--thread is required unless action is 'opened'");
 }
 async function renameThread(opts) {
@@ -5702,7 +5728,11 @@ async function renameThread(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const events = await readForumChannelEvents(opts.channel, ref.project, "thread rename");
+  const events = await readForumChannelEvents(
+    opts.channel,
+    ref.project,
+    "thread rename"
+  );
   const oldKey = normalizeThreadKey(opts.thread);
   const newKey = normalizeThreadKey(opts.newThread);
   if (oldKey === newKey) {
@@ -5714,42 +5744,56 @@ async function renameThread(opts) {
   const knownKeys = /* @__PURE__ */ new Set();
   for (const ev of events) {
     if (ev.kind === "thread" && typeof ev.thread === "string") {
-      knownKeys.add(resolver.resolve(ev.thread));
+      knownKeys.add(
+        resolver.resolve(ev.thread)
+      );
     }
   }
   if (!knownKeys.has(oldCurrent)) {
-    throw new Error(`Thread '${oldKey}' not found in channel '${opts.channel}'.`);
+    throw new Error(
+      `Thread '${oldKey}' not found in channel '${opts.channel}'.`
+    );
   }
   if (knownKeys.has(currentTarget) && currentTarget !== oldCurrent) {
-    throw new Error(`Thread '${newKey}' already exists in channel '${opts.channel}'. Refusing to merge two timelines.`);
+    throw new Error(
+      `Thread '${newKey}' already exists in channel '${opts.channel}'. Refusing to merge two timelines.`
+    );
   }
-  const event = await appendEvent(opts.channel, {
-    kind: "thread",
-    by: opts.by,
-    action: "rename",
-    thread: oldKey,
-    newThread: newKey,
-    ...opts.origin !== void 0 ? { origin: opts.origin } : {},
-    ...opts.meta !== void 0 ? { meta: opts.meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    opts.channel,
+    {
+      kind: "thread",
+      by: opts.by,
+      action: "rename",
+      thread: oldKey,
+      newThread: newKey,
+      ...opts.origin !== void 0 ? { origin: opts.origin } : {},
+      ...opts.meta !== void 0 ? { meta: opts.meta } : {}
+    },
+    ref.project
+  );
   return event;
 }
 
-// packages/core/dist/channel/api/context.js
+// roles/moluoxixi/packages/core/src/channel/api/context.ts
 async function appendContextEvent(ref, by, action, target, context, thread, origin, meta) {
   if (!context || context.length === 0) {
     throw new Error("context must contain at least one entry");
   }
-  const event = await appendEvent(ref.name, {
-    kind: "context",
-    by,
-    target,
-    action,
-    context,
-    ...thread !== void 0 ? { thread } : {},
-    ...origin !== void 0 ? { origin } : {},
-    ...meta !== void 0 ? { meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    ref.name,
+    {
+      kind: "context",
+      by,
+      target,
+      action,
+      context,
+      ...thread !== void 0 ? { thread } : {},
+      ...origin !== void 0 ? { origin } : {},
+      ...meta !== void 0 ? { meta } : {}
+    },
+    ref.project
+  );
   return event;
 }
 async function addChannelContext(opts) {
@@ -5759,7 +5803,16 @@ async function addChannelContext(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  return appendContextEvent({ name: opts.channel, project: ref.project }, opts.by, "add", "channel", opts.context, void 0, opts.origin, opts.meta);
+  return appendContextEvent(
+    { name: opts.channel, project: ref.project },
+    opts.by,
+    "add",
+    "channel",
+    opts.context,
+    void 0,
+    opts.origin,
+    opts.meta
+  );
 }
 async function deleteChannelContext(opts) {
   const ref = resolveChannelRef({
@@ -5768,7 +5821,16 @@ async function deleteChannelContext(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  return appendContextEvent({ name: opts.channel, project: ref.project }, opts.by, "delete", "channel", opts.context, void 0, opts.origin, opts.meta);
+  return appendContextEvent(
+    { name: opts.channel, project: ref.project },
+    opts.by,
+    "delete",
+    "channel",
+    opts.context,
+    void 0,
+    opts.origin,
+    opts.meta
+  );
 }
 async function listChannelContext(opts) {
   const ref = resolveChannelRef({
@@ -5789,9 +5851,20 @@ async function addThreadContext(opts) {
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
   const thread = normalizeThreadKey(opts.thread);
-  const states = reduceThreads(await readForumChannelEvents(opts.channel, ref.project, "context add"));
+  const states = reduceThreads(
+    await readForumChannelEvents(opts.channel, ref.project, "context add")
+  );
   assertKnownThread(states, thread, opts.channel);
-  return appendContextEvent({ name: opts.channel, project: ref.project }, opts.by, "add", "thread", opts.context, thread, opts.origin, opts.meta);
+  return appendContextEvent(
+    { name: opts.channel, project: ref.project },
+    opts.by,
+    "add",
+    "thread",
+    opts.context,
+    thread,
+    opts.origin,
+    opts.meta
+  );
 }
 async function deleteThreadContext(opts) {
   const ref = resolveChannelRef({
@@ -5801,9 +5874,20 @@ async function deleteThreadContext(opts) {
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
   const thread = normalizeThreadKey(opts.thread);
-  const states = reduceThreads(await readForumChannelEvents(opts.channel, ref.project, "context delete"));
+  const states = reduceThreads(
+    await readForumChannelEvents(opts.channel, ref.project, "context delete")
+  );
   assertKnownThread(states, thread, opts.channel);
-  return appendContextEvent({ name: opts.channel, project: ref.project }, opts.by, "delete", "thread", opts.context, thread, opts.origin, opts.meta);
+  return appendContextEvent(
+    { name: opts.channel, project: ref.project },
+    opts.by,
+    "delete",
+    "thread",
+    opts.context,
+    thread,
+    opts.origin,
+    opts.meta
+  );
 }
 async function listThreadContext(opts) {
   const ref = resolveChannelRef({
@@ -5812,7 +5896,11 @@ async function listThreadContext(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const events = await readForumChannelEvents(opts.channel, ref.project, "context list");
+  const events = await readForumChannelEvents(
+    opts.channel,
+    ref.project,
+    "context list"
+  );
   const states = reduceThreads(events);
   const key = normalizeThreadKey(opts.thread);
   for (const state of states) {
@@ -5823,13 +5911,15 @@ async function listThreadContext(opts) {
   return [];
 }
 function assertKnownThread(states, thread, channel) {
-  const found = states.some((state) => state.thread === thread || state.aliases.includes(thread));
+  const found = states.some(
+    (state) => state.thread === thread || state.aliases.includes(thread)
+  );
   if (!found) {
     throw new Error(`Thread '${thread}' not found in channel '${channel}'.`);
   }
 }
 
-// packages/core/dist/channel/api/title.js
+// roles/moluoxixi/packages/core/src/channel/api/title.ts
 async function setChannelTitle(opts) {
   if (!opts.title || opts.title.length === 0) {
     throw new Error("Channel title must not be empty (use clearChannelTitle)");
@@ -5840,14 +5930,18 @@ async function setChannelTitle(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const event = await appendEvent(opts.channel, {
-    kind: "channel",
-    action: "title",
-    by: opts.by,
-    title: opts.title,
-    ...opts.origin !== void 0 ? { origin: opts.origin } : {},
-    ...opts.meta !== void 0 ? { meta: opts.meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    opts.channel,
+    {
+      kind: "channel",
+      action: "title",
+      by: opts.by,
+      title: opts.title,
+      ...opts.origin !== void 0 ? { origin: opts.origin } : {},
+      ...opts.meta !== void 0 ? { meta: opts.meta } : {}
+    },
+    ref.project
+  );
   return event;
 }
 async function clearChannelTitle(opts) {
@@ -5857,18 +5951,22 @@ async function clearChannelTitle(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const event = await appendEvent(opts.channel, {
-    kind: "channel",
-    action: "title",
-    by: opts.by,
-    title: null,
-    ...opts.origin !== void 0 ? { origin: opts.origin } : {},
-    ...opts.meta !== void 0 ? { meta: opts.meta } : {}
-  }, ref.project);
+  const event = await appendEvent(
+    opts.channel,
+    {
+      kind: "channel",
+      action: "title",
+      by: opts.by,
+      title: null,
+      ...opts.origin !== void 0 ? { origin: opts.origin } : {},
+      ...opts.meta !== void 0 ? { meta: opts.meta } : {}
+    },
+    ref.project
+  );
   return event;
 }
 
-// packages/core/dist/channel/api/read.js
+// roles/moluoxixi/packages/core/src/channel/api/read.ts
 async function listForumThreads(opts) {
   const ref = resolveChannelRef({
     channel: opts.channel,
@@ -5876,7 +5974,11 @@ async function listForumThreads(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const events = await readForumChannelEvents(opts.channel, ref.project, "forum");
+  const events = await readForumChannelEvents(
+    opts.channel,
+    ref.project,
+    "forum"
+  );
   return reduceThreads(events);
 }
 async function showThread(opts) {
@@ -5886,11 +5988,15 @@ async function showThread(opts) {
     ...opts.projectKey !== void 0 ? { projectKey: opts.projectKey } : {},
     ...opts.cwd !== void 0 ? { cwd: opts.cwd } : {}
   });
-  const events = await readForumChannelEvents(opts.channel, ref.project, "thread");
+  const events = await readForumChannelEvents(
+    opts.channel,
+    ref.project,
+    "thread"
+  );
   return collectThreadTimeline(events, normalizeThreadKey(opts.thread));
 }
 
-// packages/core/dist/channel/api/interrupt.js
+// roles/moluoxixi/packages/core/src/channel/api/interrupt.ts
 async function requestInterrupt(input) {
   const ref = resolveChannelRef({
     channel: input.channel,
@@ -5898,24 +6004,28 @@ async function requestInterrupt(input) {
     ...input.projectKey !== void 0 ? { projectKey: input.projectKey } : {},
     ...input.cwd !== void 0 ? { cwd: input.cwd } : {}
   });
-  return appendEvent(input.channel, {
-    kind: "interrupt_requested",
-    by: input.by,
-    worker: input.workerId,
-    ...input.reason !== void 0 ? { reason: input.reason } : {},
-    ...input.message !== void 0 ? { message: input.message } : {},
-    ...input.origin !== void 0 ? { origin: input.origin } : {},
-    ...input.meta !== void 0 ? { meta: input.meta } : {}
-  }, ref.project);
+  return appendEvent(
+    input.channel,
+    {
+      kind: "interrupt_requested",
+      by: input.by,
+      worker: input.workerId,
+      ...input.reason !== void 0 ? { reason: input.reason } : {},
+      ...input.message !== void 0 ? { message: input.message } : {},
+      ...input.origin !== void 0 ? { origin: input.origin } : {},
+      ...input.meta !== void 0 ? { meta: input.meta } : {}
+    },
+    ref.project
+  );
 }
 
-// packages/cli/src/commands/channel/store/schema.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/schema.ts
 function parseCsv(value) {
   const out = value?.split(",").map((s) => s.trim()).filter(Boolean);
   return out && out.length > 0 ? out : void 0;
 }
 
-// packages/cli/src/commands/channel/context.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/context.ts
 async function channelContextAdd(channelName, opts) {
   const context = buildContextEntries(opts.file, opts.raw);
   if (!context) {
@@ -5989,7 +6099,7 @@ async function channelContextList(channelName, opts) {
   }
 }
 
-// packages/cli/src/commands/channel/create.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/create.ts
 async function createChannel2(name, opts) {
   const scope = parseChannelScope(opts.scope) ?? "project";
   const channelType = parseChannelType(opts.type);
@@ -6034,7 +6144,7 @@ function channelDirFromEvent(name, scope, cwd) {
   return ref.dir;
 }
 
-// packages/cli/src/commands/channel/dev-parse-trace.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/dev-parse-trace.ts
 import fs6 from "node:fs";
 function parseTrace(adapter, file) {
   const raw = fs6.readFileSync(file, "utf-8");
@@ -6093,14 +6203,14 @@ function printResult(lineNo, result) {
   }
 }
 
-// packages/cli/src/commands/channel/kill.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/kill.ts
 import fs10 from "node:fs";
 
-// packages/cli/src/commands/channel/store/events.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/events.ts
 import fs9 from "node:fs";
 import fsp3 from "node:fs/promises";
 
-// packages/cli/src/commands/channel/store/lock.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/lock.ts
 import fs7 from "node:fs";
 import path6 from "node:path";
 var DEFAULT_RETRY_INTERVAL_MS2 = 25;
@@ -6177,7 +6287,7 @@ function sleep4(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// packages/cli/src/commands/channel/store/paths.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/paths.ts
 import fs8 from "node:fs";
 import os3 from "node:os";
 import path7 from "node:path";
@@ -6347,7 +6457,7 @@ function resolveExistingChannelRef2(name, opts = {}) {
   );
 }
 
-// packages/cli/src/commands/channel/store/events.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/events.ts
 async function ensureChannelDir2(name, project) {
   const dir = channelDir2(name, project);
   await fsp3.mkdir(dir, { recursive: true, mode: 448 });
@@ -6403,7 +6513,7 @@ async function readChannelMetadata2(name, project) {
   return reduceChannelMetadata(await readChannelEvents3(name, project));
 }
 
-// packages/cli/src/commands/channel/kill.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/kill.ts
 var POLL_INTERVAL_MS = 100;
 var KILL_GRACE_MS = 8e3;
 async function channelKill(channelName, opts) {
@@ -6519,7 +6629,7 @@ function sleep5(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// packages/cli/src/commands/channel/text-body.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/text-body.ts
 import fs11 from "node:fs";
 async function resolveChannelTextBody(opts, resolveOpts) {
   const raw = await readChannelTextBody(opts);
@@ -6562,7 +6672,7 @@ async function readStdin() {
   });
 }
 
-// packages/cli/src/commands/channel/interrupt.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/interrupt.ts
 async function channelInterrupt(channelName, opts) {
   const message = await resolveChannelTextBody(opts, {
     required: true,
@@ -6582,7 +6692,7 @@ async function channelInterrupt(channelName, opts) {
   console.log(JSON.stringify(event));
 }
 
-// packages/cli/src/commands/channel/list.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/list.ts
 import fs12 from "node:fs";
 import path8 from "node:path";
 async function channelList(opts = {}) {
@@ -6772,10 +6882,10 @@ function colorKind(k) {
   }
 }
 
-// packages/cli/src/commands/channel/messages.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/messages.ts
 import fs14 from "node:fs";
 
-// packages/cli/src/commands/channel/store/thread-state.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/thread-state.ts
 function formatThreadBoard(states) {
   if (states.length === 0) return ["(no threads)"];
   return [
@@ -6788,7 +6898,7 @@ function formatThreadBoard(states) {
   ];
 }
 
-// packages/cli/src/commands/channel/store/watch.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/store/watch.ts
 import fs13 from "node:fs";
 async function readNewEvents(filePath, state) {
   if (!fs13.existsSync(filePath)) {
@@ -6892,7 +7002,7 @@ async function* watchEvents(channelName, filter, opts = {}) {
   }
 }
 
-// packages/cli/src/commands/channel/messages.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/messages.ts
 async function channelMessages(channelName, opts) {
   const ref = resolveExistingChannelRef2(channelName, {
     scope: parseChannelScope(opts.scope)
@@ -7126,7 +7236,7 @@ function summarizeProgress(detail) {
   return parts.join(" ");
 }
 
-// packages/cli/src/commands/channel/rm.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/rm.ts
 import fs15 from "node:fs";
 import path9 from "node:path";
 async function channelRm(name, opts = {}) {
@@ -7299,7 +7409,7 @@ function sleep6(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// packages/cli/src/commands/channel/send.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/send.ts
 async function channelSend(channelName, opts) {
   const text = await resolveChannelTextBody(opts, {
     required: true,
@@ -7321,22 +7431,22 @@ async function channelSend(channelName, opts) {
   console.log(JSON.stringify(event));
 }
 
-// packages/cli/src/commands/channel/run.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/run.ts
 import crypto from "node:crypto";
-import fs23 from "node:fs";
+import fs24 from "node:fs";
 
-// packages/cli/src/commands/channel/spawn.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/spawn.ts
 import { spawn as spawn2 } from "node:child_process";
-import fs22 from "node:fs";
-import path14 from "node:path";
+import fs23 from "node:fs";
+import path15 from "node:path";
 import { fileURLToPath } from "node:url";
 
-// packages/cli/src/commands/channel/agent-loader.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/agent-loader.ts
 import fs16 from "node:fs";
 import path10 from "node:path";
 var FRONTMATTER_FENCE = /^---\s*\n([\s\S]*?)\n---\s*\n?([\s\S]*)$/;
 var SAFE_AGENT_NAME = /^[A-Za-z0-9._-]+$/;
-function findAgentFile(name, cwd) {
+function findAgentFile(name, cwd, trustedRoots = []) {
   if (!SAFE_AGENT_NAME.test(name)) {
     throw new Error(
       `Agent name '${name}' is not allowed (must match ${SAFE_AGENT_NAME.source})`
@@ -7349,15 +7459,19 @@ function findAgentFile(name, cwd) {
   ];
   for (const p of candidates) {
     const real = fs16.existsSync(p) ? fs16.realpathSync(p) : p;
-    if (real !== agentsRoot && !real.startsWith(agentsRoot + path10.sep)) {
+    const inAgentsRoot = real === agentsRoot || real.startsWith(agentsRoot + path10.sep);
+    const inTrustedRoot = trustedRoots.some(
+      (root) => real === root || real.startsWith(root + path10.sep)
+    );
+    if (!inAgentsRoot && !inTrustedRoot) {
       continue;
     }
     if (fs16.existsSync(p)) return p;
   }
   return null;
 }
-function loadAgent(name, cwd = process.cwd()) {
-  const file = findAgentFile(name, cwd);
+function loadAgent(name, cwd = process.cwd(), trustedRoots = []) {
+  const file = findAgentFile(name, cwd, trustedRoots);
   if (!file) {
     throw new Error(
       `Agent '${name}' not found. Looked in:
@@ -7444,13 +7558,16 @@ function parseFrontmatter(text) {
   return out;
 }
 
-// packages/cli/src/commands/channel/context-loader.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/context-loader.ts
 import fs17 from "node:fs";
 import path11 from "node:path";
 var MAX_PER_FILE_BYTES = 1e6;
 var WARN_PER_FILE_BYTES = 2e5;
 var WARN_TOTAL_BYTES = 5e5;
-function jailedRealpath(target, cwd) {
+function isUnderRoot(real, root) {
+  return real === root || real.startsWith(root + path11.sep);
+}
+function jailedRealpath(target, cwd, trustedRoots = []) {
   const cwdReal = fs17.realpathSync(cwd);
   let real;
   try {
@@ -7458,9 +7575,9 @@ function jailedRealpath(target, cwd) {
   } catch {
     real = path11.resolve(target);
   }
-  if (real !== cwdReal && !real.startsWith(cwdReal + path11.sep)) {
+  if (!isUnderRoot(real, cwdReal) && !trustedRoots.some((root) => isUnderRoot(real, root))) {
     process.stderr.write(
-      `[channel spawn] context path escapes cwd, refusing: ${path11.relative(cwd, target) || target}
+      `[channel spawn] context path escapes cwd, refusing: ${path11.relative(cwd, target) || target} (add its real directory to channel.trusted_context_dirs in .moluoxixi/config.yaml to allow)
 `
     );
     return null;
@@ -7470,19 +7587,23 @@ function jailedRealpath(target, cwd) {
 function safeHeader(s) {
   return s.replace(/[\r\n\x00-\x08\x0b-\x1f\x7f]/g, " ");
 }
-function assembleContext(cwd, files = [], jsonls = []) {
+function assembleContext(cwd, files = [], jsonls = [], trustedRoots = []) {
   const blocks = [];
   const manifestPaths = [];
   for (const spec of files) {
     for (const resolved of expandGlob(cwd, spec)) {
-      const jailed = jailedRealpath(resolved, cwd);
+      const jailed = jailedRealpath(resolved, cwd, trustedRoots);
       if (!jailed) continue;
-      const block = readFileBlock(jailed, cwd, "file");
+      const block = readFileBlock(jailed, cwd, "file", void 0, trustedRoots);
       if (block) blocks.push(block);
     }
   }
   for (const jsonlPath of jsonls) {
-    const jailedJsonl = jailedRealpath(path11.resolve(cwd, jsonlPath), cwd);
+    const jailedJsonl = jailedRealpath(
+      path11.resolve(cwd, jsonlPath),
+      cwd,
+      trustedRoots
+    );
     if (!jailedJsonl) continue;
     if (!fs17.existsSync(jailedJsonl)) {
       process.stderr.write(
@@ -7507,9 +7628,19 @@ function assembleContext(cwd, files = [], jsonls = []) {
       }
       if (obj._example !== void 0) continue;
       if (!obj.file) continue;
-      const jailed = jailedRealpath(path11.resolve(cwd, obj.file), cwd);
+      const jailed = jailedRealpath(
+        path11.resolve(cwd, obj.file),
+        cwd,
+        trustedRoots
+      );
       if (!jailed) continue;
-      const block = readFileBlock(jailed, cwd, "jsonl", obj.reason);
+      const block = readFileBlock(
+        jailed,
+        cwd,
+        "jsonl",
+        obj.reason,
+        trustedRoots
+      );
       if (block) blocks.push(block);
     }
   }
@@ -7622,7 +7753,7 @@ function segmentToRegex(seg) {
   }
   return new RegExp(re + "$");
 }
-function readFileBlock(absPath, cwd, source, reason) {
+function readFileBlock(absPath, cwd, source, reason, trustedRoots = []) {
   if (!fs17.existsSync(absPath)) {
     process.stderr.write(
       `[channel spawn] --${source}: file not found, skipping: ${path11.relative(cwd, absPath)}
@@ -7637,11 +7768,20 @@ function readFileBlock(absPath, cwd, source, reason) {
     return null;
   }
   if (lstat.isSymbolicLink()) {
-    process.stderr.write(
-      `[channel spawn] --${source}: refusing unresolved symlink: ${path11.relative(cwd, absPath)}
+    let real;
+    try {
+      real = fs17.realpathSync(absPath);
+    } catch {
+      real = absPath;
+    }
+    const cwdReal = fs17.realpathSync(cwd);
+    if (!isUnderRoot(real, cwdReal) && !trustedRoots.some((root) => isUnderRoot(real, root))) {
+      process.stderr.write(
+        `[channel spawn] --${source}: refusing unresolved symlink: ${path11.relative(cwd, absPath)}
 `
-    );
-    return null;
+      );
+      return null;
+    }
   }
   let stat;
   try {
@@ -7681,66 +7821,117 @@ function formatBlock(b) {
 ${b.content.trimEnd()}`;
 }
 
-// packages/cli/src/commands/channel/guard.ts
-import { execFileSync } from "node:child_process";
+// roles/moluoxixi/packages/cli/src/commands/channel/context-trust.ts
 import fs18 from "node:fs";
 import path12 from "node:path";
+var WORKFLOW_DIR = ".moluoxixi";
+var AUTO_TRUST_ENTRIES = ["tasks", "workspace"];
+function parseChannelTrustSection(content) {
+  const lines = content.split("\n");
+  const trustedDirs = [];
+  let autoTrustSymlinks;
+  let inChannel = false;
+  let inList = false;
+  for (const raw of lines) {
+    const line = raw.replace(/\r$/, "");
+    const trimmed = line.trimEnd();
+    if (trimmed.trim().startsWith("#")) continue;
+    if (/^channel:\s*$/.test(trimmed)) {
+      inChannel = true;
+      inList = false;
+      continue;
+    }
+    if (!inChannel) continue;
+    if (trimmed.trim() !== "" && /^\S/.test(line)) {
+      inChannel = false;
+      inList = false;
+      continue;
+    }
+    if (trimmed.trim() === "") continue;
+    if (inList) {
+      const item = trimmed.match(/^ {4}-\s*(.+)$/);
+      if (item) {
+        const val = stripTrustValue(item[1]);
+        if (val) trustedDirs.push(val);
+        continue;
+      }
+      inList = false;
+    }
+    if (/^ {2}trusted_context_dirs:\s*$/.test(trimmed)) {
+      inList = true;
+      continue;
+    }
+    const boolMatch = trimmed.match(
+      /^ {2}auto_trust_moluoxixi_symlinks:\s*(.+)$/
+    );
+    if (boolMatch) {
+      const val = stripTrustValue(boolMatch[1]).toLowerCase();
+      if (val === "false") autoTrustSymlinks = false;
+      else if (val === "true") autoTrustSymlinks = true;
+      else {
+        process.stderr.write(
+          `[channel] channel.auto_trust_moluoxixi_symlinks: invalid value '${val}', ignoring
+`
+        );
+      }
+      continue;
+    }
+  }
+  return { trustedDirs, autoTrustSymlinks };
+}
+function stripTrustValue(s) {
+  return s.trim().replace(/\s*#.*$/, "").trim().replace(/^['"]|['"]$/g, "");
+}
+function loadChannelTrustConfig(cwd) {
+  const configPath = path12.join(cwd, WORKFLOW_DIR, "config.yaml");
+  if (!fs18.existsSync(configPath)) return { trustedDirs: [] };
+  let content;
+  try {
+    content = fs18.readFileSync(configPath, "utf-8");
+  } catch {
+    return { trustedDirs: [] };
+  }
+  return parseChannelTrustSection(content);
+}
+function resolveTrustedRoots(cwd) {
+  const config = loadChannelTrustConfig(cwd);
+  const roots = [];
+  for (const entry of config.trustedDirs) {
+    const resolved = path12.resolve(cwd, entry);
+    try {
+      roots.push(fs18.realpathSync(resolved));
+    } catch {
+      process.stderr.write(
+        `[channel] channel.trusted_context_dirs: entry not found or invalid, skipping: ${entry}
+`
+      );
+    }
+  }
+  if (config.autoTrustSymlinks !== false) {
+    for (const entryName of AUTO_TRUST_ENTRIES) {
+      const entryPath = path12.join(cwd, WORKFLOW_DIR, entryName);
+      let lstat;
+      try {
+        lstat = fs18.lstatSync(entryPath);
+      } catch {
+        continue;
+      }
+      if (!lstat.isSymbolicLink()) continue;
+      try {
+        roots.push(fs18.realpathSync(entryPath));
+      } catch {
+      }
+    }
+  }
+  return [...new Set(roots)];
+}
 
-// packages/cli/src/constants/paths.ts
-var DIR_NAMES = {
-  /** Root workflow directory */
-  WORKFLOW: ".moluoxixi",
-  /** Workspace directory (under .moluoxixi/) - developer work areas */
-  WORKSPACE: "workspace",
-  /** Tasks directory (under .moluoxixi/) - unified task storage */
-  TASKS: "tasks",
-  /** Archive directory (under tasks/) */
-  ARCHIVE: "archive",
-  /** Spec/guidelines directory (under .moluoxixi/) */
-  SPEC: "spec",
-  /** Scripts directory (under .moluoxixi/) */
-  SCRIPTS: "scripts",
-  /** Channel runtime agent definitions (under .moluoxixi/) */
-  AGENTS: "agents"
-};
-var FILE_NAMES = {
-  /** Root agent instructions file */
-  AGENTS: "AGENTS.md",
-  /** Developer identity file */
-  DEVELOPER: ".developer",
-  /** Current task pointer */
-  CURRENT_TASK: ".current-task",
-  /** Task metadata */
-  TASK_JSON: "task.json",
-  /** Requirements document */
-  PRD: "prd.md",
-  /** Workflow guide */
-  WORKFLOW_GUIDE: "workflow.md",
-  /** Journal file prefix */
-  JOURNAL_PREFIX: "journal-"
-};
-var PATHS = {
-  /** .moluoxixi/ */
-  WORKFLOW: DIR_NAMES.WORKFLOW,
-  /** .moluoxixi/workspace/ */
-  WORKSPACE: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.WORKSPACE}`,
-  /** .moluoxixi/tasks/ */
-  TASKS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.TASKS}`,
-  /** .moluoxixi/spec/ */
-  SPEC: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SPEC}`,
-  /** .moluoxixi/scripts/ */
-  SCRIPTS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.SCRIPTS}`,
-  /** .moluoxixi/agents/ */
-  AGENTS: `${DIR_NAMES.WORKFLOW}/${DIR_NAMES.AGENTS}`,
-  /** .moluoxixi/.developer */
-  DEVELOPER_FILE: `${DIR_NAMES.WORKFLOW}/${FILE_NAMES.DEVELOPER}`,
-  /** .moluoxixi/.current-task */
-  CURRENT_TASK_FILE: `${DIR_NAMES.WORKFLOW}/${FILE_NAMES.CURRENT_TASK}`,
-  /** .moluoxixi/workflow.md */
-  WORKFLOW_GUIDE_FILE: `${DIR_NAMES.WORKFLOW}/${FILE_NAMES.WORKFLOW_GUIDE}`
-};
+// roles/moluoxixi/packages/cli/src/commands/channel/guard.ts
+import { execFileSync } from "node:child_process";
+import fs19 from "node:fs";
+import path13 from "node:path";
 
-// packages/cli/src/commands/channel/wait.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/wait.ts
 var TIMEOUT_EXIT_CODE = 124;
 async function channelWait(channelName, opts) {
   const ref = resolveExistingChannelRef2(channelName, {
@@ -7805,7 +7996,8 @@ function parseDuration(s) {
   }
 }
 
-// packages/cli/src/commands/channel/guard.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/guard.ts
+var WORKFLOW_DIR2 = ".moluoxixi";
 var DEFAULT_IDLE_TTL_MS = 5 * 60 * 1e3;
 var DEFAULT_MAX_LIVE_WORKERS = 6;
 var ENV_IDLE_TIMEOUT = "MOLUOXIXI_CHANNEL_WORKER_IDLE_TIMEOUT";
@@ -7871,11 +8063,11 @@ function parseEnvInt(raw, envName) {
   return n;
 }
 function loadWorkerGuardConfig(cwd) {
-  const configPath = path12.join(cwd, DIR_NAMES.WORKFLOW, "config.yaml");
-  if (!fs18.existsSync(configPath)) return void 0;
+  const configPath = path13.join(cwd, WORKFLOW_DIR2, "config.yaml");
+  if (!fs19.existsSync(configPath)) return void 0;
   let content;
   try {
-    content = fs18.readFileSync(configPath, "utf-8");
+    content = fs19.readFileSync(configPath, "utf-8");
   } catch {
     return void 0;
   }
@@ -7955,11 +8147,11 @@ function parseGuardDuration(raw, key) {
 }
 function scanLiveWorkers(opts = {}) {
   const project = opts.projectKey ?? currentProjectKey2();
-  const bucket = opts.root ? path12.join(opts.root, project) : projectDir2(project);
-  if (!fs18.existsSync(bucket)) return [];
+  const bucket = opts.root ? path13.join(opts.root, project) : projectDir2(project);
+  if (!fs19.existsSync(bucket)) return [];
   let entries;
   try {
-    entries = fs18.readdirSync(bucket);
+    entries = fs19.readdirSync(bucket);
   } catch {
     return [];
   }
@@ -7967,14 +8159,14 @@ function scanLiveWorkers(opts = {}) {
   for (const entry of entries) {
     if (entry.startsWith(".")) continue;
     if (!isSafeName2(entry)) continue;
-    const dir = path12.join(bucket, entry);
+    const dir = path13.join(bucket, entry);
     try {
-      if (!fs18.statSync(dir).isDirectory()) continue;
+      if (!fs19.statSync(dir).isDirectory()) continue;
     } catch {
       continue;
     }
-    const events = path12.join(dir, "events.jsonl");
-    if (!fs18.existsSync(events)) continue;
+    const events = path13.join(dir, "events.jsonl");
+    if (!fs19.existsSync(events)) continue;
     let workers;
     try {
       const all = readFileEventsSync(events);
@@ -8027,7 +8219,7 @@ function readReservationWorkers(channel, project) {
   const dir = channelDir2(channel, project);
   let files;
   try {
-    files = fs18.readdirSync(dir);
+    files = fs19.readdirSync(dir);
   } catch {
     return [];
   }
@@ -8049,7 +8241,7 @@ function readReservationWorkers(channel, project) {
   return workers;
 }
 function readFileEventsSync(file) {
-  const text = fs18.readFileSync(file, "utf-8");
+  const text = fs19.readFileSync(file, "utf-8");
   const events = [];
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
@@ -8063,7 +8255,7 @@ function readFileEventsSync(file) {
 }
 function readPid(p) {
   try {
-    const n = Number(fs18.readFileSync(p, "utf-8").trim());
+    const n = Number(fs19.readFileSync(p, "utf-8").trim());
     return Number.isFinite(n) && n > 0 ? n : void 0;
   } catch {
     return void 0;
@@ -8129,12 +8321,12 @@ async function cleanupExpiredIdleWorkers(candidates, idleTimeoutMs, opts = {}) {
         "shutdown-reason",
         project
       );
-      fs18.writeFileSync(reasonFile, "idle-timeout\n", "utf-8");
+      fs19.writeFileSync(reasonFile, "idle-timeout\n", "utf-8");
       try {
         process.kill(live.supervisorPid, "SIGTERM");
       } catch (err) {
         try {
-          fs18.unlinkSync(reasonFile);
+          fs19.unlinkSync(reasonFile);
         } catch {
         }
         throw err;
@@ -8192,12 +8384,12 @@ function formatBudgetOverflowError(args) {
   return [header, rows, hint].join("\n");
 }
 
-// packages/cli/src/commands/channel/supervisor.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor.ts
 import { spawn } from "node:child_process";
-import fs21 from "node:fs";
-import path13 from "node:path";
+import fs22 from "node:fs";
+import path14 from "node:path";
 
-// packages/cli/src/commands/channel/supervisor/idle.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor/idle.ts
 function scheduleSupervisorIdleTimer(args) {
   const { idleTimeoutMs, shutdown, isChildExited, log } = args;
   if (idleTimeoutMs <= 0) {
@@ -8218,7 +8410,7 @@ function scheduleSupervisorIdleTimer(args) {
   const fire = () => {
     timer = void 0;
     if (cancelled) return;
-    if (shutdown.isShuttingDown() || shutdown.hasTerminalEvent() || isChildExited()) {
+    if (shutdown.isShuttingDown() || isChildExited()) {
       return;
     }
     log.write(
@@ -8244,8 +8436,8 @@ function scheduleSupervisorIdleTimer(args) {
   };
 }
 
-// packages/cli/src/commands/channel/supervisor/inbox.ts
-import fs19 from "node:fs";
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor/inbox.ts
+import fs20 from "node:fs";
 async function runInboxWatcher(args) {
   const { channelName, workerName, adapter, ctx, child, signal } = args;
   const inboxPolicy = args.inboxPolicy ?? DEFAULT_INBOX_POLICY;
@@ -8344,7 +8536,7 @@ async function runInboxWatcher(args) {
 }
 function readInboxCursor(channelName, workerName) {
   try {
-    const raw = fs19.readFileSync(
+    const raw = fs20.readFileSync(
       workerFile(channelName, workerName, "inbox-cursor"),
       "utf-8"
     );
@@ -8356,7 +8548,7 @@ function readInboxCursor(channelName, workerName) {
 }
 function writeInboxCursor(channelName, workerName, seq) {
   try {
-    fs19.writeFileSync(
+    fs20.writeFileSync(
       workerFile(channelName, workerName, "inbox-cursor"),
       String(seq),
       "utf-8"
@@ -8373,7 +8565,7 @@ async function waitForActiveTurnToFinish(turnTracker, signal) {
   }
 }
 
-// packages/cli/src/commands/channel/supervisor/shutdown.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor/shutdown.ts
 function createShutdown(args) {
   const {
     channelName,
@@ -8486,8 +8678,8 @@ function createShutdown(args) {
   };
 }
 
-// packages/cli/src/commands/channel/supervisor/stdout.ts
-import fs20 from "node:fs";
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor/stdout.ts
+import fs21 from "node:fs";
 function pumpStdout(stream, onLine, onError) {
   let buf = "";
   let queue = Promise.resolve();
@@ -8566,13 +8758,13 @@ async function applyParseResult(channelName, workerName, result, child, shutdown
   if (result.side) {
     const { reply, persistSessionId, persistThreadId } = result.side;
     if (persistSessionId) {
-      fs20.writeFileSync(
+      fs21.writeFileSync(
         workerFile(channelName, workerName, "session-id"),
         persistSessionId
       );
     }
     if (persistThreadId) {
-      fs20.writeFileSync(
+      fs21.writeFileSync(
         workerFile(channelName, workerName, "thread-id"),
         persistThreadId
       );
@@ -8624,7 +8816,7 @@ function startStdoutPump(args) {
   );
 }
 
-// packages/cli/src/commands/channel/supervisor/turns.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor/turns.ts
 var TurnTracker = class {
   #turns = [];
   #hooks;
@@ -8656,7 +8848,7 @@ var TurnTracker = class {
   }
 };
 
-// packages/cli/src/commands/channel/supervisor/warning.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor/warning.ts
 var SUPERVISOR_TIMEOUT_WARNING_REMAINING_MS = 5 * 6e4;
 function scheduleSupervisorTimeoutWarning(args) {
   const { channelName, workerName, timeoutMs, shutdown, isChildExited, log } = args;
@@ -8702,7 +8894,7 @@ function scheduleSupervisorTimeoutWarning(args) {
   };
 }
 
-// packages/cli/src/commands/channel/supervisor.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/supervisor.ts
 var SHUTDOWN_GRACE_MS = 3e3;
 function resolveProviderPath(provider, cwd) {
   const fallback = { command: provider, prefixArgs: [] };
@@ -8710,24 +8902,24 @@ function resolveProviderPath(provider, cwd) {
   try {
     const cmdName = `${provider}.cmd`;
     const dirs = [
-      ...cwd ? [path13.join(cwd, "node_modules", ".bin")] : [],
-      ...(process.env.PATH ?? "").split(path13.delimiter)
+      ...cwd ? [path14.join(cwd, "node_modules", ".bin")] : [],
+      ...(process.env.PATH ?? "").split(path14.delimiter)
     ].filter(Boolean);
     for (const dir of dirs) {
-      const cmdFile = path13.join(dir, cmdName);
-      if (!fs21.existsSync(cmdFile)) continue;
-      const content = fs21.readFileSync(cmdFile, "utf8");
+      const cmdFile = path14.join(dir, cmdName);
+      if (!fs22.existsSync(cmdFile)) continue;
+      const content = fs22.readFileSync(cmdFile, "utf8");
       const m = content.match(/"%dp0%\\([^"]+?\.exe)"/i);
       if (m) {
-        const exePath = path13.join(dir, m[1]);
-        if (path13.basename(exePath).toLowerCase() !== "node.exe" && fs21.existsSync(exePath)) {
+        const exePath = path14.join(dir, m[1]);
+        if (path14.basename(exePath).toLowerCase() !== "node.exe" && fs22.existsSync(exePath)) {
           return { command: exePath, prefixArgs: [] };
         }
       }
       const js = content.match(/"%dp0%\\([^"]+?\.(?:js|cjs|mjs))"/i);
       if (js) {
-        const jsPath = path13.join(dir, js[1]);
-        if (fs21.existsSync(jsPath)) {
+        const jsPath = path14.join(dir, js[1]);
+        if (fs22.existsSync(jsPath)) {
           return { command: process.execPath, prefixArgs: [jsPath] };
         }
       }
@@ -8739,7 +8931,7 @@ function resolveProviderPath(provider, cwd) {
 async function runSupervisor(channelName, workerName, configPath) {
   const config = readConfig(configPath);
   const project = process.env.MOLUOXIXI_CHANNEL_PROJECT;
-  fs21.writeFileSync(
+  fs22.writeFileSync(
     workerFile(channelName, workerName, "pid", project),
     String(process.pid)
   );
@@ -8749,7 +8941,8 @@ async function runSupervisor(channelName, workerName, configPath) {
     resume: config.resume,
     model: config.model,
     systemPrompt: config.systemPrompt,
-    cwd: config.cwd
+    cwd: config.cwd,
+    sandbox: config.sandbox
   };
   const args = adapter.buildArgs(view);
   const env2 = {
@@ -8760,7 +8953,7 @@ async function runSupervisor(channelName, workerName, configPath) {
     MOLUOXIXI_CHANNEL_AS: workerName
   };
   const logPath = workerFile(channelName, workerName, "log", project);
-  const log = fs21.createWriteStream(logPath);
+  const log = fs22.createWriteStream(logPath);
   const resolvedProvider = resolveProviderPath(adapter.provider, config.cwd);
   const resolvedProviderDisplay = [
     resolvedProvider.command,
@@ -8862,7 +9055,7 @@ async function runSupervisor(channelName, workerName, configPath) {
     await shutdown.awaitFinalize();
     return;
   }
-  fs21.writeFileSync(
+  fs22.writeFileSync(
     workerFile(channelName, workerName, "worker-pid", project),
     String(child.pid)
   );
@@ -8970,7 +9163,7 @@ async function cleanup(channelName, workerName) {
     "reservation"
   ]) {
     try {
-      fs21.unlinkSync(
+      fs22.unlinkSync(
         workerFile(
           channelName,
           workerName,
@@ -8985,32 +9178,33 @@ async function cleanup(channelName, workerName) {
 function readExternalShutdownReason(channelName, workerName, project) {
   const file = workerFile(channelName, workerName, "shutdown-reason", project);
   try {
-    const reason = fs21.readFileSync(file, "utf-8").trim();
-    fs21.unlinkSync(file);
+    const reason = fs22.readFileSync(file, "utf-8").trim();
+    fs22.unlinkSync(file);
     if (reason === "idle-timeout") return "idle-timeout";
   } catch {
   }
   return "explicit-kill";
 }
 function readConfig(p) {
-  return JSON.parse(fs21.readFileSync(p, "utf-8"));
+  return JSON.parse(fs22.readFileSync(p, "utf-8"));
 }
 function writeSupervisorConfig(channelName, workerName, config, project) {
   const p = workerFile(channelName, workerName, "config", project);
-  fs21.mkdirSync(path13.dirname(p), { recursive: true });
-  fs21.writeFileSync(p, JSON.stringify(config, null, 2), "utf-8");
+  fs22.mkdirSync(path14.dirname(p), { recursive: true });
+  fs22.writeFileSync(p, JSON.stringify(config, null, 2), "utf-8");
   return p;
 }
 
-// packages/cli/src/commands/channel/spawn.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/spawn.ts
 function resolveSpawn(channelName, opts) {
   const cwd = opts.cwd ?? process.cwd();
+  const trustedRoots = resolveTrustedRoots(cwd);
   let agentBody;
   let provider = opts.provider;
   let model = opts.model;
   let as = opts.as;
   if (opts.agent) {
-    const agent = loadAgent(opts.agent, cwd);
+    const agent = loadAgent(opts.agent, cwd, trustedRoots);
     agentBody = agent.systemPrompt || void 0;
     provider = provider ?? agent.provider;
     model = model ?? agent.model;
@@ -9024,7 +9218,7 @@ function resolveSpawn(channelName, opts) {
   if (!as) {
     throw new Error("Missing --as (no agent name to fall back to)");
   }
-  const context = assembleContext(cwd, opts.files, opts.jsonls);
+  const context = assembleContext(cwd, opts.files, opts.jsonls, trustedRoots);
   const systemPrompt = buildSystemPrompt(
     channelName,
     as,
@@ -9072,7 +9266,7 @@ async function channelSpawn(channelName, opts) {
   const ref = resolveExistingChannelRef2(channelName, {
     scope: parseChannelScope(opts.scope)
   });
-  if (!fs22.existsSync(channelDir2(channelName, ref.project))) {
+  if (!fs23.existsSync(channelDir2(channelName, ref.project))) {
     throw new Error(
       `Channel '${channelName}' not found at ${channelDir2(channelName, ref.project)}`
     );
@@ -9083,7 +9277,7 @@ async function channelSpawn(channelName, opts) {
     ...opts.maxLiveWorkers !== void 0 ? { flagMaxLiveWorkers: opts.maxLiveWorkers } : {}
   });
   return withLock2(
-    path14.join(projectDir2(ref.project), ".worker-guard.lock"),
+    path15.join(projectDir2(ref.project), ".worker-guard.lock"),
     async () => {
       const guard = await enforceSpawnBudget({
         projectKey: ref.project,
@@ -9121,8 +9315,8 @@ async function channelSpawn(channelName, opts) {
 }
 async function spawnLocked(channelName, resolved, opts, project, idleTimeoutMs) {
   const pidPath = workerFile(channelName, resolved.as, "pid", project);
-  if (fs22.existsSync(pidPath)) {
-    const existing = Number(fs22.readFileSync(pidPath, "utf-8").trim());
+  if (fs23.existsSync(pidPath)) {
+    const existing = Number(fs23.readFileSync(pidPath, "utf-8").trim());
     if (existing && processAlive(existing)) {
       throw new Error(
         `Worker '${resolved.as}' is already running in channel '${channelName}' (pid ${existing})`
@@ -9139,6 +9333,7 @@ async function spawnLocked(channelName, resolved, opts, project, idleTimeoutMs) 
       systemPrompt: resolved.systemPrompt,
       model: resolved.model,
       resume: opts.resume,
+      sandbox: opts.sandbox,
       timeoutMs: opts.timeoutMs,
       warnBeforeMs: opts.warnBeforeMs,
       idleTimeoutMs,
@@ -9157,7 +9352,7 @@ async function spawnLocked(channelName, resolved, opts, project, idleTimeoutMs) 
     "reservation",
     project
   );
-  fs22.writeFileSync(
+  fs23.writeFileSync(
     reservationPath,
     JSON.stringify({
       channel: channelName,
@@ -9199,11 +9394,11 @@ async function spawnLocked(channelName, resolved, opts, project, idleTimeoutMs) 
       if (settled) return;
       settled = true;
       try {
-        fs22.unlinkSync(configPath);
+        fs23.unlinkSync(configPath);
       } catch {
       }
       try {
-        fs22.unlinkSync(reservationPath);
+        fs23.unlinkSync(reservationPath);
       } catch {
       }
       reject(
@@ -9214,7 +9409,7 @@ async function spawnLocked(channelName, resolved, opts, project, idleTimeoutMs) 
     });
   });
   if (child.pid !== void 0) {
-    fs22.writeFileSync(pidPath, String(child.pid));
+    fs23.writeFileSync(pidPath, String(child.pid));
   }
   child.unref();
   const result = {
@@ -9234,10 +9429,13 @@ function processAlive(pid) {
   }
 }
 function resolveCliEntry() {
-  return fileURLToPath(import.meta.url);
+  const here = fileURLToPath(import.meta.url);
+  if (path15.basename(here) === "channel-mem.mjs") return here;
+  const distRoot = path15.resolve(path15.dirname(here), "..", "..");
+  return path15.join(distRoot, "cli", "index.js");
 }
 
-// packages/cli/src/commands/channel/run.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/run.ts
 async function channelRun(opts) {
   const name = opts.name ?? `run-${crypto.randomBytes(4).toString("hex")}`;
   const timeoutMs = opts.timeoutMs ?? 5 * 60 * 1e3;
@@ -9314,8 +9512,8 @@ async function waitForDone(channelName, workerName, timeoutMs) {
 }
 async function printFinalMessage(channelName, workerName) {
   const file = eventsPath2(channelName);
-  if (!fs23.existsSync(file)) return;
-  const lines = fs23.readFileSync(file, "utf-8").split("\n").filter((l) => l.trim());
+  if (!fs24.existsSync(file)) return;
+  const lines = fs24.readFileSync(file, "utf-8").split("\n").filter((l) => l.trim());
   const events = [];
   for (const l of lines) {
     try {
@@ -9330,7 +9528,7 @@ async function printFinalMessage(channelName, workerName) {
   if (!text.endsWith("\n")) process.stdout.write("\n");
 }
 
-// packages/cli/src/commands/channel/threads.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/threads.ts
 async function channelThreadPost(channelName, opts) {
   const parsed = parseThreadAction(opts.action);
   if (parsed === "rename") {
@@ -9433,7 +9631,7 @@ function printTimelineEvent(ev) {
   console.log(`  ${ts} context-${action} by=${ev.by}`);
 }
 
-// packages/cli/src/commands/channel/title.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/title.ts
 async function channelTitleSet(channelName, opts) {
   const scope = parseChannelScope(opts.scope);
   const event = await setChannelTitle({
@@ -9456,7 +9654,7 @@ async function channelTitleClear(channelName, opts) {
   console.log(JSON.stringify(event));
 }
 
-// packages/cli/src/commands/channel/index.ts
+// roles/moluoxixi/packages/cli/src/commands/channel/index.ts
 function parseNonNegativeInteger(value) {
   if (!/^\d+$/.test(value)) {
     throw new InvalidArgumentError(
@@ -9604,6 +9802,9 @@ function registerChannelCommand(program3) {
     "--as <name>",
     "worker name in the channel (default: <agent-name> if --agent is set)"
   ).option("--cwd <path>", "worker working directory (default: process cwd)").option("--model <id>", "model override").option("--resume <id>", "resume an existing session/thread id").option(
+    "--sandbox <mode>",
+    "codex-only: worker sandbox mode: read-only | workspace-write | danger-full-access (default workspace-write)"
+  ).option(
     "--timeout <duration>",
     "auto-kill worker after this duration (e.g. 30m, 1h, 7200s)"
   ).option(
@@ -9642,6 +9843,7 @@ function registerChannelCommand(program3) {
       process.exit(1);
     }
     try {
+      const sandbox = parseCodexSandboxMode(opts.sandbox);
       await channelSpawn(name, {
         agent: opts.agent,
         provider: opts.provider,
@@ -9649,6 +9851,7 @@ function registerChannelCommand(program3) {
         cwd: opts.cwd,
         model: opts.model,
         resume: opts.resume,
+        sandbox,
         timeoutMs: parseDuration(opts.timeout),
         warnBeforeMs: parseDuration(opts.warnBefore),
         files: opts.file,
@@ -10031,15 +10234,15 @@ function registerChannelCommand(program3) {
   });
 }
 
-// packages/cli/src/commands/mem.ts
+// roles/moluoxixi/packages/cli/src/commands/mem.ts
 import * as os5 from "node:os";
-import * as path20 from "node:path";
+import * as path22 from "node:path";
 
-// packages/core/dist/mem/adapters/claude.js
-import * as fs26 from "node:fs";
-import * as path17 from "node:path";
+// roles/moluoxixi/packages/core/src/mem/adapters/claude.ts
+import * as fs27 from "node:fs";
+import * as path18 from "node:path";
 
-// packages/core/dist/mem/dialogue.js
+// roles/moluoxixi/packages/core/src/mem/dialogue.ts
 var INJECTION_TAGS = [
   "system-reminder",
   "task-status",
@@ -10061,59 +10264,72 @@ var INJECTION_TAGS = [
   "user_instructions"
 ];
 function isBootstrapTurn(cleaned, originalLength) {
-  if (cleaned.startsWith("# AGENTS.md instructions for"))
-    return true;
-  if (originalLength > 4e3 && /^<INSTRUCTIONS>/i.test(cleaned))
-    return true;
+  if (cleaned.startsWith("# AGENTS.md instructions for")) return true;
+  if (originalLength > 4e3 && /^<INSTRUCTIONS>/i.test(cleaned)) return true;
   return false;
 }
 function stripInjectionTags(text) {
   let out = text;
   for (const tag of INJECTION_TAGS) {
     const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(new RegExp(`<${escaped}[^>]*>[\\s\\S]*?</${escaped}>`, "gi"), "");
+    out = out.replace(
+      new RegExp(`<${escaped}[^>]*>[\\s\\S]*?</${escaped}>`, "gi"),
+      ""
+    );
   }
-  out = out.replace(/^# AGENTS\.md instructions for[\s\S]*?(?=\n\n[A-Z一-龥]|$)/m, "");
+  out = out.replace(
+    /^# AGENTS\.md instructions for[\s\S]*?(?=\n\n[A-Z一-龥]|$)/m,
+    ""
+  );
   return out.replace(/\n{3,}/g, "\n\n").trim();
 }
+var COMPACT_BOUNDARY_PREFIX = "[compaction boundary]";
+function compactionBoundaryTurn(detail, summary) {
+  const body = summary?.trim();
+  return {
+    role: "user",
+    text: body ? `${COMPACT_BOUNDARY_PREFIX} ${detail}
 
-// packages/core/dist/mem/filter.js
-import * as path15 from "node:path";
+${body}` : `${COMPACT_BOUNDARY_PREFIX} ${detail}`,
+    kind: "marker"
+  };
+}
+function turnKey(turn) {
+  return `${turn.role}\0${turn.text}`;
+}
+
+// roles/moluoxixi/packages/core/src/mem/filter.ts
+import * as path16 from "node:path";
 function inRangeOverlap(start, end, f) {
   const s = start ?? end;
   const e = end ?? start;
-  if (!s && !e)
-    return true;
+  if (!s && !e) return true;
   if (f.since && e) {
     const eT = new Date(e);
-    if (!Number.isNaN(+eT) && eT < f.since)
-      return false;
+    if (!Number.isNaN(+eT) && eT < f.since) return false;
   }
   if (f.until && s) {
     const sT = new Date(s);
-    if (!Number.isNaN(+sT) && sT > f.until)
-      return false;
+    if (!Number.isNaN(+sT) && sT > f.until) return false;
   }
   return true;
 }
 function sameProject(sessionCwd, target) {
-  if (!target)
-    return true;
-  if (!sessionCwd)
-    return false;
-  const a = path15.resolve(sessionCwd);
-  const b = path15.resolve(target);
-  return a === b || a.startsWith(b + path15.sep);
+  if (!target) return true;
+  if (!sessionCwd) return false;
+  const a = path16.resolve(sessionCwd);
+  const b = path16.resolve(target);
+  return a === b || a.startsWith(b + path16.sep);
 }
 
-// packages/core/dist/mem/internal/jsonl.js
-import * as fs24 from "node:fs";
+// roles/moluoxixi/packages/core/src/mem/internal/jsonl.ts
+import * as fs25 from "node:fs";
 var CHUNK = 256 * 1024;
 var OPEN_BRACE = 123;
 function readJsonl(file, onLine) {
   let fd;
   try {
-    fd = fs24.openSync(file, "r");
+    fd = fs25.openSync(file, "r");
   } catch {
     return;
   }
@@ -10122,9 +10338,8 @@ function readJsonl(file, onLine) {
   try {
     let stop = false;
     while (!stop) {
-      const n = fs24.readSync(fd, buf, 0, CHUNK, null);
-      if (n === 0)
-        break;
+      const n = fs25.readSync(fd, buf, 0, CHUNK, null);
+      if (n === 0) break;
       const chunk = leftover + buf.toString("utf8", 0, n);
       let from = 0;
       while (true) {
@@ -10135,10 +10350,8 @@ function readJsonl(file, onLine) {
         }
         const line = chunk.slice(from, nl);
         from = nl + 1;
-        if (!line)
-          continue;
-        if (line.charCodeAt(0) !== OPEN_BRACE)
-          continue;
+        if (!line) continue;
+        if (line.charCodeAt(0) !== OPEN_BRACE) continue;
         let raw;
         try {
           raw = JSON.parse(line);
@@ -10162,7 +10375,7 @@ function readJsonl(file, onLine) {
       }
     }
   } finally {
-    fs24.closeSync(fd);
+    fs25.closeSync(fd);
   }
 }
 function readJsonlFirst(file) {
@@ -10182,108 +10395,111 @@ function findInJsonl(file, predicate, maxLines = 200) {
       hit = obj;
       return "stop";
     }
-    if (count >= maxLines)
-      return "stop";
+    if (count >= maxLines) return "stop";
   });
   return hit;
 }
 function readJsonFile(file) {
   try {
-    return JSON.parse(fs24.readFileSync(file, "utf8"));
+    return JSON.parse(fs25.readFileSync(file, "utf8"));
   } catch {
     return void 0;
   }
 }
 
-// packages/core/dist/mem/internal/paths.js
-import * as fs25 from "node:fs";
+// roles/moluoxixi/packages/core/src/mem/internal/paths.ts
+import * as fs26 from "node:fs";
 import * as os4 from "node:os";
-import * as path16 from "node:path";
+import * as path17 from "node:path";
 var HOME = os4.homedir();
-var CLAUDE_PROJECTS = path16.join(HOME, ".claude", "projects");
-var CODEX_SESSIONS = path16.join(HOME, ".codex", "sessions");
+var CLAUDE_PROJECTS = path17.join(HOME, ".claude", "projects");
+var CODEX_SESSIONS = path17.join(HOME, ".codex", "sessions");
+var ZCODE_DB = path17.join(HOME, ".zcode", "cli", "db", "db.sqlite");
+var GROK_SESSIONS = path17.join(HOME, ".grok", "sessions");
 function expandHome(p) {
-  if (p === "~")
-    return HOME;
-  if (p.startsWith(`~${path16.sep}`))
-    return path16.join(HOME, p.slice(2));
-  if (p.startsWith("~/"))
-    return path16.join(HOME, p.slice(2));
+  if (p === "~") return HOME;
+  if (p.startsWith(`~${path17.sep}`)) return path17.join(HOME, p.slice(2));
+  if (p.startsWith("~/")) return path17.join(HOME, p.slice(2));
   return p;
 }
-var PI_AGENT_DIR = expandHome(process.env.PI_CODING_AGENT_DIR ?? path16.join(HOME, ".pi", "agent"));
-var PI_SESSIONS = expandHome(process.env.PI_CODING_AGENT_SESSION_DIR ?? path16.join(PI_AGENT_DIR, "sessions"));
+var PI_AGENT_DIR = expandHome(
+  process.env.PI_CODING_AGENT_DIR ?? path17.join(HOME, ".pi", "agent")
+);
+var PI_SESSIONS = expandHome(
+  process.env.PI_CODING_AGENT_SESSION_DIR ?? path17.join(PI_AGENT_DIR, "sessions")
+);
 function readPiSettingsSessionDir(settingsFile) {
   try {
-    const raw = JSON.parse(fs25.readFileSync(settingsFile, "utf8"));
-    if (!raw || typeof raw !== "object" || Array.isArray(raw))
-      return void 0;
+    const raw = JSON.parse(fs26.readFileSync(settingsFile, "utf8"));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
     const sessionDir = raw.sessionDir;
-    if (typeof sessionDir !== "string" || !sessionDir.trim())
-      return void 0;
+    if (typeof sessionDir !== "string" || !sessionDir.trim()) return void 0;
     const expanded = expandHome(sessionDir);
-    return path16.isAbsolute(expanded) ? expanded : path16.resolve(path16.dirname(settingsFile), expanded);
+    return path17.isAbsolute(expanded) ? expanded : path17.resolve(path17.dirname(settingsFile), expanded);
   } catch {
     return void 0;
   }
 }
 function claudeProjectDirFromCwd(cwd) {
-  return path16.join(CLAUDE_PROJECTS, cwd.replace(/[/\\:_.]/g, "-"));
+  return path17.join(CLAUDE_PROJECTS, cwd.replace(/[/\\:_.]/g, "-"));
+}
+function grokCwdFromProjectDir(dirName) {
+  try {
+    return decodeURIComponent(dirName);
+  } catch {
+    return void 0;
+  }
 }
 function piProjectDirFromCwd(cwd) {
-  const resolvedCwd = path16.resolve(cwd);
+  const resolvedCwd = path17.resolve(cwd);
   const safePath = `--${resolvedCwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
-  return path16.join(path16.join(PI_AGENT_DIR, "sessions"), safePath);
+  return path17.join(path17.join(PI_AGENT_DIR, "sessions"), safePath);
 }
 function piSessionRoots(cwd) {
-  const roots = [path16.join(PI_AGENT_DIR, "sessions"), PI_SESSIONS];
-  const globalSettingsDir = readPiSettingsSessionDir(path16.join(PI_AGENT_DIR, "settings.json"));
-  if (globalSettingsDir)
-    roots.push(globalSettingsDir);
+  const roots = [path17.join(PI_AGENT_DIR, "sessions"), PI_SESSIONS];
+  const globalSettingsDir = readPiSettingsSessionDir(
+    path17.join(PI_AGENT_DIR, "settings.json")
+  );
+  if (globalSettingsDir) roots.push(globalSettingsDir);
   if (cwd) {
-    const projectSettingsDir = readPiSettingsSessionDir(path16.join(path16.resolve(cwd), ".pi", "settings.json"));
-    if (projectSettingsDir)
-      roots.push(projectSettingsDir);
+    const projectSettingsDir = readPiSettingsSessionDir(
+      path17.join(path17.resolve(cwd), ".pi", "settings.json")
+    );
+    if (projectSettingsDir) roots.push(projectSettingsDir);
   }
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
-    const normalized = path16.resolve(root);
-    if (seen.has(normalized))
-      continue;
+    const normalized = path17.resolve(root);
+    if (seen.has(normalized)) continue;
     seen.add(normalized);
     out.push(root);
   }
   return out;
 }
 function* walkDir(root) {
-  if (!fs25.existsSync(root))
-    return;
+  if (!fs26.existsSync(root)) return;
   const stack = [root];
   while (stack.length) {
     const cur = stack.pop();
-    if (cur === void 0)
-      break;
+    if (cur === void 0) break;
     let entries;
     try {
-      entries = fs25.readdirSync(cur, { withFileTypes: true });
+      entries = fs26.readdirSync(cur, { withFileTypes: true });
     } catch {
       continue;
     }
     for (const e of entries) {
-      const p = path16.join(cur, e.name);
-      if (e.isDirectory())
-        stack.push(p);
-      else if (e.isFile())
-        yield p;
+      const p = path17.join(cur, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (e.isFile()) yield p;
     }
   }
 }
 
-// packages/core/dist/mem/phase.js
+// roles/moluoxixi/packages/core/src/mem/phase.ts
 function parseTaskPyCommandsAll(cmd) {
-  if (typeof cmd !== "string" || cmd.length === 0)
-    return [];
+  if (typeof cmd !== "string" || cmd.length === 0) return [];
   const all = [];
   const findRe = /(^|[\s/\\])task\.py\s+(create|start)(?:\s+|$)/g;
   const matches = [];
@@ -10294,13 +10510,11 @@ function parseTaskPyCommandsAll(cmd) {
   }
   for (let i = 0; i < matches.length; i++) {
     const cur = matches[i];
-    if (!cur)
-      continue;
+    if (!cur) continue;
     const next = matches[i + 1];
     const slice = cmd.slice(cur.bodyStart, next?.bodyStart ?? cmd.length);
     const restRaw = (slice.split("\n")[0] ?? "").trim();
-    if (/^[A-Za-z][A-Za-z0-9_-]*\s+[A-Za-z]{2,}\b/.test(restRaw))
-      continue;
+    if (/^[A-Za-z][A-Za-z0-9_-]*\s+[A-Za-z]{2,}\b/.test(restRaw)) continue;
     const parsed = parseRestOfTaskPyCommand(cur.action, restRaw);
     if (cur.action === "create" && parsed.action === "create" && !parsed.slug && !parsed.titleArg)
       continue;
@@ -10317,8 +10531,7 @@ function parseRestOfTaskPyCommand(action, restRaw) {
     let titleArg;
     for (let i = 0; i < args2.length; i++) {
       const a = args2[i];
-      if (a === void 0)
-        continue;
+      if (a === void 0) continue;
       if (a === "--slug" || a === "-s") {
         slug = args2[i + 1];
         i++;
@@ -10328,8 +10541,7 @@ function parseRestOfTaskPyCommand(action, restRaw) {
         slug = a.slice("--slug=".length);
         continue;
       }
-      if (a.startsWith("-"))
-        continue;
+      if (a.startsWith("-")) continue;
       titleArg ??= a;
     }
     return { action: "create", slug, titleArg };
@@ -10337,8 +10549,7 @@ function parseRestOfTaskPyCommand(action, restRaw) {
   const args = splitShellArgs(restRaw);
   let taskDir;
   for (const a of args) {
-    if (a.startsWith("-"))
-      continue;
+    if (a.startsWith("-")) continue;
     taskDir = a;
     break;
   }
@@ -10349,11 +10560,9 @@ function splitShellArgs(s) {
   let cur = "";
   let quote = null;
   const flush = () => {
-    if (!cur)
-      return;
+    if (!cur) return;
     const cleaned = cur.replace(/[)};&|>]+$/, "");
-    if (cleaned)
-      out.push(cleaned);
+    if (cleaned) out.push(cleaned);
     cur = "";
   };
   for (const ch of s) {
@@ -10383,13 +10592,11 @@ function splitShellArgs(s) {
   return out;
 }
 function slugFromTaskDir(p) {
-  if (!p)
-    return void 0;
+  if (!p) return void 0;
   const norm = p.replace(/\\+/g, "/").replace(/\/+$/g, "");
   const parts = norm.split("/").filter(Boolean);
   const last = parts[parts.length - 1];
-  if (last === void 0)
-    return void 0;
+  if (last === void 0) return void 0;
   return last.replace(/^\d{2}-\d{2}-/, "");
 }
 function buildBrainstormWindows(events, totalTurns) {
@@ -10400,43 +10607,63 @@ function buildBrainstormWindows(events, totalTurns) {
   const windows = [];
   let windowCounter = 0;
   for (const { e: createEv, i: ci } of creates) {
-    if (!createEv.slug)
-      continue;
-    const matchIdx = starts.findIndex(({ e, i }) => !usedStartIdx.has(i) && slugFromTaskDir(e.taskDir) === createEv.slug);
-    if (matchIdx === -1)
-      continue;
+    if (!createEv.slug) continue;
+    const matchIdx = starts.findIndex(
+      ({ e, i }) => !usedStartIdx.has(i) && slugFromTaskDir(e.taskDir) === createEv.slug
+    );
+    if (matchIdx === -1) continue;
     const startEntry = starts[matchIdx];
-    if (!startEntry)
-      continue;
+    if (!startEntry) continue;
     usedStartIdx.add(startEntry.i);
     usedCreateIdx.add(ci);
-    pushWindow(windows, createEv.turnIndex, startEntry.e.turnIndex, createEv.slug, ++windowCounter);
+    pushWindow(
+      windows,
+      createEv.turnIndex,
+      startEntry.e.turnIndex,
+      createEv.slug,
+      ++windowCounter
+    );
   }
   for (const { e: createEv, i: ci } of creates) {
-    if (usedCreateIdx.has(ci))
-      continue;
+    if (usedCreateIdx.has(ci)) continue;
     const pairedStart = starts.find(({ i }) => !usedStartIdx.has(i) && i > ci);
     if (pairedStart) {
       usedStartIdx.add(pairedStart.i);
       usedCreateIdx.add(ci);
       const slug = createEv.slug ?? slugFromTaskDir(pairedStart.e.taskDir);
-      pushWindow(windows, createEv.turnIndex, pairedStart.e.turnIndex, slug, ++windowCounter);
+      pushWindow(
+        windows,
+        createEv.turnIndex,
+        pairedStart.e.turnIndex,
+        slug,
+        ++windowCounter
+      );
     } else {
       usedCreateIdx.add(ci);
-      pushWindow(windows, createEv.turnIndex, totalTurns, createEv.slug, ++windowCounter);
+      pushWindow(
+        windows,
+        createEv.turnIndex,
+        totalTurns,
+        createEv.slug,
+        ++windowCounter
+      );
     }
   }
   for (const { e: startEv, i } of starts) {
-    if (usedStartIdx.has(i))
-      continue;
-    pushWindow(windows, 0, startEv.turnIndex, slugFromTaskDir(startEv.taskDir), ++windowCounter);
+    if (usedStartIdx.has(i)) continue;
+    pushWindow(
+      windows,
+      0,
+      startEv.turnIndex,
+      slugFromTaskDir(startEv.taskDir),
+      ++windowCounter
+    );
   }
   windows.sort((a, b) => a.startTurn - b.startTurn);
   return windows;
 }
 function pushWindow(windows, startTurn, endTurn, slug, counter) {
-  if (endTurn < startTurn)
-    return;
+  if (endTurn < startTurn) return;
   windows.push({
     label: slug ?? `window-${counter}`,
     startTurn,
@@ -10444,10 +10671,9 @@ function pushWindow(windows, startTurn, endTurn, slug, counter) {
   });
 }
 
-// packages/core/dist/mem/search.js
+// roles/moluoxixi/packages/core/src/mem/search.ts
 function relevanceScore(h) {
-  if (h.totalTurns === 0)
-    return 0;
+  if (h.totalTurns === 0) return 0;
   return (3 * h.userCount + h.asstCount) / h.totalTurns;
 }
 function chunkAround(text, hitIdx, maxChars) {
@@ -10464,13 +10690,14 @@ function chunkAround(text, hitIdx, maxChars) {
   return { start, end, truncated };
 }
 function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
+  const dialogue = turns.filter((t) => t.kind !== "marker");
   const tokens = kw.toLowerCase().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) {
     return {
       count: 0,
       userCount: 0,
       asstCount: 0,
-      totalTurns: turns.length,
+      totalTurns: dialogue.length,
       excerpts: []
     };
   }
@@ -10478,10 +10705,9 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
   let asstCount = 0;
   const userExcerpts = [];
   const asstExcerpts = [];
-  for (const t of turns) {
+  for (const t of dialogue) {
     const hay = t.text.toLowerCase();
-    if (!tokens.every((tok) => hay.includes(tok)))
-      continue;
+    if (!tokens.every((tok) => hay.includes(tok))) continue;
     const hitPositions = [];
     const tokenFreq = /* @__PURE__ */ new Map();
     let turnHits = 0;
@@ -10490,8 +10716,7 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
       let n = 0;
       while (true) {
         const idx = hay.indexOf(tok, from);
-        if (idx === -1)
-          break;
+        if (idx === -1) break;
         n++;
         turnHits++;
         hitPositions.push({ idx, tok });
@@ -10499,17 +10724,14 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
       }
       tokenFreq.set(tok, n);
     }
-    if (t.role === "user")
-      userCount += turnHits;
-    else
-      asstCount += turnHits;
+    if (t.role === "user") userCount += turnHits;
+    else asstCount += turnHits;
     hitPositions.sort((a, b) => a.idx - b.idx);
     const candidates = [];
     const seenStarts = /* @__PURE__ */ new Set();
     for (const { idx, tok } of hitPositions) {
       const { start, end, truncated } = chunkAround(t.text, idx, chunkChars);
-      if (seenStarts.has(start))
-        continue;
+      if (seenStarts.has(start)) continue;
       seenStarts.add(start);
       const slice = hay.slice(start, end);
       const coverage = tokens.filter((tk) => slice.includes(tk)).length;
@@ -10517,19 +10739,15 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
       candidates.push({ start, end, truncated, coverage, rarity });
     }
     candidates.sort((a, b) => {
-      if (b.coverage !== a.coverage)
-        return b.coverage - a.coverage;
-      if (b.rarity !== a.rarity)
-        return b.rarity - a.rarity;
+      if (b.coverage !== a.coverage) return b.coverage - a.coverage;
+      if (b.rarity !== a.rarity) return b.rarity - a.rarity;
       return a.start - b.start;
     });
     for (const c of candidates) {
       let snippet = t.text.slice(c.start, c.end).trim();
       if (c.truncated) {
-        if (c.start > 0)
-          snippet = "\u2026" + snippet;
-        if (c.end < t.text.length)
-          snippet += "\u2026";
+        if (c.start > 0) snippet = "\u2026" + snippet;
+        if (c.end < t.text.length) snippet += "\u2026";
       }
       (t.role === "user" ? userExcerpts : asstExcerpts).push({
         role: t.role,
@@ -10542,55 +10760,54 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400) {
     count: userCount + asstCount,
     userCount,
     asstCount,
-    totalTurns: turns.length,
+    totalTurns: dialogue.length,
     excerpts
   };
 }
 
-// packages/core/dist/mem/adapters/claude.js
+// roles/moluoxixi/packages/core/src/mem/adapters/claude.ts
 function claudeListSessions(f) {
-  if (!fs26.existsSync(CLAUDE_PROJECTS))
-    return [];
+  if (!fs27.existsSync(CLAUDE_PROJECTS)) return [];
   const out = [];
-  const allDirs = () => fs26.readdirSync(CLAUDE_PROJECTS).map((d) => path17.join(CLAUDE_PROJECTS, d));
+  const allDirs = () => fs27.readdirSync(CLAUDE_PROJECTS).map((d) => path18.join(CLAUDE_PROJECTS, d));
   const projectDirs = f.cwd ? (() => {
     const derived = claudeProjectDirFromCwd(f.cwd);
-    return fs26.existsSync(derived) ? [derived] : allDirs();
+    return fs27.existsSync(derived) ? [derived] : allDirs();
   })() : allDirs();
   for (const dir of projectDirs) {
     let entries;
     try {
-      entries = fs26.readdirSync(dir, { withFileTypes: true });
+      entries = fs27.readdirSync(dir, { withFileTypes: true });
     } catch {
       continue;
     }
-    const indexFile = path17.join(dir, "sessions-index.json");
+    const indexFile = path18.join(dir, "sessions-index.json");
     const index = readJsonFile(indexFile);
     const indexById = /* @__PURE__ */ new Map();
     for (const e of Array.isArray(index?.entries) ? index.entries : []) {
-      if (typeof e.id === "string")
-        indexById.set(e.id, e);
+      if (typeof e.id === "string") indexById.set(e.id, e);
     }
     for (const e of entries) {
-      if (!e.isFile() || !e.name.endsWith(".jsonl"))
-        continue;
-      const filePath = path17.join(dir, e.name);
+      if (!e.isFile() || !e.name.endsWith(".jsonl")) continue;
+      const filePath = path18.join(dir, e.name);
       const id = e.name.replace(/\.jsonl$/, "");
       const idx = indexById.get(id);
       let cwd = idx?.cwd;
       let created = idx?.created;
       const title = idx?.title;
       if (!cwd || !created) {
-        const evt = findInJsonl(filePath, (o) => typeof o.cwd === "string", 100);
+        const evt = findInJsonl(
+          filePath,
+          (o) => typeof o.cwd === "string",
+          100
+        );
         cwd = cwd ?? evt?.cwd;
         created = created ?? evt?.timestamp ?? readJsonlFirst(filePath)?.timestamp;
       }
-      const stat = fs26.statSync(filePath);
+      const stat = fs27.statSync(filePath);
       const updated = stat.mtime.toISOString();
-      if (!inRangeOverlap(created, updated, f))
-        continue;
-      if (f.cwd && cwd && !sameProject(cwd, f.cwd))
-        continue;
+      if (!inRangeOverlap(created, updated, f)) continue;
+      if (f.cwd && cwd && !sameProject(cwd, f.cwd)) continue;
       out.push({
         platform: "claude",
         id,
@@ -10604,31 +10821,32 @@ function claudeListSessions(f) {
   }
   return out;
 }
+function claudeText(content) {
+  if (typeof content === "string") return stripInjectionTags(content);
+  if (!Array.isArray(content)) return "";
+  const parts = [];
+  for (const block of content) {
+    if (block.type === "text" && typeof block.text === "string") {
+      const cleaned = stripInjectionTags(block.text);
+      if (cleaned) parts.push(cleaned);
+    }
+  }
+  return parts.join("\n\n");
+}
 function claudeExtractDialogue(s) {
-  let turns = [];
+  const turns = [];
   readJsonl(s.filePath, (obj) => {
     const t = obj.type;
     const msg = obj.message;
-    if (!msg)
-      return;
+    if (!msg) return;
     const content = msg.content;
     if (t === "user" && obj.isCompactSummary === true) {
-      let summary = "";
-      if (typeof content === "string") {
-        summary = stripInjectionTags(content);
-      } else if (Array.isArray(content)) {
-        const parts = [];
-        for (const block of content) {
-          if (block.type === "text" && typeof block.text === "string") {
-            const cleaned = stripInjectionTags(block.text);
-            if (cleaned)
-              parts.push(cleaned);
-          }
-        }
-        summary = parts.join("\n\n");
-      }
-      turns = summary ? [{ role: "user", text: `[compact summary]
-${summary}` }] : [];
+      turns.push(
+        compactionBoundaryTurn(
+          "context compacted here; the turns above are the conversation Claude summarized",
+          claudeText(content)
+        )
+      );
       return;
     }
     if (t === "user" && msg.role === "user") {
@@ -10639,16 +10857,8 @@ ${summary}` }] : [];
         }
       }
     } else if (t === "assistant" && msg.role === "assistant" && Array.isArray(content)) {
-      const parts = [];
-      for (const block of content) {
-        if (block.type === "text" && typeof block.text === "string") {
-          const cleaned = stripInjectionTags(block.text);
-          if (cleaned)
-            parts.push(cleaned);
-        }
-      }
-      if (parts.length)
-        turns.push({ role: "assistant", text: parts.join("\n\n") });
+      const text = claudeText(content);
+      if (text) turns.push({ role: "assistant", text });
     }
   });
   return turns;
@@ -10657,32 +10867,20 @@ function claudeSearch(s, kw) {
   return searchInDialogue(claudeExtractDialogue(s), kw);
 }
 function collectClaudeTurnsAndEvents(s) {
-  let turns = [];
-  let events = [];
+  const turns = [];
+  const events = [];
   readJsonl(s.filePath, (obj) => {
     const t = obj.type;
     const msg = obj.message;
-    if (!msg)
-      return;
+    if (!msg) return;
     const content = msg.content;
     if (t === "user" && obj.isCompactSummary === true) {
-      let summary = "";
-      if (typeof content === "string") {
-        summary = stripInjectionTags(content);
-      } else if (Array.isArray(content)) {
-        const parts = [];
-        for (const block of content) {
-          if (block.type === "text" && typeof block.text === "string") {
-            const cleaned = stripInjectionTags(block.text);
-            if (cleaned)
-              parts.push(cleaned);
-          }
-        }
-        summary = parts.join("\n\n");
-      }
-      turns = summary ? [{ role: "user", text: `[compact summary]
-${summary}` }] : [];
-      events = [];
+      turns.push(
+        compactionBoundaryTurn(
+          "context compacted here; the turns above are the conversation Claude summarized",
+          claudeText(content)
+        )
+      );
       return;
     }
     if (t === "user" && msg.role === "user") {
@@ -10699,17 +10897,13 @@ ${summary}` }] : [];
       for (const block of content) {
         if (block.type === "text" && typeof block.text === "string") {
           const cleaned = stripInjectionTags(block.text);
-          if (cleaned)
-            parts.push(cleaned);
+          if (cleaned) parts.push(cleaned);
         } else if (block.type === "tool_use") {
-          if (block.name !== "Bash")
-            continue;
+          if (block.name !== "Bash") continue;
           const inp = block.input;
-          if (!inp || typeof inp !== "object")
-            continue;
+          if (!inp || typeof inp !== "object") continue;
           const command = inp.command;
-          if (typeof command !== "string")
-            continue;
+          if (typeof command !== "string") continue;
           const parsedAll = parseTaskPyCommandsAll(command);
           for (const parsed of parsedAll) {
             const ev = {
@@ -10729,25 +10923,22 @@ ${summary}` }] : [];
   return { turns, events };
 }
 
-// packages/core/dist/mem/adapters/codex.js
-import * as fs27 from "node:fs";
-import * as path18 from "node:path";
+// roles/moluoxixi/packages/core/src/mem/adapters/codex.ts
+import * as fs28 from "node:fs";
+import * as path19 from "node:path";
 function parseDialogueRole(v) {
   return v === "user" || v === "assistant" ? v : void 0;
 }
 function commandFromCodexArguments(argsRaw) {
   const fromObject = (obj) => {
     const cmd = obj.cmd;
-    if (typeof cmd === "string")
-      return cmd;
+    if (typeof cmd === "string") return cmd;
     const command = obj.command;
-    if (typeof command === "string")
-      return command;
+    if (typeof command === "string") return command;
     const argv = obj.argv;
     if (Array.isArray(argv)) {
       const parts = argv.filter((a) => typeof a === "string");
-      if (parts.length)
-        return parts.join(" ");
+      if (parts.length) return parts.join(" ");
     }
     return void 0;
   };
@@ -10768,25 +10959,25 @@ function commandFromCodexArguments(argsRaw) {
   return void 0;
 }
 function codexListSessions(f) {
-  if (!fs27.existsSync(CODEX_SESSIONS))
-    return [];
+  if (!fs28.existsSync(CODEX_SESSIONS)) return [];
   const out = [];
   for (const file of walkDir(CODEX_SESSIONS)) {
-    if (!file.endsWith(".jsonl"))
-      continue;
-    const base = path18.basename(file, ".jsonl");
-    const m = base.match(/^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)$/);
-    const tsFromName = m?.[1] ? (/* @__PURE__ */ new Date(m[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, "T$1:$2:$3") + "Z")).toISOString() : void 0;
+    if (!file.endsWith(".jsonl")) continue;
+    const base = path19.basename(file, ".jsonl");
+    const m = base.match(
+      /^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-(.+)$/
+    );
+    const tsFromName = m?.[1] ? (/* @__PURE__ */ new Date(
+      m[1].replace(/T(\d{2})-(\d{2})-(\d{2})/, "T$1:$2:$3") + "Z"
+    )).toISOString() : void 0;
     const first = readJsonlFirst(file);
     const meta = first?.payload;
     const id = meta?.id ?? m?.[2] ?? base;
     const cwd = meta?.cwd;
     const created = first?.timestamp ?? tsFromName ?? "";
-    if (f.cwd && !sameProject(cwd, f.cwd))
-      continue;
-    const updated = fs27.statSync(file).mtime.toISOString();
-    if (!inRangeOverlap(created, updated, f))
-      continue;
+    if (f.cwd && !sameProject(cwd, f.cwd)) continue;
+    const updated = fs28.statSync(file).mtime.toISOString();
+    if (!inRangeOverlap(created, updated, f)) continue;
     out.push({
       platform: "codex",
       id,
@@ -10803,116 +10994,321 @@ function buildTurnFromMessage(role, parts) {
   let totalRaw = 0;
   for (const c of parts ?? []) {
     const txt = c.text;
-    if (typeof txt !== "string")
-      continue;
-    if (c.type !== "input_text" && c.type !== "output_text")
-      continue;
+    if (typeof txt !== "string") continue;
+    if (c.type !== "input_text" && c.type !== "output_text") continue;
     totalRaw += txt.length;
     const cleaned = stripInjectionTags(txt);
-    if (cleaned)
-      collected.push(cleaned);
+    if (cleaned) collected.push(cleaned);
   }
-  if (!collected.length)
-    return null;
+  if (!collected.length) return null;
   const merged = collected.join("\n\n");
-  if (isBootstrapTurn(merged, totalRaw))
-    return null;
+  if (isBootstrapTurn(merged, totalRaw)) return null;
   return { role, text: merged };
 }
-function codexExtractDialogue(s) {
-  let turns = [];
-  readJsonl(s.filePath, (obj) => {
-    if (obj.type === "compacted") {
-      const rh = obj.payload?.replacement_history;
-      turns = [];
-      if (!Array.isArray(rh))
-        return;
-      for (const item of rh) {
-        if (item.type !== "message")
-          continue;
-        const role2 = parseDialogueRole(item.role);
-        if (!role2)
-          continue;
-        const turn2 = buildTurnFromMessage(role2, item.content);
-        if (turn2)
-          turns.push({ role: turn2.role, text: `[compact]
-${turn2.text}` });
+var CodexTurnPool = class {
+  turns = [];
+  counts = /* @__PURE__ */ new Map();
+  push(turn) {
+    this.turns.push(turn);
+    this.bump(turn);
+  }
+  get length() {
+    return this.turns.length;
+  }
+  toArray() {
+    return this.turns;
+  }
+  bump(turn) {
+    if (turn.kind === "marker") return;
+    const k = turnKey(turn);
+    this.counts.set(k, (this.counts.get(k) ?? 0) + 1);
+  }
+  /**
+   * Merge the dialogue Codex retained across a compaction. Anything already in
+   * the pool is dropped; the rest is inserted ahead of the collected turns,
+   * because retained history is chronologically the prefix of what this file
+   * shows. Returns the recovered turns so the caller can shift event indices.
+   *
+   * On a second or later compaction, "ahead of everything" also puts recovered
+   * turns ahead of the earlier boundary marker, which is only an approximation
+   * of where they belong. Measured over the 365 local rollouts with two or more
+   * compactions: 32 items are recovered that late and all 32 are re-injected
+   * AGENTS.md / plugin preamble, not dialogue. Revisit if that ever changes.
+   */
+  absorbRetainedHistory(items) {
+    const consumed = /* @__PURE__ */ new Map();
+    const recovered = [];
+    for (const item of items) {
+      if (item.type !== "message") continue;
+      const role = parseDialogueRole(item.role);
+      if (!role) continue;
+      const turn = buildTurnFromMessage(role, item.content);
+      if (!turn) continue;
+      const k = turnKey(turn);
+      const alreadyInPool = this.counts.get(k) ?? 0;
+      const used = consumed.get(k) ?? 0;
+      if (used < alreadyInPool) {
+        consumed.set(k, used + 1);
+        continue;
       }
-      return;
+      recovered.push(turn);
+      consumed.set(k, used + 1);
     }
-    const p = obj.payload;
-    if (p?.type !== "message")
-      return;
-    const role = parseDialogueRole(p.role);
-    if (!role)
-      return;
-    const turn = buildTurnFromMessage(role, p.content);
-    if (turn)
-      turns.push(turn);
-  });
-  return turns;
+    if (recovered.length > 0) {
+      this.turns = [...recovered, ...this.turns];
+      for (const turn of recovered) this.bump(turn);
+    }
+    return recovered;
+  }
+};
+var AGENT_ENVELOPE_KIND = /^Message Type:\s*(\S+)/;
+function parseCodexAgentEnvelope(parts) {
+  let header = "";
+  let encrypted = false;
+  for (const part of parts ?? []) {
+    if (part.type === "encrypted_content") {
+      encrypted = true;
+      continue;
+    }
+    if (part.type !== "input_text" && part.type !== "output_text") continue;
+    if (typeof part.text === "string") header += part.text;
+  }
+  if (!header) return null;
+  const kind = AGENT_ENVELOPE_KIND.exec(header)?.[1];
+  if (!kind) return null;
+  const marker = header.indexOf("Payload:");
+  const body = marker === -1 ? "" : header.slice(marker + "Payload:".length);
+  return { kind, body: body.trim(), encrypted };
+}
+function agentEnvelopeRole(kind) {
+  return kind === "FINAL_ANSWER" ? "assistant" : "user";
+}
+var WARN_ENCRYPTED_INTER_AGENT = "codex-inter-agent-encrypted";
+var WARN_COMPACTION_LOSSY = "codex-compaction-assistant-dropped";
+function pushWarningOnce(warnings, code, message) {
+  if (!warnings) return;
+  if (warnings.some((w) => w.code === code)) return;
+  warnings.push({ code, message });
+}
+function codexExtractDialogue(s, warnings) {
+  return collectCodexTurnsAndEvents(s, warnings).turns;
 }
 function codexSearch(s, kw) {
   return searchInDialogue(codexExtractDialogue(s), kw);
 }
-function collectCodexTurnsAndEvents(s) {
-  let turns = [];
-  let events = [];
+function collectCodexTurnsAndEvents(s, warnings) {
+  const pool = new CodexTurnPool();
+  const events = [];
+  let encryptedInterAgent = 0;
   readJsonl(s.filePath, (obj) => {
     if (obj.type === "compacted") {
       const rh = obj.payload?.replacement_history;
-      turns = [];
-      events = [];
-      if (!Array.isArray(rh))
-        return;
-      for (const item of rh) {
-        if (item.type !== "message")
-          continue;
-        const role2 = parseDialogueRole(item.role);
-        if (!role2)
-          continue;
-        const turn2 = buildTurnFromMessage(role2, item.content);
-        if (turn2)
-          turns.push({ role: turn2.role, text: `[compact]
-${turn2.text}` });
+      const recovered = Array.isArray(rh) ? pool.absorbRetainedHistory(rh) : [];
+      if (recovered.length > 0) {
+        for (const ev of events) ev.turnIndex += recovered.length;
+        if (!recovered.some((t) => t.role === "assistant")) {
+          pushWarningOnce(
+            warnings,
+            WARN_COMPACTION_LOSSY,
+            `session ${s.id}: recovered ${recovered.length} pre-compaction turn(s) from Codex's retained history, but it retains user messages only \u2014 assistant replies from before the boundary are not in this file.`
+          );
+        }
       }
+      pool.push(
+        compactionBoundaryTurn(
+          recovered.length > 0 ? `context compacted here; ${recovered.length} earlier turn(s) recovered from the platform's retained history` : `context compacted here; the platform's retained history added nothing beyond the turns above`
+        )
+      );
       return;
     }
     const p = obj.payload;
-    if (!p)
+    if (!p) return;
+    if (p.type === "agent_message" && obj.type === "response_item") {
+      const envelope = parseCodexAgentEnvelope(p.content);
+      if (!envelope) return;
+      if (!envelope.body) {
+        if (envelope.encrypted) encryptedInterAgent++;
+        return;
+      }
+      const cleaned = stripInjectionTags(envelope.body);
+      if (!cleaned) return;
+      pool.push({ role: agentEnvelopeRole(envelope.kind), text: cleaned });
       return;
+    }
     if (p.type === "function_call") {
       const fnName = p.name;
-      if (fnName !== "exec_command" && fnName !== "shell")
-        return;
+      if (fnName !== "exec_command" && fnName !== "shell") return;
       const cmd = commandFromCodexArguments(p.arguments);
-      if (!cmd)
-        return;
+      if (!cmd) return;
       const parsedAll = parseTaskPyCommandsAll(cmd);
       for (const parsed of parsedAll) {
         const ev = {
           action: parsed.action,
           timestamp: obj.timestamp ?? "",
-          turnIndex: turns.length,
+          turnIndex: pool.length,
           ...parsed.action === "create" ? { slug: parsed.slug } : { taskDir: parsed.taskDir }
         };
         events.push(ev);
       }
       return;
     }
-    if (p.type !== "message")
-      return;
+    if (p.type !== "message") return;
     const role = parseDialogueRole(p.role);
-    if (!role)
-      return;
+    if (!role) return;
     const turn = buildTurnFromMessage(role, p.content);
-    if (turn)
-      turns.push(turn);
+    if (turn) pool.push(turn);
   });
+  if (encryptedInterAgent > 0) {
+    pushWarningOnce(
+      warnings,
+      WARN_ENCRYPTED_INTER_AGENT,
+      `session ${s.id}: ${encryptedInterAgent} inter-agent message payload(s) are stored encrypted by Codex and cannot be read back \u2014 the instructions driving this multi-agent run are not recoverable from the rollout.`
+    );
+  }
+  return { turns: pool.toArray(), events };
+}
+
+// roles/moluoxixi/packages/core/src/mem/adapters/grok.ts
+import * as fs29 from "node:fs";
+import * as path20 from "node:path";
+var CHAT_HISTORY = "chat_history.jsonl";
+var COMPACTION_META = "compaction_meta";
+var WARN_COMPACTION_UNRECOVERABLE = "grok-compaction-unrecoverable";
+function* grokSessionDirs(f) {
+  if (!fs29.existsSync(GROK_SESSIONS)) return;
+  let projects;
+  try {
+    projects = fs29.readdirSync(GROK_SESSIONS, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const project of projects) {
+    if (!project.isDirectory()) continue;
+    if (f.cwd) {
+      const cwd = grokCwdFromProjectDir(project.name);
+      if (!sameProject(cwd, f.cwd)) continue;
+    }
+    const projectDir3 = path20.join(GROK_SESSIONS, project.name);
+    let sessions;
+    try {
+      sessions = fs29.readdirSync(projectDir3, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const session of sessions) {
+      if (!session.isDirectory()) continue;
+      const sessionDir = path20.join(projectDir3, session.name);
+      if (!fs29.existsSync(path20.join(sessionDir, CHAT_HISTORY))) continue;
+      yield { projectDir: projectDir3, sessionDir };
+    }
+  }
+}
+function grokListSessions(f) {
+  const out = [];
+  for (const { projectDir: projectDir3, sessionDir } of grokSessionDirs(f)) {
+    const filePath = path20.join(sessionDir, CHAT_HISTORY);
+    const summary = readJsonFile(
+      path20.join(sessionDir, "summary.json")
+    );
+    const id = summary?.info?.id ?? path20.basename(sessionDir);
+    const cwd = summary?.info?.cwd ?? grokCwdFromProjectDir(path20.basename(projectDir3));
+    if (f.cwd && !sameProject(cwd, f.cwd)) continue;
+    const created = summary?.created_at;
+    let updated = summary?.updated_at;
+    if (!updated) {
+      try {
+        updated = fs29.statSync(filePath).mtime.toISOString();
+      } catch {
+        updated = void 0;
+      }
+    }
+    if (!inRangeOverlap(created, updated, f)) continue;
+    const title = summary?.session_summary?.trim() ?? "";
+    out.push({
+      platform: "grok",
+      id,
+      title: title || void 0,
+      cwd,
+      created,
+      updated,
+      filePath
+    });
+  }
+  return out;
+}
+function grokText(content) {
+  if (typeof content === "string") {
+    return { text: stripInjectionTags(content), rawLength: content.length };
+  }
+  if (!Array.isArray(content)) return { text: "", rawLength: 0 };
+  const parts = [];
+  let rawLength = 0;
+  for (const block of content) {
+    if (block.type !== "text" || typeof block.text !== "string") continue;
+    rawLength += block.text.length;
+    const cleaned = stripInjectionTags(block.text);
+    if (cleaned) parts.push(cleaned);
+  }
+  return { text: parts.join("\n\n"), rawLength };
+}
+function grokExtractDialogue(s, warnings) {
+  return collectGrokTurnsAndEvents(s, warnings).turns;
+}
+function grokSearch(s, kw) {
+  return searchInDialogue(grokExtractDialogue(s), kw);
+}
+function collectGrokTurnsAndEvents(s, warnings) {
+  const turns = [];
+  const events = [];
+  let compactions = 0;
+  readJsonl(s.filePath, (obj) => {
+    if (obj.type === "user") {
+      const reason = obj.synthetic_reason;
+      if (reason === COMPACTION_META) {
+        compactions++;
+        const { text: text3 } = grokText(obj.content);
+        turns.push(
+          compactionBoundaryTurn(
+            "context compacted here; Grok starts this file from the compacted state, so earlier turns are not in it",
+            text3
+          )
+        );
+        return;
+      }
+      if (reason !== void 0) return;
+      const { text: text2, rawLength } = grokText(obj.content);
+      if (text2 && !isBootstrapTurn(text2, rawLength))
+        turns.push({ role: "user", text: text2 });
+      return;
+    }
+    if (obj.type !== "assistant") return;
+    for (const call of obj.tool_calls ?? []) {
+      if (call.name !== "run_terminal_command") continue;
+      const cmd = commandFromCodexArguments(call.arguments);
+      if (!cmd) continue;
+      for (const parsed of parseTaskPyCommandsAll(cmd)) {
+        events.push({
+          action: parsed.action,
+          timestamp: "",
+          turnIndex: turns.length,
+          ...parsed.action === "create" ? { slug: parsed.slug } : { taskDir: parsed.taskDir }
+        });
+      }
+    }
+    const { text } = grokText(obj.content);
+    if (text) turns.push({ role: "assistant", text });
+  });
+  if (compactions > 0 && warnings) {
+    const archive = path20.join(path20.dirname(s.filePath), "compaction");
+    warnings.push({
+      code: WARN_COMPACTION_UNRECOVERABLE,
+      message: `session ${s.id}: compacted ${compactions} time(s); the turns before each boundary are not in chat_history.jsonl and cannot be recovered as dialogue. Grok keeps a rendered transcript at ${archive}/ if you need to read them.`
+    });
+  }
   return { turns, events };
 }
 
-// packages/core/dist/mem/adapters/opencode.js
+// roles/moluoxixi/packages/core/src/mem/adapters/opencode.ts
 function opencodeListSessions(_f) {
   return [];
 }
@@ -10923,19 +11319,17 @@ function opencodeSearch(kw) {
   return searchInDialogue([], kw);
 }
 
-// packages/core/dist/mem/adapters/pi.js
-import * as fs28 from "node:fs";
-import * as path19 from "node:path";
+// roles/moluoxixi/packages/core/src/mem/adapters/pi.ts
+import * as fs30 from "node:fs";
+import * as path21 from "node:path";
 function piListSessions(f) {
   const out = [];
   for (const filePath of candidateFiles(f)) {
     const header = readJsonlFirst(filePath);
-    if (header?.type !== "session")
-      continue;
+    if (header?.type !== "session") continue;
     const id = typeof header.id === "string" ? header.id : idFromFile(filePath);
     const cwd = typeof header.cwd === "string" ? header.cwd : void 0;
-    if (f.cwd && !sameProject(cwd, f.cwd))
-      continue;
+    if (f.cwd && !sameProject(cwd, f.cwd)) continue;
     let title;
     let lastActivityMs;
     readJsonl(filePath, (entry) => {
@@ -10943,24 +11337,21 @@ function piListSessions(f) {
         title = typeof entry.name === "string" && entry.name.trim() ? entry.name.trim() : void 0;
         return;
       }
-      if (entry.type !== "message")
-        return;
+      if (entry.type !== "message") return;
       const role = entry.message?.role;
-      if (role !== "user" && role !== "assistant")
-        return;
+      if (role !== "user" && role !== "assistant") return;
       const activityMs = timestampMs(entry.message?.timestamp) ?? timestampMs(entry.timestamp);
       if (activityMs !== void 0)
         lastActivityMs = Math.max(lastActivityMs ?? 0, activityMs);
     });
     let updated;
     try {
-      updated = lastActivityMs !== void 0 ? new Date(lastActivityMs).toISOString() : fs28.statSync(filePath).mtime.toISOString();
+      updated = lastActivityMs !== void 0 ? new Date(lastActivityMs).toISOString() : fs30.statSync(filePath).mtime.toISOString();
     } catch {
       updated = lastActivityMs !== void 0 ? new Date(lastActivityMs).toISOString() : void 0;
     }
     const created = typeof header.timestamp === "string" ? header.timestamp : void 0;
-    if (!inRangeOverlap(created, updated, f))
-      continue;
+    if (!inRangeOverlap(created, updated, f)) continue;
     out.push({
       platform: "pi",
       id,
@@ -10974,24 +11365,21 @@ function piListSessions(f) {
   return out;
 }
 function candidateFiles(f) {
-  const defaultRoot = path19.join(PI_AGENT_DIR, "sessions");
+  const defaultRoot = path21.join(PI_AGENT_DIR, "sessions");
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   const pushJsonlFiles = (root) => {
-    if (!fs28.existsSync(root))
-      return;
+    if (!fs30.existsSync(root)) return;
     for (const file of walkDir(root)) {
-      if (!file.endsWith(".jsonl"))
-        continue;
-      const normalized = path19.resolve(file);
-      if (seen.has(normalized))
-        continue;
+      if (!file.endsWith(".jsonl")) continue;
+      const normalized = path21.resolve(file);
+      if (seen.has(normalized)) continue;
       seen.add(normalized);
       out.push(file);
     }
   };
   for (const root of piSessionRoots(f.cwd)) {
-    if (f.cwd && path19.resolve(root) === path19.resolve(defaultRoot)) {
+    if (f.cwd && path21.resolve(root) === path21.resolve(defaultRoot)) {
       pushJsonlFiles(piProjectDirFromCwd(f.cwd));
     } else {
       pushJsonlFiles(root);
@@ -11000,15 +11388,13 @@ function candidateFiles(f) {
   return out;
 }
 function idFromFile(filePath) {
-  const base = path19.basename(filePath, ".jsonl");
+  const base = path21.basename(filePath, ".jsonl");
   const underscore = base.indexOf("_");
   return underscore === -1 ? base : base.slice(underscore + 1);
 }
 function timestampMs(value) {
-  if (typeof value === "number" && Number.isFinite(value))
-    return value;
-  if (typeof value !== "string")
-    return void 0;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return void 0;
   const ms = new Date(value).getTime();
   return Number.isNaN(ms) ? void 0 : ms;
 }
@@ -11022,71 +11408,44 @@ function collectPiTurnsAndEvents(s) {
   return buildPiTurnsAndEvents(s);
 }
 function buildPiTurnsAndEvents(s) {
-  const effective = effectiveActivePath(s.filePath);
+  const activePath = piActivePath(s.filePath);
   const turns = [];
   const events = [];
-  for (const entry of effective) {
+  for (const entry of activePath) {
     collectTaskEvents(entry, turns.length, events);
     const turn = turnFromEntry(entry);
-    if (turn)
-      turns.push(turn);
+    if (turn) turns.push(turn);
   }
   return { turns, events };
 }
-function effectiveActivePath(filePath) {
+function piActivePath(filePath) {
   const entries = [];
   readJsonl(filePath, (entry) => {
-    if (entry.type === "session")
-      return;
-    if (typeof entry.id !== "string")
-      return;
+    if (entry.type === "session") return;
+    if (typeof entry.id !== "string") return;
     entries.push(entry);
   });
-  if (entries.length === 0)
-    return [];
+  if (entries.length === 0) return [];
   const byId = /* @__PURE__ */ new Map();
   for (const entry of entries) {
-    if (typeof entry.id === "string")
-      byId.set(entry.id, entry);
+    if (typeof entry.id === "string") byId.set(entry.id, entry);
   }
   const leaf = entries[entries.length - 1];
-  if (!leaf)
-    return [];
+  if (!leaf) return [];
   const activePath = [];
   let current = leaf;
   const seen = /* @__PURE__ */ new Set();
   while (current) {
-    if (typeof current.id !== "string" || seen.has(current.id))
-      break;
+    if (typeof current.id !== "string" || seen.has(current.id)) break;
     seen.add(current.id);
     activePath.unshift(current);
     current = typeof current.parentId === "string" ? byId.get(current.parentId) : void 0;
   }
-  const compactionIdx = findLastIndex(activePath, (entry) => entry.type === "compaction");
-  if (compactionIdx === -1)
-    return activePath;
-  const compaction = activePath[compactionIdx];
-  if (!compaction)
-    return activePath;
-  const firstKeptIdx = activePath.findIndex((entry, idx) => idx < compactionIdx && entry.id === compaction.firstKeptEntryId);
-  const keptBeforeCompaction = firstKeptIdx === -1 ? [] : activePath.slice(firstKeptIdx, compactionIdx);
-  return [
-    compaction,
-    ...keptBeforeCompaction,
-    ...activePath.slice(compactionIdx + 1)
-  ];
-}
-function findLastIndex(items, pred) {
-  for (let i = items.length - 1; i >= 0; i--) {
-    const item = items[i];
-    if (item !== void 0 && pred(item))
-      return i;
-  }
-  return -1;
+  return activePath;
 }
 function turnFromEntry(entry) {
   if (entry.type === "compaction") {
-    return syntheticTurn("[compact summary]", entry.summary);
+    return compactionBoundary(entry.summary);
   }
   if (entry.type === "branch_summary") {
     return syntheticTurn("[branch summary]", entry.summary);
@@ -11094,11 +11453,9 @@ function turnFromEntry(entry) {
   if (entry.type === "custom_message") {
     return buildTurn("user", entry.content);
   }
-  if (entry.type !== "message")
-    return null;
+  if (entry.type !== "message") return null;
   const msg = entry.message;
-  if (!msg)
-    return null;
+  if (!msg) return null;
   switch (msg.role) {
     case "user":
       return buildTurn("user", msg.content);
@@ -11109,17 +11466,22 @@ function turnFromEntry(entry) {
     case "branchSummary":
       return syntheticTurn("[branch summary]", msg.summary);
     case "compactionSummary":
-      return syntheticTurn("[compact summary]", msg.summary);
+      return compactionBoundary(msg.summary);
     default:
       return null;
   }
 }
+function compactionBoundary(raw) {
+  const summary = typeof raw === "string" ? stripInjectionTags(raw) : "";
+  return compactionBoundaryTurn(
+    "context compacted here; the turns above stayed on the active branch",
+    summary
+  );
+}
 function syntheticTurn(prefix, raw) {
-  if (typeof raw !== "string")
-    return null;
+  if (typeof raw !== "string") return null;
   const text = stripInjectionTags(raw);
-  if (!text)
-    return null;
+  if (!text) return null;
   return { role: "user", text: `${prefix}
 ${text}` };
 }
@@ -11129,51 +11491,38 @@ function buildTurn(role, content) {
   if (typeof content === "string") {
     totalRaw = content.length;
     const cleaned = stripInjectionTags(content);
-    if (cleaned)
-      parts.push(cleaned);
+    if (cleaned) parts.push(cleaned);
   } else if (Array.isArray(content)) {
     for (const block of content) {
-      if (block.type !== "text" || typeof block.text !== "string")
-        continue;
+      if (block.type !== "text" || typeof block.text !== "string") continue;
       totalRaw += block.text.length;
       const cleaned = stripInjectionTags(block.text);
-      if (cleaned)
-        parts.push(cleaned);
+      if (cleaned) parts.push(cleaned);
     }
   }
-  if (parts.length === 0)
-    return null;
+  if (parts.length === 0) return null;
   const merged = parts.join("\n\n");
-  if (isBootstrapTurn(merged, totalRaw))
-    return null;
+  if (isBootstrapTurn(merged, totalRaw)) return null;
   return { role, text: merged };
 }
 function collectTaskEvents(entry, turnIndex, events) {
-  if (entry.type !== "message")
-    return;
+  if (entry.type !== "message") return;
   const msg = entry.message;
-  if (!msg)
-    return;
+  if (!msg) return;
   if (msg.role === "bashExecution" && typeof msg.command === "string") {
     pushTaskEvents(msg.command, entry.timestamp, turnIndex, events);
     return;
   }
-  if (msg.role !== "assistant" || !Array.isArray(msg.content))
-    return;
+  if (msg.role !== "assistant" || !Array.isArray(msg.content)) return;
   for (const block of msg.content) {
-    if (block.type !== "toolCall")
-      continue;
-    if (typeof block.name !== "string")
-      continue;
+    if (block.type !== "toolCall") continue;
+    if (typeof block.name !== "string") continue;
     const toolName = block.name.toLowerCase();
-    if (toolName !== "bash" && toolName !== "shell")
-      continue;
+    if (toolName !== "bash" && toolName !== "shell") continue;
     const args = block.arguments;
-    if (!args || typeof args !== "object" || Array.isArray(args))
-      continue;
+    if (!args || typeof args !== "object" || Array.isArray(args)) continue;
     const command = args.command;
-    if (typeof command !== "string")
-      continue;
+    if (typeof command !== "string") continue;
     pushTaskEvents(command, entry.timestamp, turnIndex, events);
   }
 }
@@ -11190,14 +11539,953 @@ function pushTaskEvents(command, timestamp, turnIndex, events) {
   }
 }
 
-// packages/core/dist/mem/sessions.js
+// roles/moluoxixi/packages/core/src/mem/adapters/zcode.ts
+import * as fs32 from "node:fs";
+
+// roles/moluoxixi/packages/core/src/mem/internal/sqlite-readonly.ts
+import * as fs31 from "node:fs";
+var SqliteParseError = class extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.cause = cause;
+    this.name = "SqliteParseError";
+  }
+  cause;
+};
+var SqliteSnapshotUnstableError = class extends SqliteParseError {
+  constructor(mainPath) {
+    super(
+      `SQLite main/WAL files changed while capturing a read snapshot: ${mainPath}`
+    );
+    this.name = "SqliteSnapshotUnstableError";
+  }
+};
+function byteAt(buf, off) {
+  return off >= 0 && off < buf.length ? buf[off] : 0;
+}
+function readUint32BE(buf, off) {
+  return byteAt(buf, off) * 16777216 + (byteAt(buf, off + 1) << 16 | byteAt(buf, off + 2) << 8 | byteAt(buf, off + 3)) >>> 0;
+}
+function readUint16BE(buf, off) {
+  return (byteAt(buf, off) << 8 | byteAt(buf, off + 1)) >>> 0;
+}
+function readUint8(buf, off) {
+  return byteAt(buf, off);
+}
+function readVarint(buf, off) {
+  let result = 0;
+  for (let i = 0; i < 8; i++) {
+    const byte = byteAt(buf, off + i);
+    if (byte < 128) {
+      result = result * 128 + byte;
+      return { value: result, next: off + i + 1 };
+    }
+    result = result * 128 + (byte & 127);
+  }
+  const ninth = byteAt(buf, off + 8);
+  result = result * 256 + ninth;
+  return { value: result, next: off + 9 };
+}
+function readSignedBE(buf, off, n) {
+  let val = 0;
+  for (let i = 0; i < n; i++) val = val * 256 + byteAt(buf, off + i);
+  const bits = n * 8;
+  if (val >= 2 ** (bits - 1)) val -= 2 ** bits;
+  return val;
+}
+var DB_HEADER_SIZE = 100;
+var WAL_HEADER_SIZE = 32;
+var WAL_FRAME_HEADER_SIZE = 24;
+var WAL_INDEX_HEADER_SIZE = 96;
+var SNAPSHOT_ATTEMPTS = 3;
+function parseDbHeader(buf) {
+  if (buf[0] !== 83 || // S
+  buf[1] !== 81 || // Q
+  buf[2] !== 76 || // l
+  buf[3] !== 105 || // i
+  buf[4] !== 116 || // t
+  buf[5] !== 101) {
+    throw new SqliteParseError("not a SQLite database (bad magic)");
+  }
+  const ps = readUint16BE(buf, 16);
+  const pageSize = ps === 1 ? 65536 : ps;
+  if (pageSize < 512 || (pageSize & pageSize - 1) !== 0) {
+    throw new SqliteParseError(`invalid page size ${pageSize}`);
+  }
+  const textEncoding = readUint32BE(buf, 56);
+  const reservedBytes = readUint8(buf, 20);
+  const dbSizePages = readUint32BE(buf, 28);
+  return {
+    pageSize,
+    dbSizePages,
+    textEncoding: textEncoding || 1,
+    reservedBytes
+  };
+}
+var HOST_IS_LITTLE_ENDIAN = (() => {
+  const bytes = new Uint8Array(4);
+  new Uint32Array(bytes.buffer)[0] = 1;
+  return bytes[0] === 1;
+})();
+function readUint32LE(buf, off) {
+  return (byteAt(buf, off) | byteAt(buf, off + 1) << 8 | byteAt(buf, off + 2) << 16 | byteAt(buf, off + 3) * 16777216) >>> 0;
+}
+function readUint32Native(buf, off) {
+  return HOST_IS_LITTLE_ENDIAN ? readUint32LE(buf, off) : readUint32BE(buf, off);
+}
+function readUint16Native(buf, off) {
+  return HOST_IS_LITTLE_ENDIAN ? (byteAt(buf, off) | byteAt(buf, off + 1) << 8) >>> 0 : readUint16BE(buf, off);
+}
+function equalBytes(a, b) {
+  if (a === null || b === null) return a === b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+function fileStamp(path23) {
+  try {
+    const stat = fs31.statSync(path23);
+    return {
+      size: stat.size,
+      mtimeMs: stat.mtimeMs,
+      ctimeMs: stat.ctimeMs,
+      dev: stat.dev,
+      ino: stat.ino
+    };
+  } catch (error) {
+    const code = error.code;
+    if (code === "ENOENT") return null;
+    throw error;
+  }
+}
+function sameStamp(a, b) {
+  if (a === null || b === null) return a === b;
+  return a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs && a.dev === b.dev && a.ino === b.ino;
+}
+function readOptionalFile(path23) {
+  try {
+    return fs31.readFileSync(path23);
+  } catch (error) {
+    const code = error.code;
+    if (code === "ENOENT") return null;
+    throw error;
+  }
+}
+function readWalIndexPrefix(path23) {
+  const bytes = readOptionalFile(path23);
+  return bytes === null ? null : bytes.subarray(0, Math.min(bytes.length, WAL_INDEX_HEADER_SIZE));
+}
+function walChecksum(bytes, off, length, bigEndian, seed0, seed1) {
+  if (length % 8 !== 0) {
+    throw new SqliteParseError("WAL checksum input is not 8-byte aligned");
+  }
+  const readWord = bigEndian ? readUint32BE : readUint32LE;
+  let s0 = seed0 >>> 0;
+  let s1 = seed1 >>> 0;
+  for (let i = off; i < off + length; i += 8) {
+    s0 = s0 + readWord(bytes, i) + s1 >>> 0;
+    s1 = s1 + readWord(bytes, i + 4) + s0 >>> 0;
+  }
+  return [s0, s1];
+}
+function parseWalIndexHeader(bytes) {
+  if (bytes === null) return null;
+  if (bytes.length < WAL_INDEX_HEADER_SIZE) {
+    throw new SqliteParseError("WAL-index header is truncated");
+  }
+  const first = bytes.subarray(0, 48);
+  const second = bytes.subarray(48, 96);
+  if (!equalBytes(first, second)) {
+    throw new SqliteParseError("WAL-index header copies disagree");
+  }
+  if (byteAt(first, 12) !== 1) {
+    throw new SqliteParseError("WAL-index is not initialized");
+  }
+  const [checksum1, checksum2] = walChecksum(
+    first,
+    0,
+    40,
+    !HOST_IS_LITTLE_ENDIAN,
+    0,
+    0
+  );
+  if (checksum1 !== readUint32Native(first, 40) || checksum2 !== readUint32Native(first, 44)) {
+    throw new SqliteParseError("WAL-index header checksum mismatch");
+  }
+  const encodedPageSize = readUint16Native(first, 14);
+  return {
+    pageSize: encodedPageSize === 1 ? 65536 : encodedPageSize,
+    mxFrame: readUint32Native(first, 16),
+    nPage: readUint32Native(first, 20),
+    frameChecksum1: readUint32Native(first, 24),
+    frameChecksum2: readUint32Native(first, 28),
+    salt1: readUint32BE(first, 32),
+    salt2: readUint32BE(first, 36),
+    bigEndianChecksum: byteAt(first, 13) !== 0
+  };
+}
+function captureSnapshot(mainPath) {
+  const walPath = mainPath + "-wal";
+  const shmPath = mainPath + "-shm";
+  let lastError;
+  for (let attempt = 0; attempt < SNAPSHOT_ATTEMPTS; attempt++) {
+    try {
+      const shmBefore = readWalIndexPrefix(shmPath);
+      const mainBefore = fileStamp(mainPath);
+      const walBefore = fileStamp(walPath);
+      if (mainBefore === null) {
+        throw new SqliteParseError(`cannot read db file: ${mainPath}`);
+      }
+      const mainBytes = fs31.readFileSync(mainPath);
+      const walBytes = readOptionalFile(walPath);
+      const mainAfter = fileStamp(mainPath);
+      const walAfter = fileStamp(walPath);
+      const shmAfter = readWalIndexPrefix(shmPath);
+      if (!sameStamp(mainBefore, mainAfter) || !sameStamp(walBefore, walAfter) || !equalBytes(shmBefore, shmAfter)) {
+        lastError = new SqliteSnapshotUnstableError(mainPath);
+        continue;
+      }
+      const walIndex = walBytes === null ? null : parseWalIndexHeader(shmAfter);
+      return { mainBytes, walBytes, walIndex };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof SqliteParseError ? lastError : new SqliteParseError(
+    `cannot capture SQLite snapshot: ${mainPath}`,
+    lastError
+  );
+}
+function loadWal(walBytes, expectedPageSize, walIndex) {
+  if (walBytes === null) return null;
+  if (walBytes.length < WAL_HEADER_SIZE) return null;
+  const magic = readUint32BE(walBytes, 0);
+  if (magic !== 931071618 && magic !== 931071619) {
+    throw new SqliteParseError("invalid WAL magic");
+  }
+  const bigEndianChecksum = magic === 931071619;
+  const walPageSize = readUint32BE(walBytes, 8);
+  if (walPageSize !== expectedPageSize) {
+    throw new SqliteParseError("WAL page size does not match database");
+  }
+  const salt1 = readUint32BE(walBytes, 16);
+  const salt2 = readUint32BE(walBytes, 20);
+  let [checksum1, checksum2] = walChecksum(
+    walBytes,
+    0,
+    24,
+    bigEndianChecksum,
+    0,
+    0
+  );
+  if (checksum1 !== readUint32BE(walBytes, 24) || checksum2 !== readUint32BE(walBytes, 28)) {
+    throw new SqliteParseError("WAL header checksum mismatch");
+  }
+  if (walIndex) {
+    if (walIndex.pageSize !== expectedPageSize || walIndex.salt1 !== salt1 || walIndex.salt2 !== salt2 || walIndex.bigEndianChecksum !== bigEndianChecksum) {
+      throw new SqliteParseError("WAL-index does not match WAL header");
+    }
+  }
+  const frameSize = WAL_FRAME_HEADER_SIZE + expectedPageSize;
+  const frameCount = Math.floor(
+    (walBytes.length - WAL_HEADER_SIZE) / frameSize
+  );
+  const frameLimit = walIndex?.mxFrame ?? frameCount;
+  if (frameLimit > frameCount) {
+    throw new SqliteParseError("WAL-index end mark exceeds WAL frame count");
+  }
+  let lastCommitFrame = -1;
+  let validatedFrameCount = 0;
+  for (let i = 0; i < frameLimit; i++) {
+    const base = WAL_HEADER_SIZE + i * frameSize;
+    const fSalt1 = readUint32BE(walBytes, base + 8);
+    const fSalt2 = readUint32BE(walBytes, base + 12);
+    if (fSalt1 !== salt1 || fSalt2 !== salt2) {
+      if (walIndex) {
+        throw new SqliteParseError(`WAL frame ${i + 1} salt mismatch`);
+      }
+      break;
+    }
+    [checksum1, checksum2] = walChecksum(
+      walBytes,
+      base,
+      8,
+      bigEndianChecksum,
+      checksum1,
+      checksum2
+    );
+    [checksum1, checksum2] = walChecksum(
+      walBytes,
+      base + WAL_FRAME_HEADER_SIZE,
+      expectedPageSize,
+      bigEndianChecksum,
+      checksum1,
+      checksum2
+    );
+    if (checksum1 !== readUint32BE(walBytes, base + 16) || checksum2 !== readUint32BE(walBytes, base + 20)) {
+      if (walIndex) {
+        throw new SqliteParseError(`WAL frame ${i + 1} checksum mismatch`);
+      }
+      break;
+    }
+    validatedFrameCount = i + 1;
+    const dbSizeAfterCommit = readUint32BE(walBytes, base + 4);
+    if (dbSizeAfterCommit !== 0) lastCommitFrame = i;
+  }
+  if (walIndex) {
+    if (checksum1 !== walIndex.frameChecksum1 || checksum2 !== walIndex.frameChecksum2) {
+      throw new SqliteParseError(
+        "WAL end-mark checksum disagrees with WAL-index"
+      );
+    }
+    if (frameLimit > 0 && lastCommitFrame !== frameLimit - 1) {
+      throw new SqliteParseError("WAL-index end mark is not a commit frame");
+    }
+  }
+  if (lastCommitFrame < 0) return { pageMap: /* @__PURE__ */ new Map() };
+  const pageMap = /* @__PURE__ */ new Map();
+  const replayFrameCount = walIndex ? frameLimit : Math.min(validatedFrameCount, lastCommitFrame + 1);
+  for (let i = 0; i < replayFrameCount; i++) {
+    const base = WAL_HEADER_SIZE + i * frameSize;
+    const pgno = readUint32BE(walBytes, base);
+    const pageStart = base + WAL_FRAME_HEADER_SIZE;
+    pageMap.set(
+      pgno,
+      walBytes.subarray(pageStart, pageStart + expectedPageSize)
+    );
+  }
+  return { pageMap };
+}
+function makePageSource(mainBytes, header, wal) {
+  return {
+    pageSize: header.pageSize,
+    getPage(pgno) {
+      if (wal?.pageMap.has(pgno)) {
+        const walPage = wal.pageMap.get(pgno);
+        if (walPage) return walPage;
+      }
+      const start = (pgno - 1) * header.pageSize;
+      const end = start + header.pageSize;
+      if (end > mainBytes.length) {
+        return new Uint8Array(header.pageSize);
+      }
+      return mainBytes.subarray(start, end);
+    }
+  };
+}
+function decodeRecord(payload, td) {
+  const headerLenInfo = readVarint(payload, 0);
+  const headerLen = headerLenInfo.value;
+  const headerEnd = headerLenInfo.next;
+  if (headerLen > payload.length) {
+    throw new SqliteParseError("record header length exceeds payload");
+  }
+  const serialTypes = [];
+  let p = headerEnd;
+  while (p < headerLen) {
+    const st = readVarint(payload, p);
+    serialTypes.push(st.value);
+    p = st.next;
+  }
+  const values = [];
+  let bodyOff = headerLen;
+  for (const st of serialTypes) {
+    if (st === 0) {
+      values.push(null);
+    } else if (st <= 4) {
+      values.push(readSignedBE(payload, bodyOff, st));
+      bodyOff += st;
+    } else if (st === 5) {
+      values.push(readSignedBE(payload, bodyOff, 6));
+      bodyOff += 6;
+    } else if (st === 6) {
+      values.push(readSignedBE(payload, bodyOff, 8));
+      bodyOff += 8;
+    } else if (st === 7) {
+      const view = new DataView(
+        payload.buffer,
+        payload.byteOffset + bodyOff,
+        8
+      );
+      values.push(view.getFloat64(0));
+      bodyOff += 8;
+    } else if (st === 8) {
+      values.push(0);
+    } else if (st === 9) {
+      values.push(1);
+    } else if (st >= 12 && st % 2 === 0) {
+      const len = (st - 12) / 2;
+      values.push(payload.subarray(bodyOff, bodyOff + len));
+      bodyOff += len;
+    } else if (st >= 13 && st % 2 === 1) {
+      const len = (st - 13) / 2;
+      values.push(td.decode(payload.subarray(bodyOff, bodyOff + len)));
+      bodyOff += len;
+    } else {
+      values.push(null);
+    }
+  }
+  return { values };
+}
+function decodeTextDecoderEncoding(enc) {
+  if (enc === 2) return "utf-16le";
+  if (enc === 3) return "utf-16be";
+  return "utf-8";
+}
+var PAGE_LEAF_TABLE = 13;
+var PAGE_INTERIOR_TABLE = 5;
+function visitTableBtree(src, rootPgno, textEncoding, header, visit) {
+  const td = new TextDecoder(decodeTextDecoderEncoding(textEncoding));
+  const visited = /* @__PURE__ */ new Set();
+  walk(rootPgno);
+  function walk(pgno) {
+    if (pgno <= 0 || visited.has(pgno)) return;
+    visited.add(pgno);
+    const page = src.getPage(pgno);
+    const hdrOff = pgno === 1 ? DB_HEADER_SIZE : 0;
+    const pageType = byteAt(page, hdrOff);
+    if (pageType === PAGE_INTERIOR_TABLE) {
+      walkInterior(page, hdrOff);
+    } else if (pageType === PAGE_LEAF_TABLE) {
+      walkLeaf(page, hdrOff);
+    } else {
+    }
+  }
+  function walkInterior(page, hdrOff) {
+    const ncells = readUint16BE(page, hdrOff + 3);
+    const cellPtrStart = hdrOff + 12;
+    for (let i = 0; i < ncells; i++) {
+      const cellOff = readUint16BE(page, cellPtrStart + i * 2);
+      const childPgno = readUint32BE(page, cellOff);
+      walk(childPgno);
+    }
+    const rightMost = readUint32BE(page, hdrOff + 8);
+    if (rightMost !== 0) walk(rightMost);
+  }
+  function walkLeaf(page, hdrOff) {
+    const ncells = readUint16BE(page, hdrOff + 3);
+    const cellPtrStart = hdrOff + 8;
+    for (let i = 0; i < ncells; i++) {
+      const cellOff = readUint16BE(page, cellPtrStart + i * 2);
+      const { rowid, values } = decodeLeafCell(page, cellOff, src, header, td);
+      visit({ rowid, values });
+    }
+  }
+}
+function decodeLeafCell(page, cellOff, src, header, td) {
+  let cur = cellOff;
+  const payloadLenInfo = readVarint(page, cur);
+  cur = payloadLenInfo.next;
+  const rowidInfo = readVarint(page, cur);
+  cur = rowidInfo.next;
+  const payloadLen = payloadLenInfo.value;
+  const usableSize = header.pageSize - header.reservedBytes;
+  const maxLocal = usableSize - 35;
+  const minLocal = Math.floor((usableSize - 12) * 32 / 255) - 23;
+  let localBytes;
+  let overflowPgno = null;
+  if (payloadLen <= maxLocal) {
+    localBytes = payloadLen;
+  } else {
+    const k = minLocal + (payloadLen - minLocal) % (usableSize - 4);
+    localBytes = k <= maxLocal ? k : minLocal;
+    overflowPgno = readUint32BE(page, cur + localBytes);
+  }
+  let payload;
+  if (overflowPgno === null) {
+    payload = page.subarray(cur, cur + localBytes);
+  } else {
+    const full = new Uint8Array(payloadLen);
+    full.set(page.subarray(cur, cur + localBytes), 0);
+    let written = localBytes;
+    let nextPgno = overflowPgno;
+    let guard = 0;
+    while (nextPgno !== 0 && written < payloadLen && guard < 1e5) {
+      guard++;
+      const ovPage = src.getPage(nextPgno);
+      const nextPage = readUint32BE(ovPage, 0);
+      const chunkLen = Math.min(payloadLen - written, usableSize - 4);
+      full.set(ovPage.subarray(4, 4 + chunkLen), written);
+      written += chunkLen;
+      nextPgno = nextPage;
+    }
+    payload = full;
+  }
+  const { values } = decodeRecord(payload, td);
+  return { rowid: rowidInfo.value, values };
+}
+function parseColumnNames(sql) {
+  const open = sql.indexOf("(");
+  const close = sql.lastIndexOf(")");
+  if (open < 0 || close < 0 || close <= open) return null;
+  const body = sql.slice(open + 1, close);
+  const segments = splitTopLevelCommas(body);
+  const cols = [];
+  for (const seg of segments) {
+    const trimmed = seg.trim();
+    if (!trimmed) continue;
+    const ident = firstIdentifier(trimmed);
+    if (!ident) continue;
+    if (isConstraintKeyword(ident)) continue;
+    cols.push(ident);
+  }
+  return cols.length ? cols : null;
+}
+function splitTopLevelCommas(body) {
+  const out = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i <= body.length; i++) {
+    const ch = body[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (ch === "," && depth === 0 || i === body.length) {
+      out.push(body.slice(start, i));
+      start = i + 1;
+    }
+  }
+  return out;
+}
+function firstIdentifier(piece) {
+  const m = piece.match(
+    /^\s*(?:"([^"]+)"|`([^`]+)`|\[([^\]]+)\]|([A-Za-z_][A-Za-z0-9_$]*))/
+  );
+  if (!m) return null;
+  return m[1] ?? m[2] ?? m[3] ?? m[4] ?? null;
+}
+function isConstraintKeyword(id) {
+  return /^(primary|unique|check|foreign|constraint)$/i.test(id);
+}
+function openSqliteReadOnly(mainPath) {
+  const snapshot = captureSnapshot(mainPath);
+  const { mainBytes } = snapshot;
+  if (mainBytes.length < DB_HEADER_SIZE) {
+    throw new SqliteParseError(`db file too small: ${mainPath}`);
+  }
+  const header = parseDbHeader(mainBytes);
+  const wal = loadWal(snapshot.walBytes, header.pageSize, snapshot.walIndex);
+  const src = makePageSource(mainBytes, header, wal);
+  const columnCache = /* @__PURE__ */ new Map();
+  function readSqliteMaster() {
+    const tables = [];
+    visitTableBtree(src, 1, header.textEncoding, header, ({ values }) => {
+      const [type, name, _tbl, rootpage, sql] = values;
+      if (type === "table" && typeof name === "string" && typeof rootpage === "number") {
+        tables.push({ name, rootPgno: rootpage, sql: sql ?? "" });
+      }
+    });
+    return tables;
+  }
+  function columnsFor(table) {
+    const cached = columnCache.get(table.name);
+    if (cached !== void 0) return cached;
+    const parsed = table.sql ? parseColumnNames(table.sql) : null;
+    columnCache.set(table.name, parsed);
+    return parsed;
+  }
+  function rowidAliasIndex(table, columns) {
+    if (!table.sql || !columns) return -1;
+    const open = table.sql.indexOf("(");
+    const close = table.sql.lastIndexOf(")");
+    if (open < 0 || close < 0) return -1;
+    const body = table.sql.slice(open + 1, close);
+    const segments = splitTopLevelCommas(body);
+    let idx = 0;
+    for (const seg of segments) {
+      const trimmed = seg.trim();
+      const ident = firstIdentifier(trimmed);
+      if (!ident || isConstraintKeyword(ident)) continue;
+      if (/integer\s+primary\s+key\b/i.test(trimmed)) {
+        return idx;
+      }
+      idx++;
+    }
+    return -1;
+  }
+  return {
+    dbPath: mainPath,
+    listTables() {
+      return readSqliteMaster();
+    },
+    scanTable(tableName, predicate) {
+      let table;
+      try {
+        table = readSqliteMaster().find((t) => t.name === tableName);
+        if (!table || table.rootPgno <= 0) return [];
+        const columns = columnsFor(table);
+        const aliasIdx = rowidAliasIndex(table, columns);
+        const rows = [];
+        visitTableBtree(
+          src,
+          table.rootPgno,
+          header.textEncoding,
+          header,
+          ({ rowid, values }) => {
+            const row = {};
+            for (let i = 0; i < values.length; i++) {
+              const key = columns?.[i] ?? `col${i}`;
+              if (i === aliasIdx && values[i] === null) {
+                row[key] = rowid;
+              } else {
+                row[key] = values[i];
+              }
+            }
+            if (!predicate || predicate(row)) rows.push(row);
+          }
+        );
+        return rows;
+      } catch (e) {
+        throw e instanceof SqliteParseError ? e : new SqliteParseError(`failed reading table "${tableName}"`, e);
+      }
+    },
+    close() {
+    }
+  };
+}
+
+// roles/moluoxixi/packages/core/src/mem/adapters/zcode.ts
+function parseDialogueRole2(v) {
+  return v === "user" || v === "assistant" ? v : void 0;
+}
+function parseDataJson(raw) {
+  if (typeof raw !== "string") return null;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+var ZCODE_DB_UNREADABLE_WARNING_CODE = "zcode-db-unreadable";
+var ZCODE_DB_SNAPSHOT_UNSTABLE_WARNING_CODE = "zcode-db-snapshot-unstable";
+function emptySessionStore() {
+  return { messagesBySession: /* @__PURE__ */ new Map(), partsByMsg: /* @__PURE__ */ new Map() };
+}
+function pushDbWarning(warnings, dbPath, error) {
+  const isSnapshotUnstable = error instanceof SqliteSnapshotUnstableError;
+  const code = isSnapshotUnstable ? ZCODE_DB_SNAPSHOT_UNSTABLE_WARNING_CODE : ZCODE_DB_UNREADABLE_WARNING_CODE;
+  if (warnings.some((warning) => warning.code === code)) return;
+  warnings.push({
+    code,
+    message: isSnapshotUnstable ? `ZCode \u6B63\u5728\u5199\u5165\uFF0C\u8BF7\u91CD\u8BD5\u3002 (${dbPath})` : `cannot read ZCode session database (${dbPath}): ${error.message}`
+  });
+}
+function requireTables(db, names) {
+  const available = new Set(db.listTables().map((table) => table.name));
+  const missing = names.filter((name) => !available.has(name));
+  if (missing.length > 0) {
+    throw new SqliteParseError(
+      `ZCode database schema is missing table(s): ${missing.join(", ")}`
+    );
+  }
+}
+function requireTableColumns(db, tableName, names) {
+  const table = db.listTables().find((item) => item.name === tableName);
+  if (!table) {
+    throw new SqliteParseError(
+      `ZCode database schema is missing table: ${tableName}`
+    );
+  }
+  const missing = names.filter((name) => {
+    const pattern = new RegExp(
+      `(?:\\(|,)\\s*["\`\\[]?${name}(?:["\`\\]]|\\b)`,
+      "i"
+    );
+    return !pattern.test(table.sql);
+  });
+  if (missing.length > 0) {
+    throw new SqliteParseError(
+      `ZCode table ${tableName} is missing column(s): ${missing.join(", ")}`
+    );
+  }
+}
+function requireRowColumns(rows, tableName, names) {
+  const first = rows[0];
+  if (!first) return;
+  const missing = names.filter((name) => !(name in first));
+  if (missing.length > 0) {
+    throw new SqliteParseError(
+      `ZCode table ${tableName} is missing column(s): ${missing.join(", ")}`
+    );
+  }
+}
+function buildSessionStore(allMessages, allParts) {
+  const messagesBySession = /* @__PURE__ */ new Map();
+  for (const row of allMessages) {
+    const sessionId = typeof row.session_id === "string" ? row.session_id : "";
+    if (!sessionId) continue;
+    const data = parseDataJson(row.data);
+    const role = parseDialogueRole2(data?.role);
+    if (!role) continue;
+    const tc = typeof row.time_created === "number" ? row.time_created : 0;
+    const id = typeof row.id === "string" ? row.id : "";
+    if (!id) continue;
+    const list = messagesBySession.get(sessionId) ?? [];
+    list.push({ id, time_created: tc, role });
+    messagesBySession.set(sessionId, list);
+  }
+  for (const list of messagesBySession.values()) {
+    list.sort((a, b) => a.time_created - b.time_created);
+  }
+  const partsByMsg = /* @__PURE__ */ new Map();
+  for (const row of allParts) {
+    const msgId = typeof row.message_id === "string" ? row.message_id : "";
+    if (!msgId) continue;
+    const data = parseDataJson(row.data);
+    if (!data) continue;
+    const tc = typeof row.time_created === "number" ? row.time_created : 0;
+    const list = partsByMsg.get(msgId) ?? [];
+    list.push({ message_id: msgId, time_created: tc, data });
+    partsByMsg.set(msgId, list);
+  }
+  for (const list of partsByMsg.values()) {
+    list.sort((a, b) => a.time_created - b.time_created);
+  }
+  return { messagesBySession, partsByMsg };
+}
+var preparedStore = null;
+function loadSessionStore(dbPath, warnings) {
+  if (!fs32.existsSync(dbPath)) return emptySessionStore();
+  let allMessages;
+  let allParts;
+  try {
+    const db = openSqliteReadOnly(dbPath);
+    try {
+      requireTables(db, ["message", "part"]);
+      requireTableColumns(db, "message", ["id", "session_id", "data"]);
+      requireTableColumns(db, "part", ["message_id", "data"]);
+      allMessages = db.scanTable("message");
+      allParts = db.scanTable("part");
+      requireRowColumns(allMessages, "message", ["id", "session_id", "data"]);
+      requireRowColumns(allParts, "part", ["message_id", "data"]);
+    } finally {
+      db.close();
+    }
+  } catch (e) {
+    if (e instanceof SqliteParseError) {
+      pushDbWarning(warnings, dbPath, e);
+      return emptySessionStore();
+    }
+    throw e;
+  }
+  return buildSessionStore(allMessages, allParts);
+}
+function prepareZcodeSessionStore(dbPath, warnings) {
+  preparedStore = { dbPath, store: loadSessionStore(dbPath, warnings) };
+}
+function releaseZcodeSessionStore() {
+  preparedStore = null;
+}
+function readSessionMessages(dbPath, sessionId, warnings) {
+  if (preparedStore?.dbPath === dbPath) {
+    return {
+      messages: preparedStore.store.messagesBySession.get(sessionId) ?? [],
+      partsByMsg: preparedStore.store.partsByMsg
+    };
+  }
+  if (!fs32.existsSync(dbPath)) return { messages: [], partsByMsg: /* @__PURE__ */ new Map() };
+  let store;
+  try {
+    const db = openSqliteReadOnly(dbPath);
+    try {
+      requireTables(db, ["message", "part"]);
+      requireTableColumns(db, "message", ["id", "session_id", "data"]);
+      requireTableColumns(db, "part", ["message_id", "data"]);
+      const messages = db.scanTable(
+        "message",
+        (row) => row.session_id === sessionId
+      );
+      const messageIds = new Set(
+        messages.map((row) => row.id).filter((id) => typeof id === "string")
+      );
+      const parts = db.scanTable(
+        "part",
+        (row) => typeof row.message_id === "string" && messageIds.has(row.message_id)
+      );
+      requireRowColumns(messages, "message", ["id", "session_id", "data"]);
+      requireRowColumns(parts, "part", ["message_id", "data"]);
+      store = buildSessionStore(messages, parts);
+    } finally {
+      db.close();
+    }
+  } catch (error) {
+    if (error instanceof SqliteParseError) {
+      pushDbWarning(warnings, dbPath, error);
+      return { messages: [], partsByMsg: /* @__PURE__ */ new Map() };
+    }
+    throw error;
+  }
+  return {
+    messages: store.messagesBySession.get(sessionId) ?? [],
+    partsByMsg: store.partsByMsg
+  };
+}
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function isCompactionSummaryPart(data) {
+  return data.type === "compaction" && (typeof data.tail_start_id === "string" || isRecord(data.compactBoundary));
+}
+function compactionMarkerSummaryId(data) {
+  return data.type === "compaction" && data.replace === true && typeof data.summaryMessageId === "string" ? data.summaryMessageId : void 0;
+}
+function compactSummaryMessageIds(messages, partsByMsg) {
+  const summaryIds = /* @__PURE__ */ new Set();
+  const markerSummaryIds = /* @__PURE__ */ new Set();
+  for (const msg of messages) {
+    if (markerSummaryIds.has(msg.id)) summaryIds.add(msg.id);
+    for (const part of partsByMsg.get(msg.id) ?? []) {
+      const markerSummaryId = compactionMarkerSummaryId(part.data);
+      if (markerSummaryId) markerSummaryIds.add(markerSummaryId);
+      if (isCompactionSummaryPart(part.data)) {
+        summaryIds.add(msg.id);
+        break;
+      }
+    }
+  }
+  return summaryIds;
+}
+function buildTextTurn(msg, parts, compactSummaryIds) {
+  const collected = [];
+  let totalRaw = 0;
+  for (const part of parts) {
+    const pd = part.data;
+    if (pd.type !== "text") continue;
+    const txt = typeof pd.text === "string" ? pd.text : "";
+    if (!txt) continue;
+    totalRaw += txt.length;
+    collected.push(stripInjectionTags(txt));
+  }
+  if (!collected.length) return null;
+  const merged = collected.join("\n\n");
+  if (compactSummaryIds.has(msg.id)) {
+    return compactionBoundaryTurn(
+      "context compacted here; the turns above are still in the ZCode database",
+      merged
+    );
+  }
+  if (isBootstrapTurn(merged, totalRaw)) return null;
+  return merged.trim() ? { role: msg.role, text: merged } : null;
+}
+function zcodeListSessions(f, warnings = []) {
+  if (!fs32.existsSync(ZCODE_DB)) return [];
+  let rows;
+  try {
+    const db = openSqliteReadOnly(ZCODE_DB);
+    try {
+      requireTables(db, ["session"]);
+      requireTableColumns(db, "session", [
+        "id",
+        "directory",
+        "time_created",
+        "time_updated"
+      ]);
+      rows = db.scanTable("session");
+      requireRowColumns(rows, "session", [
+        "id",
+        "directory",
+        "time_created",
+        "time_updated"
+      ]);
+    } finally {
+      db.close();
+    }
+  } catch (e) {
+    if (e instanceof SqliteParseError) {
+      pushDbWarning(warnings, ZCODE_DB, e);
+      return [];
+    }
+    throw e;
+  }
+  const out = [];
+  for (const row of rows) {
+    const taskType = typeof row.task_type === "string" ? row.task_type : "";
+    if (taskType === "subagent_child") continue;
+    const directory = typeof row.directory === "string" ? row.directory : void 0;
+    if (f.cwd && !sameProject(directory, f.cwd)) continue;
+    const created = toIso(row.time_created);
+    const updated = toIso(row.time_updated) ?? created;
+    if (!inRangeOverlap(created, updated, f)) continue;
+    out.push({
+      platform: "zcode",
+      id: typeof row.id === "string" ? row.id : "",
+      title: typeof row.title === "string" ? row.title : void 0,
+      cwd: directory,
+      created,
+      updated,
+      filePath: ZCODE_DB
+    });
+  }
+  return out;
+}
+function toIso(epochMs) {
+  return typeof epochMs === "number" && epochMs > 0 ? new Date(epochMs).toISOString() : void 0;
+}
+function zcodeExtractDialogue(s, warnings = []) {
+  const { messages, partsByMsg } = readSessionMessages(
+    s.filePath,
+    s.id,
+    warnings
+  );
+  const summaryIds = compactSummaryMessageIds(messages, partsByMsg);
+  const turns = [];
+  for (const msg of messages) {
+    const parts = partsByMsg.get(msg.id) ?? [];
+    const turn = buildTextTurn(msg, parts, summaryIds);
+    if (turn) turns.push(turn);
+  }
+  return turns;
+}
+function zcodeSearch(s, kw, warnings = []) {
+  return searchInDialogue(zcodeExtractDialogue(s, warnings), kw);
+}
+function collectZcodeTurnsAndEvents(s, warnings = []) {
+  const { messages, partsByMsg } = readSessionMessages(
+    s.filePath,
+    s.id,
+    warnings
+  );
+  const summaryIds = compactSummaryMessageIds(messages, partsByMsg);
+  const turns = [];
+  const events = [];
+  for (const msg of messages) {
+    const parts = partsByMsg.get(msg.id) ?? [];
+    const turn = buildTextTurn(msg, parts, summaryIds);
+    if (turn) turns.push(turn);
+    for (const part of parts) {
+      const pd = part.data;
+      if (pd.type !== "tool") continue;
+      if (pd.tool !== "Bash" && pd.tool !== "bash") continue;
+      const cmd = pd.state?.input?.command;
+      if (typeof cmd !== "string" || !cmd) continue;
+      const parsedAll = parseTaskPyCommandsAll(cmd);
+      const ts = toIso(part.time_created) ?? "";
+      for (const parsed of parsedAll) {
+        const ev = {
+          action: parsed.action,
+          timestamp: ts,
+          turnIndex: turns.length,
+          ...parsed.action === "create" ? { slug: parsed.slug } : { taskDir: parsed.taskDir }
+        };
+        events.push(ev);
+      }
+    }
+  }
+  return { turns, events };
+}
+
+// roles/moluoxixi/packages/core/src/mem/sessions.ts
 var WIDE_LIMIT = 1e6;
 var MemSessionNotFoundError = class extends Error {
   sessionId;
-  constructor(sessionId) {
+  warnings;
+  constructor(sessionId, warnings = []) {
     super(`mem session not found: ${sessionId}`);
     this.name = "MemSessionNotFoundError";
     this.sessionId = sessionId;
+    this.warnings = warnings;
   }
 };
 function resolveFilter(filter) {
@@ -11209,60 +12497,77 @@ function resolveFilter(filter) {
     limit: filter?.limit ?? 50
   };
 }
-function listAll(f) {
+function listAll(f, warnings = []) {
   const all = [];
   if (f.platform === "all" || f.platform === "claude")
     all.push(...claudeListSessions(f));
   if (f.platform === "all" || f.platform === "codex")
     all.push(...codexListSessions(f));
+  if (f.platform === "all" || f.platform === "grok")
+    all.push(...grokListSessions(f));
   if (f.platform === "all" || f.platform === "opencode")
     all.push(...opencodeListSessions(f));
   if (f.platform === "all" || f.platform === "pi")
     all.push(...piListSessions(f));
-  all.sort((a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? ""));
+  if (f.platform === "all" || f.platform === "zcode")
+    all.push(...zcodeListSessions(f, warnings));
+  all.sort(
+    (a, b) => (b.updated ?? b.created ?? "").localeCompare(a.updated ?? a.created ?? "")
+  );
   return all.slice(0, f.limit);
 }
-function extractDialogue(s) {
+function extractDialogue(s, warnings = []) {
   switch (s.platform) {
     case "claude":
       return claudeExtractDialogue(s);
     case "codex":
-      return codexExtractDialogue(s);
+      return codexExtractDialogue(s, warnings);
+    case "grok":
+      return grokExtractDialogue(s, warnings);
     case "opencode":
       return opencodeExtractDialogue(s);
     case "pi":
       return piExtractDialogue(s);
+    case "zcode":
+      return zcodeExtractDialogue(s, warnings);
   }
 }
-function searchSession(s, kw) {
+function searchSession(s, kw, warnings = []) {
   switch (s.platform) {
     case "claude":
       return claudeSearch(s, kw);
     case "codex":
       return codexSearch(s, kw);
+    case "grok":
+      return grokSearch(s, kw);
     case "opencode":
       return opencodeSearch(kw);
     case "pi":
       return piSearch(s, kw);
+    case "zcode":
+      return zcodeSearch(s, kw, warnings);
   }
 }
-function collectTurnsAndEvents(s) {
+function collectTurnsAndEvents(s, warnings = []) {
   switch (s.platform) {
     case "claude":
       return collectClaudeTurnsAndEvents(s);
     case "codex":
-      return collectCodexTurnsAndEvents(s);
+      return collectCodexTurnsAndEvents(s, warnings);
+    case "grok":
+      return collectGrokTurnsAndEvents(s, warnings);
     case "opencode":
       return { turns: opencodeExtractDialogue(s), events: [] };
     case "pi":
       return collectPiTurnsAndEvents(s);
+    case "zcode":
+      return collectZcodeTurnsAndEvents(s, warnings);
   }
 }
 function buildChildIndex(sessions) {
   const directChildren = /* @__PURE__ */ new Map();
   for (const s of sessions) {
-    if (!s.parent_id)
-      continue;
+    if (!s.parent_id) continue;
     const list = directChildren.get(s.parent_id) ?? [];
     list.push(s);
     directChildren.set(s.parent_id, list);
@@ -11273,32 +12578,27 @@ function buildChildIndex(sessions) {
     const flat = [];
     while (stack.length) {
       const cur = stack.pop();
-      if (cur === void 0)
-        break;
+      if (cur === void 0) break;
       flat.push(cur);
-      for (const c of directChildren.get(cur.id) ?? [])
-        stack.push(c);
+      for (const c of directChildren.get(cur.id) ?? []) stack.push(c);
     }
     out.set(pid, flat);
   }
   return out;
 }
-function searchSessionWithChildren(s, kw, childIndex) {
+function searchSessionWithChildren(s, kw, childIndex, warnings) {
   const children = childIndex.get(s.id) ?? [];
-  if (children.length === 0)
-    return searchSession(s, kw);
-  const merged = [...extractDialogue(s)];
-  for (const c of children)
-    merged.push(...extractDialogue(c));
+  if (children.length === 0) return searchSession(s, kw, warnings);
+  const merged = [...extractDialogue(s, warnings)];
+  for (const c of children) merged.push(...extractDialogue(c, warnings));
   return searchInDialogue(merged, kw);
 }
-function findSessionById(id, f) {
+function findSessionById(id, f, warnings = []) {
   const wide = { ...f, cwd: void 0, limit: WIDE_LIMIT };
-  const all = listAll(wide);
+  const all = listAll(wide, warnings);
   return all.find((s) => s.id === id) ?? all.find((s) => s.id.startsWith(id));
 }
-function sliceMemPhase(s, phase) {
-  const warnings = [];
+function sliceMemPhase(s, phase, warnings = []) {
   if (phase === "all" || s.platform === "opencode") {
     if (phase !== "all" && s.platform === "opencode") {
       warnings.push({
@@ -11306,7 +12606,7 @@ function sliceMemPhase(s, phase) {
         message: `--phase ${phase} on platform=opencode is not yet supported; returning full dialogue.`
       });
     }
-    const turns2 = extractDialogue(s);
+    const turns2 = extractDialogue(s, warnings);
     return {
       groups: [{ label: null, turns: turns2 }],
       windows: [],
@@ -11314,7 +12614,7 @@ function sliceMemPhase(s, phase) {
       warnings
     };
   }
-  const { turns, events } = collectTurnsAndEvents(s);
+  const { turns, events } = collectTurnsAndEvents(s, warnings);
   const windows = buildBrainstormWindows(events, turns.length);
   if (phase === "brainstorm") {
     if (windows.length === 0) {
@@ -11349,15 +12649,13 @@ function sliceMemPhase(s, phase) {
   }
   const covered = /* @__PURE__ */ new Set();
   for (const w of windows) {
-    for (let i = w.startTurn; i < w.endTurn; i++)
-      covered.add(i);
+    for (let i = w.startTurn; i < w.endTurn; i++) covered.add(i);
   }
   const implementTurns = [];
   for (let i = 0; i < turns.length; i++) {
     if (!covered.has(i)) {
       const t = turns[i];
-      if (t)
-        implementTurns.push(t);
+      if (t) implementTurns.push(t);
     }
   }
   return {
@@ -11368,50 +12666,60 @@ function sliceMemPhase(s, phase) {
   };
 }
 function listMemSessions(options) {
-  return listAll(resolveFilter(options?.filter));
+  const warnings = [];
+  const sessions = listAll(resolveFilter(options?.filter), warnings);
+  for (const warning of warnings) options?.onWarning?.(warning);
+  return sessions;
 }
 function searchMemSessions(options) {
   const f = resolveFilter(options.filter);
   const kw = options.keyword;
   const includeChildren = options.includeChildren === true;
-  const candidates = listAll({ ...f, limit: WIDE_LIMIT });
+  const warnings = [];
+  const candidates = listAll({ ...f, limit: WIDE_LIMIT }, warnings);
   const childIndex = includeChildren ? buildChildIndex(candidates) : /* @__PURE__ */ new Map();
   const candidateIds = new Set(candidates.map((s) => s.id));
   const isAbsorbedChild = (s) => includeChildren && s.parent_id !== void 0 && candidateIds.has(s.parent_id);
   const matches = [];
-  for (const s of candidates) {
-    if (isAbsorbedChild(s))
-      continue;
-    const hit = includeChildren ? searchSessionWithChildren(s, kw, childIndex) : searchSession(s, kw);
-    if (hit.count === 0)
-      continue;
-    matches.push({
-      session: s,
-      hit,
-      score: relevanceScore(hit),
-      descendantsMerged: childIndex.get(s.id)?.length ?? 0
-    });
+  const zcodeCandidate = candidates.find((s) => s.platform === "zcode");
+  if (zcodeCandidate) {
+    prepareZcodeSessionStore(zcodeCandidate.filePath, warnings);
+  }
+  try {
+    for (const s of candidates) {
+      if (isAbsorbedChild(s)) continue;
+      const hit = includeChildren ? searchSessionWithChildren(s, kw, childIndex, warnings) : searchSession(s, kw, warnings);
+      if (hit.count === 0) continue;
+      matches.push({
+        session: s,
+        hit,
+        score: relevanceScore(hit),
+        descendantsMerged: childIndex.get(s.id)?.length ?? 0
+      });
+    }
+  } finally {
+    releaseZcodeSessionStore();
   }
   matches.sort((a, b) => {
-    if (b.score !== a.score)
-      return b.score - a.score;
-    if (b.hit.count !== a.hit.count)
-      return b.hit.count - a.hit.count;
-    return (b.session.updated ?? b.session.created ?? "").localeCompare(a.session.updated ?? a.session.created ?? "");
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.hit.count !== a.hit.count) return b.hit.count - a.hit.count;
+    return (b.session.updated ?? b.session.created ?? "").localeCompare(
+      a.session.updated ?? a.session.created ?? ""
+    );
   });
   return {
     matches: matches.slice(0, f.limit),
     totalMatches: matches.length,
-    warnings: []
+    warnings
   };
 }
 function extractMemDialogue(options) {
   const f = resolveFilter(options.filter);
   const phase = options.phase ?? "all";
-  const s = findSessionById(options.sessionId, f);
-  if (!s)
-    throw new MemSessionNotFoundError(options.sessionId);
-  const slice = sliceMemPhase(s, phase);
+  const warnings = [];
+  const s = findSessionById(options.sessionId, f, warnings);
+  if (!s) throw new MemSessionNotFoundError(options.sessionId, warnings);
+  const slice = sliceMemPhase(s, phase, warnings);
   const grepLc = typeof options.grep === "string" ? options.grep.toLowerCase() : void 0;
   const filterTurns = (turns) => grepLc ? turns.filter((t) => t.text.toLowerCase().includes(grepLc)) : turns;
   const groups = slice.groups.map((g) => ({
@@ -11430,7 +12738,7 @@ function extractMemDialogue(options) {
   };
 }
 
-// packages/core/dist/mem/context.js
+// roles/moluoxixi/packages/core/src/mem/context.ts
 function selectContextTurns(turns, grep, nTurns, around, maxChars) {
   let hitIndices = [];
   let totalHitTurns = 0;
@@ -11438,15 +12746,13 @@ function selectContextTurns(turns, grep, nTurns, around, maxChars) {
     const tokens = grep.toLowerCase().split(/\s+/).filter(Boolean);
     const matchCount = (text) => {
       const hay = text.toLowerCase();
-      if (!tokens.every((tok) => hay.includes(tok)))
-        return 0;
+      if (!tokens.every((tok) => hay.includes(tok))) return 0;
       let n = 0;
       for (const tok of tokens) {
         let from = 0;
         while (true) {
           const idx = hay.indexOf(tok, from);
-          if (idx === -1)
-            break;
+          if (idx === -1) break;
           n++;
           from = idx + tok.length;
         }
@@ -11456,24 +12762,19 @@ function selectContextTurns(turns, grep, nTurns, around, maxChars) {
     const ranked = [];
     for (let i = 0; i < turns.length; i++) {
       const turn = turns[i];
-      if (!turn)
-        continue;
+      if (!turn) continue;
       const h = tokens.length === 0 ? 0 : matchCount(turn.text);
-      if (h > 0)
-        ranked.push({ idx: i, role: turn.role, hits: h });
+      if (h > 0) ranked.push({ idx: i, role: turn.role, hits: h });
     }
     totalHitTurns = ranked.length;
     ranked.sort((a, b) => {
-      if (a.role !== b.role)
-        return a.role === "user" ? -1 : 1;
-      if (b.hits !== a.hits)
-        return b.hits - a.hits;
+      if (a.role !== b.role) return a.role === "user" ? -1 : 1;
+      if (b.hits !== a.hits) return b.hits - a.hits;
       return a.idx - b.idx;
     });
     hitIndices = ranked.slice(0, nTurns).map((r) => r.idx);
   } else {
-    for (let i = 0; i < Math.min(nTurns, turns.length); i++)
-      hitIndices.push(i);
+    for (let i = 0; i < Math.min(nTurns, turns.length); i++) hitIndices.push(i);
   }
   const display = /* @__PURE__ */ new Set();
   for (const idx of hitIndices) {
@@ -11487,15 +12788,13 @@ function selectContextTurns(turns, grep, nTurns, around, maxChars) {
   let used = 0;
   for (const i of ordered) {
     const t = turns[i];
-    if (!t)
-      continue;
+    if (!t) continue;
     let text = t.text;
     const cap = Math.floor(maxChars / 2);
     if (text.length > cap)
       text = text.slice(0, cap) + `
 \u2026[+${t.text.length - cap} chars]`;
-    if (used + text.length > maxChars && out.length > 0)
-      break;
+    if (used + text.length > maxChars && out.length > 0) break;
     out.push({ idx: i, role: t.role, text, isHit: hitSet.has(i) });
     used += text.length;
   }
@@ -11503,22 +12802,23 @@ function selectContextTurns(turns, grep, nTurns, around, maxChars) {
 }
 function readMemContext(options) {
   const f = resolveFilter(options.filter);
-  const s = findSessionById(options.sessionId, f);
-  if (!s)
-    throw new MemSessionNotFoundError(options.sessionId);
+  const warnings = [];
+  const s = findSessionById(options.sessionId, f, warnings);
+  if (!s) throw new MemSessionNotFoundError(options.sessionId, warnings);
   const grep = typeof options.grep === "string" ? options.grep : void 0;
   const nTurns = options.turns ?? 3;
   const around = options.around ?? 1;
   const maxChars = options.maxChars ?? 6e3;
-  let turns = extractDialogue(s);
+  let turns = extractDialogue(s, warnings);
   let mergedChildren = 0;
   if (options.includeChildren === true) {
-    const all = listAll({ ...f, cwd: void 0, limit: WIDE_LIMIT });
+    const all = listAll({ ...f, cwd: void 0, limit: WIDE_LIMIT }, warnings);
     const childIndex = buildChildIndex(all);
     const kids = childIndex.get(s.id) ?? [];
     mergedChildren = kids.length;
-    for (const c of kids)
-      turns = [...turns, ...extractDialogue(c)];
+    for (const c of kids) {
+      turns = [...turns, ...extractDialogue(c, warnings)];
+    }
   }
   const selected = selectContextTurns(turns, grep, nTurns, around, maxChars);
   return {
@@ -11530,18 +12830,19 @@ function readMemContext(options) {
     budgetUsed: selected.budgetUsed,
     maxChars,
     turns: selected.turns,
-    warnings: []
+    warnings
   };
 }
 
-// packages/core/dist/mem/projects.js
+// roles/moluoxixi/packages/core/src/mem/projects.ts
 function listMemProjects(options) {
   const f = resolveFilter(options?.filter);
-  const all = listAll({ ...f, cwd: void 0, limit: WIDE_LIMIT });
+  const warnings = [];
+  const all = listAll({ ...f, cwd: void 0, limit: WIDE_LIMIT }, warnings);
+  for (const warning of warnings) options?.onWarning?.(warning);
   const byCwd = /* @__PURE__ */ new Map();
   for (const s of all) {
-    if (!s.cwd)
-      continue;
+    if (!s.cwd) continue;
     const ts = s.updated ?? s.created ?? "";
     let agg = byCwd.get(s.cwd);
     if (!agg) {
@@ -11549,19 +12850,27 @@ function listMemProjects(options) {
         cwd: s.cwd,
         last_active: ts,
         sessions: 0,
-        by_platform: { claude: 0, codex: 0, opencode: 0, pi: 0 }
+        by_platform: {
+          claude: 0,
+          codex: 0,
+          grok: 0,
+          opencode: 0,
+          pi: 0,
+          zcode: 0
+        }
       };
       byCwd.set(s.cwd, agg);
     }
     agg.sessions++;
     agg.by_platform[s.platform]++;
-    if (ts > agg.last_active)
-      agg.last_active = ts;
+    if (ts > agg.last_active) agg.last_active = ts;
   }
-  return [...byCwd.values()].sort((a, b) => b.last_active.localeCompare(a.last_active));
+  return [...byCwd.values()].sort(
+    (a, b) => b.last_active.localeCompare(a.last_active)
+  );
 }
 
-// packages/cli/src/commands/mem.ts
+// roles/moluoxixi/packages/cli/src/commands/mem.ts
 function parseArgv(argv) {
   const cmd = argv[0] ?? "list";
   const positional = [];
@@ -11587,8 +12896,10 @@ function parseArgv(argv) {
 var VALID_PLATFORMS = [
   "claude",
   "codex",
+  "grok",
   "opencode",
   "pi",
+  "zcode",
   "all"
 ];
 function buildFilter(flags) {
@@ -11602,7 +12913,7 @@ function buildFilter(flags) {
   const untilRaw = flags.until;
   const until = typeof untilRaw === "string" ? /* @__PURE__ */ new Date(`${untilRaw}T23:59:59.999Z`) : void 0;
   if (until && Number.isNaN(+until)) die(`bad --until: ${String(untilRaw)}`);
-  const cwd = flags.global ? void 0 : path20.resolve(typeof flags.cwd === "string" ? flags.cwd : process.cwd());
+  const cwd = flags.global ? void 0 : path22.resolve(typeof flags.cwd === "string" ? flags.cwd : process.cwd());
   const limit = parseOptionalNumberFlag(flags.limit, "--limit", 50);
   return { platform, since, until, cwd, limit };
 }
@@ -11651,10 +12962,20 @@ function printSessions(rows) {
     );
   }
 }
+function printWarnings(warnings) {
+  for (const warning of warnings ?? []) {
+    console.error(`warning: ${warning.message}`);
+  }
+}
 function cmdList(argv) {
   const f = buildFilter(argv.flags);
   maybeWarnOpencode(f);
-  const rows = listMemSessions({ filter: f });
+  const warnings = [];
+  const rows = listMemSessions({
+    filter: f,
+    onWarning: (warning) => warnings.push(warning)
+  });
+  printWarnings(warnings);
   if (argv.flags.json) {
     console.log(JSON.stringify(rows, null, 2));
     return;
@@ -11677,6 +12998,7 @@ function cmdSearch(argv) {
     filter: f,
     includeChildren
   });
+  printWarnings(result.warnings);
   const top = result.matches;
   if (argv.flags.json) {
     console.log(
@@ -11725,7 +13047,12 @@ ${top.length} session(s)${result.totalMatches > top.length ? ` (of ${result.tota
 function cmdProjects(argv) {
   const f = buildFilter({ ...argv.flags, global: true });
   maybeWarnOpencode(f);
-  const rows = listMemProjects({ filter: f });
+  const warnings = [];
+  const rows = listMemProjects({
+    filter: f,
+    onWarning: (warning) => warnings.push(warning)
+  });
+  printWarnings(warnings);
   const limit = parseOptionalNumberFlag(argv.flags.limit, "--limit", 30);
   const top = rows.slice(0, limit);
   if (argv.flags.json) {
@@ -11780,10 +13107,13 @@ function cmdContext(argv) {
       includeChildren
     });
   } catch (error) {
-    if (error instanceof MemSessionNotFoundError)
+    if (error instanceof MemSessionNotFoundError) {
+      printWarnings(error.warnings);
       die(`session not found: ${id}`);
+    }
     throw error;
   }
+  printWarnings(result.warnings);
   const s = result.session;
   if (argv.flags.json) {
     console.log(
@@ -11850,11 +13180,13 @@ function cmdExtract(argv) {
   try {
     result = extractMemDialogue({ sessionId: id, filter: f, phase, grep });
   } catch (error) {
-    if (error instanceof MemSessionNotFoundError)
+    if (error instanceof MemSessionNotFoundError) {
+      printWarnings(error.warnings);
       die(`session not found: ${id}`);
+    }
     throw error;
   }
-  for (const w of result.warnings) console.error(`warning: ${w.message}`);
+  printWarnings(result.warnings);
   const s = result.session;
   if (argv.flags.json) {
     console.log(
@@ -11893,7 +13225,7 @@ function cmdExtract(argv) {
   }
 }
 function cmdHelp() {
-  console.log(`moluoxixi mem \u2014 list/search Claude/Codex/OpenCode/Pi sessions
+  console.log(`moluoxixi mem \u2014 list/search Claude/Codex/Grok/OpenCode/Pi/ZCode sessions
 
 commands:
   list                          list sessions (default if no command)
@@ -11905,7 +13237,7 @@ commands:
                                 use this to discover which --cwd to pass to search
 
 flags:
-  --platform claude|codex|opencode|pi|all   default all
+  --platform claude|codex|grok|opencode|pi|zcode|all   default all
   --since YYYY-MM-DD                     inclusive lower bound
   --until YYYY-MM-DD                     inclusive upper bound
   --global                               include all projects (default: cwd-scoped)
@@ -11914,7 +13246,7 @@ flags:
   --grep KW                              extract / context: filter turns by keyword (multi-token AND)
   --phase brainstorm|implement|all       extract: slice by Moluoxixi brainstorm windows
                                          (default all; brainstorm = [task.py create, task.py start);
-                                         Claude/Codex/Pi supported; OpenCode warns + returns all)
+                                         Claude/Codex/Grok/Pi/ZCode supported; OpenCode warns + returns all)
   --turns N                              context: number of hit turns to return (default 3)
   --around N                             context: turns of surrounding context per hit (default 1)
   --max-chars N                          context: total char budget (default 6000, ~1500 tokens)
@@ -11951,10 +13283,9 @@ function runMem(args) {
   }
 }
 
-// packages/cli/src/airules-runtime-entry.ts
+// roles/moluoxixi/packages/cli/src/airules-runtime-entry.ts
 var program2 = new Command();
-program2.name("moluoxixi-runtime").description("AIRules-owned local runtime for bundled Moluoxixi capabilities").version("0.1.0");
+program2.name("moluoxixi-runtime").description("AIRules-owned local runtime for bundled Moluoxixi capabilities").version("0.2.0");
 registerChannelCommand(program2);
 program2.command("mem").allowUnknownOption(true).helpOption(false).argument("[args...]").action((args = []) => runMem(args));
 await program2.parseAsync(process.argv);
-//# sourceMappingURL=airules-moluoxixi-runtime.mjs.map

@@ -12,11 +12,15 @@ export const PLATFORM_ORDER = [
   'codebuddy',
   'copilot',
   'droid',
+  'dsh',
   'pi',
   'reasonix',
   'zcode',
   'trae',
   'omp',
+  'grok',
+  'kimi',
+  'snow',
 ]
 
 export const PLATFORM_CONTEXT = {
@@ -33,11 +37,15 @@ export const PLATFORM_CONTEXT = {
   codebuddy: context('/moluoxixi:', 'Bash scripts or Task calls', 'Slash commands', true, true, 'codebuddy'),
   copilot: context('/', 'Bash scripts or tool calls', 'Prompts', true, true, 'copilot'),
   droid: context('/moluoxixi-', 'Bash scripts or Task calls', 'Slash commands', true, true, 'droid'),
+  dsh: context('', 'Bash scripts or tool calls', 'Skills', true, false, 'dsh'),
   pi: context('/moluoxixi-', 'Bash scripts or tool calls', 'Slash commands', true, true, 'pi'),
   reasonix: context('/skill ', 'Bash scripts or tool calls', 'Skills', true, false, 'reasonix'),
   zcode: context('/moluoxixi:', 'Bash scripts or Agent calls', 'Skills', true, false, 'zcode'),
   trae: context('/moluoxixi-', 'Bash scripts or tool calls', 'Commands', true, true, 'trae'),
   omp: context('/moluoxixi:', 'Bash scripts or Task calls', 'Slash commands', true, true, 'omp'),
+  grok: context('/moluoxixi-', 'Bash scripts or Agent calls', 'Skills', true, false, 'grok'),
+  kimi: context('/skill:', 'Bash scripts or Agent calls', 'Slash commands', true, false, 'kimi'),
+  snow: context('/moluoxixi-', 'Bash scripts or Agent calls', 'Skills', true, true, 'snow'),
 }
 
 export const PLATFORM_DIRECT = {
@@ -50,10 +58,14 @@ export const PLATFORM_DIRECT = {
   qoder: ['qoder', '.qoder'],
   codebuddy: ['codebuddy', '.codebuddy'],
   droid: ['droid', '.factory'],
+  dsh: ['dsh', '.dsh'],
   pi: ['pi', '.pi'],
   zcode: ['zcode', '.zcode'],
   trae: ['trae', '.trae'],
   omp: ['omp', '.omp'],
+  grok: ['grok', '.grok'],
+  kimi: ['kimi', '.kimi-code'],
+  snow: ['snow', '.snow'],
 }
 
 export const PLATFORM_SKILLS_ROOT = {
@@ -68,7 +80,8 @@ export const PLATFORM_SKILLS_ROOT = {
   codebuddy: '.codebuddy/skills',
   copilot: '.github/skills',
   droid: '.factory/skills',
-  pi: '.pi/skills',
+  grok: '.grok/skills',
+  pi: '.agents/skills',
   zcode: '.zcode/skills',
   trae: '.trae/skills',
   omp: '.omp/skills',
@@ -77,14 +90,15 @@ export const PLATFORM_SKILLS_ROOT = {
 export const CORE_HOOKS = {
   claude: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py'],
   cursor: ['session-start.py', 'inject-shell-session-context.py', 'inject-subagent-context.py'],
-  codex: ['inject-workflow-state.py'],
-  gemini: ['session-start.py', 'inject-workflow-state.py'],
-  qoder: ['session-start.py', 'inject-workflow-state.py'],
+  codex: ['inject-workflow-state.py', 'inject-subagent-context.py'],
+  gemini: ['session-start.py', 'inject-workflow-state.py', 'inject-shell-session-context.py'],
+  qoder: ['session-start.py', 'inject-workflow-state.py', 'inject-shell-session-context.py'],
   copilot: ['inject-workflow-state.py'],
-  codebuddy: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py'],
-  droid: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py'],
+  codebuddy: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py', 'inject-shell-session-context.py'],
+  droid: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py', 'inject-shell-session-context.py'],
   kiro: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py'],
-  trae: ['session-start.py', 'inject-workflow-state.py'],
+  trae: ['session-start.py', 'inject-workflow-state.py', 'inject-shell-session-context.py'],
+  zcode: ['session-start.py', 'inject-workflow-state.py', 'inject-subagent-context.py', 'inject-shell-session-context.py'],
 }
 
 export const HOOK_ROOTS = {
@@ -98,6 +112,7 @@ export const HOOK_ROOTS = {
   droid: '.factory/hooks',
   kiro: '.kiro/hooks',
   trae: '.trae/hooks',
+  zcode: '.zcode/hooks',
 }
 
 function context(cmdRefPrefix, executorAI, userActionLabel, agentCapable, hasHooks, cliFlag) {
@@ -121,6 +136,7 @@ export function commandTarget(platform, name) {
     zcode: `.zcode/commands/moluoxixi/${name}.md`,
     trae: `.trae/commands/moluoxixi-${name}.md`,
     omp: `.omp/commands/moluoxixi-${name}.md`,
+    grok: `.grok/commands/moluoxixi-${name}.md`,
   }[platform]
 }
 

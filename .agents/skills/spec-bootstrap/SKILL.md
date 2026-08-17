@@ -5,7 +5,7 @@ description: "Bootstrap human-reviewable proposals for project-specific Moluoxix
 
 # Moluoxixi Spec Bootstrap
 
-Use this skill to prepare complete `.moluoxixi/spec/` candidates from the real codebase and submit them to `.moluoxixi/spec-proposals/`. One capable agent owns analysis and candidate preparation; a human owns promotion through `moluoxixi-spec-review`.
+Use this skill to prepare complete `.moluoxixi/spec/` candidates from the real codebase and submit them to `.moluoxixi/spec-proposals/`. One capable agent owns analysis and candidate preparation; a human owns promotion through `spec-review`.
 
 ## Workflow
 
