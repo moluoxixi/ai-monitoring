@@ -1,5 +1,0 @@
-# eslint-disable yaml/plain-scalar
-interface:
-  display_name: 'Spec Review'
-  short_description: 'Review and govern proposed project knowledge'
-  default_prompt: 'Use $spec-review to review pending project knowledge proposals before promotion.'

@@ -1,0 +1,38 @@
+{
+  "id": "codex-desktop-short-session-watch",
+  "name": "codex-desktop-short-session-watch",
+  "title": "修复 Codex Desktop 短会话漏采集",
+  "description": "",
+  "status": "in_progress",
+  "complexity": {
+    "level": "lightweight",
+    "signals": [],
+    "reason": ""
+  },
+  "executionApproval": {
+    "mode": "manual",
+    "granted": true,
+    "source": "explicit_user",
+    "grantedAt": "2026-08-18T02:32:51.967045Z",
+    "reason": "Final planning artifacts approved before start"
+  },
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "wl",
+  "assignee": "wl",
+  "createdAt": "2026-08-18",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

@@ -1,0 +1,38 @@
+{
+  "id": "inbound-reply-routing",
+  "name": "inbound-reply-routing",
+  "title": "QQ inbound reply routing",
+  "description": "",
+  "status": "in_progress",
+  "complexity": {
+    "level": "complex",
+    "signals": [],
+    "reason": ""
+  },
+  "executionApproval": {
+    "mode": "manual",
+    "granted": true,
+    "source": "explicit_user",
+    "grantedAt": "2026-08-17T23:58:59.152583Z",
+    "reason": "Final planning artifacts approved before start"
+  },
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "wl",
+  "assignee": "wl",
+  "createdAt": "2026-08-18",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
