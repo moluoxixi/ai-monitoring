@@ -374,6 +374,14 @@ describe('DatabaseService idempotent event enrichment', () => {
       client: 'codex-cli',
       metadata: { thread_id: 'thread-123' },
     });
+    expect(database.resolveReplyRouteForEvent(eventId)).toMatchObject({
+      delivery_id: qq.id,
+      event_id: eventId,
+      channel: 'openclaw-qq',
+      client: 'codex-cli',
+      metadata: { thread_id: 'thread-123' },
+    });
+    expect(database.resolveReplyRouteForEvent(eventId + 1_000)).toBeNull();
     database.onModuleDestroy();
   });
 

@@ -4,7 +4,7 @@
 
 回复链路与现有事件采集保持分离：事件仍由 `POST /api/events` 进入 outbox；新的 `POST /api/replies/inbound` 只接收 OpenClaw QQ 插件归一化后的引用消息。MVP 不提供通用聊天 webhook，也不让普通 QQ 消息进入 Monitor。
 
-仅 `openclaw-qq` 且事件 `client=codex-cli`、`metadata.thread_id` 非空的 delivery 可创建路由令牌。投递 worker 在发送前取得同一 delivery 的稳定令牌，并在 QQ 正文开头追加任务 ID 与路由标记：
+所有 outbox 通知都由投递 worker 在正文开头追加事件 ID，作为用户可见的任务 ID。仅 `openclaw-qq` 且事件 `client=codex-cli`、`metadata.thread_id` 非空的 delivery 可创建路由令牌；这类通知在任务 ID 后紧邻追加路由标记：
 
 ```text
 [任务ID:<delivery event id>]
@@ -12,7 +12,7 @@
 [AI-MONITOR-REPLY:<base64url token>]
 ```
 
-其他渠道和不可续接事件保持现有正文不变。
+其他渠道和不可续接事件只追加任务 ID，不包含回复路由标记。
 
 ## Persistence
 
@@ -40,9 +40,11 @@ handler 只处理：
 
 - `event.channel === "qqbot"`
 - `event.isGroup === false`
-- `event.replyToBody` 含且仅含一个有效格式的 AI Monitor 路由令牌
+- `event.replyToBody` 含且仅含一个有效格式的 AI Monitor 路由令牌或正整数任务 ID
 
 腾讯 QQ 插件 2.0.1 会把引用正文传入 `replyToBody`，但不会设置 `replyToIsQuote`；其 `replyToId` 是当前入站 QQ message id，可用于幂等键。handler 将 `content` 中不含引用正文的用户文本、sender/account/message id 和结构化引用正文 POST 到 Monitor。成功或确定性失败均返回 `{ handled: true, text }`，从而阻止 OpenClaw 自身 agent 同时消费；无关消息返回 `undefined`。
+
+任务 ID 是兼容 QQ 引用预览截断的候选键，不单独构成授权。服务端按 `(event_id, openclaw-qq)` 唯一定位 delivery，并要求该 delivery 已生成不可猜测的 route token、route 未过期、已发送、事件为带 thread id 的 Codex CLI 完成事件，再执行现有 QQ sender/account 绑定校验。若任务属于 Codex Desktop 或其他不可续接来源，插件仍认领该消息并返回明确限制，避免落回 OpenClaw provider。
 
 安装脚本把当前 reply token、Monitor URL 和超时持久化到 `plugins.entries.ai-monitor-replies.config`；handler 优先读取 OpenClaw 注入的 `api.pluginConfig`，再回退到 `AIMONITOR_REPLY_TOKEN` / `AIMONITOR_INGEST_TOKEN` 环境变量，避免独立重启 Gateway 与 Monitor 后沿用旧进程环境。Docker 使用服务内地址 `http://monitor:8787/api/replies/inbound`；桌面默认 loopback 地址。安装脚本像 QQ/微信插件一样检查并安装项目内插件，插件或鉴权配置变化后必须重启 Gateway。
 
@@ -56,6 +58,8 @@ payload 通过 DTO 严格限制为 QQ、private quote、4,000 字符文本和有
 
 `PlatformReplyDispatcher` 依据 route client 选择 adapter。MVP 只有 `codex-cli`，其他 client 明确拒绝。
 
+Codex Desktop 正在运行的 thread 由 Desktop 自身 App Server 持有 active writer；另起 `codex app-server` 对同一 thread 执行 `thread/resume` 会返回 `already has an active writer`。项目不得绕过该单写者约束或直接操作 Desktop 私有 stdio，因此 Desktop 通知只允许任务 ID 被插件认领并返回明确限制，不创建 reply route。
+
 Codex adapter 每个 accepted reply 启动一个 `codex app-server` 子进程，以 JSONL JSON-RPC 执行：
 
 ```text
@@ -63,6 +67,10 @@ initialize -> initialized -> thread/resume -> turn/start
 ```
 
 每个 request 有独立 id 和超时；stderr 只保留有界、脱敏诊断。`turn/start` result 到达后 endpoint 返回 accepted，进程在后台等待匹配 thread/turn 的终态后退出；异常、超时和提前退出都清理子进程。`approvalPolicy: never` 放入 `turn/start`。
+
+App Server 会把远程回复写为 session JSONL 的 `response_item`，其中 `payload.type=message`、`role=user`、`content[].type=input_text`。Codex session watcher 将该文本作为新一轮 `task_summary`，并清空上一轮回答与开始时间状态；后续 `task_complete` 因而能生成带真实提问的完成通知。旧版 `event_msg/user_message` 继续兼容。
+
+Windows 上 pnpm 提供的裸 `codex` 首先解析到无扩展 POSIX shim，Node 直接 `spawn` 会返回 `EPERM`；裸 `codex` / `codex.CMD` 必须通过 `cmd.exe /d /s /c "codex.CMD app-server"` 启动。显式配置的其它可执行文件和非 Windows 平台继续使用直接 `spawn`，启动失败、标准流错误与提前退出统一关闭流并清理子进程。
 
 ## Compatibility And Recovery
 

@@ -1,5 +1,6 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { join, resolve } from 'node:path'
 
 const resourceRoot = resolve(process.env.AIMONITOR_RESOURCE_ROOT || resolve(import.meta.dirname, '..'))
@@ -9,7 +10,19 @@ const templateRoot = join(resourceRoot, 'openclaw-state-template')
 const openClawVersion = process.env.AIMONITOR_OPENCLAW_VERSION || '2026.7.1-2'
 const qqPluginVersion = process.env.AI_MONITOR_QQBOT_PLUGIN_VERSION || '2.0.1'
 const weixinPluginVersion = process.env.AI_MONITOR_WEIXIN_PLUGIN_VERSION || '2.4.6'
-const replyPluginVersion = '1.0.0'
+const replyPluginVersion = '1.0.4'
+const replyToken = process.env.AIMONITOR_REPLY_TOKEN?.trim()
+  || process.env.AIMONITOR_INGEST_TOKEN?.trim()
+  || ''
+const replyUrl = process.env.AIMONITOR_REPLY_URL?.trim()
+  || 'http://127.0.0.1:8787/api/replies/inbound'
+const configuredReplyTimeout = Number(process.env.AIMONITOR_REPLY_TIMEOUT_MS || 30_000)
+const replyTimeoutMs = Number.isFinite(configuredReplyTimeout)
+  ? Math.max(1_000, Math.min(configuredReplyTimeout, 60_000))
+  : 30_000
+const replyConfig = createHash('sha256')
+  .update(JSON.stringify({ replyToken, replyUrl, replyTimeoutMs }))
+  .digest('hex')
 const markerPath = join(stateRoot, '.ai-monitor-openclaw')
 
 const copyTemplate = () => {
@@ -35,6 +48,7 @@ const expected = {
   qqbot: qqPluginVersion,
   weixin: weixinPluginVersion,
   replies: replyPluginVersion,
+  replyConfig,
 }
 
 copyTemplate()

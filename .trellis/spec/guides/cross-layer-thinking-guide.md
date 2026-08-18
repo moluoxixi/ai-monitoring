@@ -100,6 +100,18 @@ create one owner for:
 
 Rendering code may format fields, but it must not redefine the payload contract.
 
+### Mistake 5: Testing The Requested Shape Instead Of The Persisted Shape
+
+An external runtime may accept an RPC payload in one representation and persist
+the same logical input in another. For example, a successful `turn/start` input
+can later appear in session JSONL as a `response_item/message(role=user)` record
+rather than a legacy user event.
+
+**Rule**: When one boundary writes and another boundary watches, capture a real
+persisted record and use that exact shape as a regression fixture. Assert the
+final projection (notification, UI state, or stored event), not only RPC
+acceptance and parser behavior in isolation.
+
 ---
 
 ## Checklist for Cross-Layer Features

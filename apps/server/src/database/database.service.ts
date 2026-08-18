@@ -379,6 +379,22 @@ export class DatabaseService implements OnModuleDestroy {
     return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as ReplyRoute;
   }
 
+  resolveReplyRouteForEvent(eventId: number): ReplyRoute | null {
+    const row = this.db.prepare(`
+      SELECT d.id AS delivery_id, d.event_id, d.channel, d.state AS delivery_state,
+             d.reply_token, d.reply_expires_at, e.client, e.metadata_json
+      FROM deliveries d JOIN events e ON e.id = d.event_id
+      WHERE d.event_id = ? AND d.channel = 'openclaw-qq'
+        AND d.reply_token IS NOT NULL AND d.reply_expires_at IS NOT NULL
+        AND e.client = 'codex-cli' AND e.status = 'completed'
+        AND typeof(json_extract(e.metadata_json, '$.thread_id')) = 'text'
+        AND trim(json_extract(e.metadata_json, '$.thread_id')) != ''
+    `).get(eventId) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const { metadata_json, ...rest } = row;
+    return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as ReplyRoute;
+  }
+
   claimInboundReply(input: {
     channel: string;
     externalMessageId: string;

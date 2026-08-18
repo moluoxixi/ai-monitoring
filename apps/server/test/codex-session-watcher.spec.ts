@@ -53,6 +53,33 @@ describe('Codex session watcher parser', () => {
     expect(result.answerSource).toBe('private response');
   });
 
+  it('uses App Server response_item user input as the next task summary', () => {
+    const prompt = parseCodexSessionLine(JSON.stringify({
+      timestamp: '2026-08-18T08:42:36.000Z',
+      type: 'response_item',
+      payload: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: '你好' }],
+      },
+    }), 'session-1', 'earlier task', false, 'earlier answer', 'codex-cli', '2026-08-18T08:40:00.000Z', 'turn-1');
+    const result = parseCodexSessionLine(terminalLine({
+      type: 'task_complete', turn_id: 'turn-2', last_agent_message: '新的回答',
+    }), prompt.sessionId, prompt.taskSummary, prompt.isSubagent, prompt.answerSource, prompt.client, prompt.startedAt, prompt.startedTurnId);
+
+    expect(prompt).toMatchObject({
+      taskSummary: '你好',
+      answerSource: '',
+      startedAt: '',
+      startedTurnId: '',
+      suppressProvisional: true,
+    });
+    expect(result.event).toMatchObject({
+      message: '提问：你好',
+      metadata: { task_summary: '你好' },
+    });
+  });
+
   it('marks a follow-up turn so provisional failures are suppressed', () => {
     const started = parseCodexSessionLine(terminalLine({ type: 'task_started', turn_id: 'turn-2' }), 'session-1');
     const prompt = parseCodexSessionLine(terminalLine({ type: 'user_message', message: '继续任务' }), started.sessionId);

@@ -69,6 +69,17 @@ const safeErrorCode = (error: Record<string, unknown>): string => {
   return candidate && /^[a-z0-9_.:-]{1,100}$/i.test(candidate) ? candidate : 'codex_task_failed';
 };
 
+const responseItemUserText = (item: Record<string, unknown>, payload: Record<string, unknown>): string => {
+  if (item.type !== 'response_item' || payload.type !== 'message' || payload.role !== 'user') return '';
+  if (!Array.isArray(payload.content)) return '';
+  return payload.content
+    .map((content) => recordValue(content))
+    .filter((content) => content.type === 'input_text' && typeof content.text === 'string')
+    .map((content) => String(content.text))
+    .join('\n')
+    .trim();
+};
+
 export const parseCodexSessionLine = (
   line: string,
   currentSessionId = '',
@@ -91,6 +102,20 @@ export const parseCodexSessionLine = (
     const sessionId = String(payload.session_id || payload.id || currentSessionId);
     const identity = sessionIdentity({ ...item, ...payload }, currentClient);
     return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: identity.isSubagent, client: identity.client, timestampMs: null };
+  }
+  const responseUserMessage = responseItemUserText(item, payload);
+  if (responseUserMessage) {
+    return {
+      sessionId: currentSessionId,
+      taskSummary: summarizeTask(responseUserMessage) || currentTaskSummary,
+      answerSource: '',
+      isSubagent: currentIsSubagent,
+      client: currentClient,
+      timestampMs: null,
+      startedAt: '',
+      startedTurnId: '',
+      suppressProvisional: Boolean(currentSessionId && !currentIsSubagent),
+    };
   }
   if (item.type !== 'event_msg') {
     return { sessionId: currentSessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, isSubagent: currentIsSubagent, client: currentClient, timestampMs: null };

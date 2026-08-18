@@ -17,6 +17,9 @@
 - R9. `turn/start` 被 Codex 接受后即可确认 QQ 回复已转交；后台进程继续存活到 turn 终态，之后由现有 watcher/notify 链路产生下一条完成通知。
 - R10. 不支持的平台、过期/伪造令牌、身份不匹配、Codex 不可执行或协议失败必须返回明确错误，且不得静默转发到其他会话。
 - R11. Docker 与桌面资源必须包含并启用 AI Monitor OpenClaw 回复插件；配置中的内部 Monitor 地址和 reply token 不得出现在通知正文或日志中。
+- R12. 所有 outbox 外发通知必须在正文开头展示稳定的任务 ID；只有满足 R1/R2 的 QQ 通知才紧邻任务 ID 展示回复路由令牌。
+- R13. App Server 续接写入的 `response_item/message(role=user)` 必须被 session watcher 识别为新一轮提问，使后续完成通知包含该提问摘要。
+- R14. QQ 引用预览只保留任务 ID、丢失回复令牌时，插件仍须认领消息；服务端只允许该任务 ID 定位到已发送、已生成有效 route、未过期且属于 Codex CLI 的 QQ delivery。不可续接任务必须返回明确提示，不得落回 OpenClaw 模型。
 
 ## Acceptance Criteria
 
@@ -28,6 +31,9 @@
 - [x] AC6. Codex adapter 测试验证完整 JSON-RPC 顺序、原 thread id、文本 input 和 `approvalPolicy: never`。
 - [x] AC7. OpenClaw 插件测试覆盖令牌提取、真实 QQ `before_dispatch` 事件形状、认领成功、失败回复、hook 注册契约和无关消息 pass-through。
 - [x] AC8. 服务端测试、类型检查、构建、插件测试及 `git diff --check` 通过。
+- [x] AC9. QQ、微信及其他 outbox 通道的正文均以任务 ID 开头，非可回复通知不含回复路由令牌。
+- [x] AC10. App Server 续接后产生的完成事件包含引用回复文本形成的 `task_summary`。
+- [x] AC11. 仅含任务 ID 的可回复 CLI 通知仍可续接；Codex Desktop 或无效任务 ID 被插件认领并返回明确错误，不触发 OpenClaw provider 401。
 
 ## Notes
 

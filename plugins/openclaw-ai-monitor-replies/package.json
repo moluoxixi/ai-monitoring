@@ -1,6 +1,6 @@
 {
   "name": "@ai-monitor/openclaw-replies",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "private": true,
   "type": "commonjs",
   "main": "index.cjs",

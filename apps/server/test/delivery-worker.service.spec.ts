@@ -87,7 +87,7 @@ describe('DeliveryWorkerService', () => {
     expect(Array.from(result!.replace('任务结果：', ''))).toHaveLength(24);
   });
 
-  it('renders heartbeat findings without exposing the internal envelope', () => {
+  it('renders heartbeat findings without exposing timing metadata or the internal envelope', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
       title: 'vite-cli 有新进展',
@@ -105,27 +105,19 @@ describe('DeliveryWorkerService', () => {
       answer_text: 'Publish succeeded.',
     });
 
-    expect(content).toEqual({
-      title: 'vite-cli 有新进展',
-      body: [
-        '开始时间：2026-08-17 20:00:00（北京时间）',
-        '完成时间：2026-08-17 20:04:12（北京时间）',
-        '总耗时：4分12秒',
-        'Publish succeeded.',
-      ].join('\n'),
-    });
+    expect(content).toEqual({ title: 'vite-cli 有新进展', body: 'Publish succeeded.' });
   });
 
-  it('shows ingestion completion time when the source start time is unavailable', () => {
+  it('does not add ingestion timing to QQ notifications when the source start time is unavailable', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
       event_created_at: '2026-08-17T12:00:00Z',
     });
 
-    expect(content.body).toMatch(/^开始时间：未采集\n完成时间：2026-08-17 20:00:00（北京时间）\n总耗时：未采集\n/);
+    expect(content.body).toBe('提问：Delivery test\n任务结果：未采集到最终回答');
   });
 
-  it('keeps fixed timing fields outside the question and result content limits', () => {
+  it('keeps question and result content limits without timing fields', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-qq'),
       metadata: {
@@ -138,12 +130,28 @@ describe('DeliveryWorkerService', () => {
       answer_text: 'result',
     }, { taskLimit: 1, resultLimit: 1 });
 
+    expect(content.body).toBe('提问：q\n任务结果：r');
+  });
+
+  it('keeps timing fields for non-QQ notifications', () => {
+    const content = notificationContent({
+      ...delivery(1, 'openclaw-weixin'),
+      metadata: {
+        task_summary: 'question',
+        timing: {
+          started_at: '2026-08-17T12:00:00Z',
+          completed_at: '2026-08-17T12:00:01Z',
+        },
+      },
+      answer_text: 'result',
+    });
+
     expect(content.body).toBe([
       '开始时间：2026-08-17 20:00:00（北京时间）',
       '完成时间：2026-08-17 20:00:01（北京时间）',
       '总耗时：1秒',
-      '提问：q',
-      '任务结果：r',
+      '提问：question',
+      '任务结果：result',
     ].join('\n'));
   });
 
@@ -161,7 +169,7 @@ describe('DeliveryWorkerService', () => {
     await service.processOnce();
 
     expect(settings.notification).toHaveBeenCalled();
-    expect(sent[0]).toBe('提问：a...\n任务结果：12345...');
+    expect(sent[0]).toBe('[任务ID:42]\n\n提问：a...\n任务结果：12345...');
   });
 
   it('adds a stable route marker only when the database enables QQ replies', async () => {
@@ -179,7 +187,24 @@ describe('DeliveryWorkerService', () => {
     expect(send).toHaveBeenCalledWith(
       'openclaw-qq',
       '(Codex CLI) 任务已完成',
-      expect.stringMatching(/\n\n\[AI-MONITOR-REPLY:A{43}\]$/),
+      '[任务ID:42]\n\n[AI-MONITOR-REPLY:' + 'A'.repeat(43) + ']\n\n'
+        + '提问：continue work\n任务结果：未采集到最终回答',
+    );
+  });
+
+  it('adds the task ID to non-QQ notifications without exposing a reply route', async () => {
+    const send = vi.fn(() => Promise.resolve());
+    const { service } = serviceFor(send, [delivery(1, 'openclaw-weixin')]);
+    const database = (service as unknown as { database: DatabaseService }).database;
+    vi.mocked(database.ensureDeliveryReplyRoute).mockReturnValue('A'.repeat(43));
+
+    service.processOnce();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+
+    expect(send).toHaveBeenCalledWith(
+      'openclaw-weixin',
+      '(Codex CLI) 任务已完成',
+      expect.stringMatching(/^\[任务ID:42\]\n\n(?!\[AI-MONITOR-REPLY:)/),
     );
   });
 

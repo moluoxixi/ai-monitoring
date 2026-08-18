@@ -4,24 +4,27 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const resourceRoot = resolve(process.env.AIMONITOR_RESOURCE_ROOT?.trim() || resolve(dirname(fileURLToPath(import.meta.url)), '..'))
+const envPath = join(resourceRoot, '.env')
+if (existsSync(envPath)) process.loadEnvFile(envPath)
 
 const definitions = [
   {
     id: 'openclaw-qqbot',
     packageName: '@tencent-connect/openclaw-qqbot',
-    version: process.env.AI_MONITOR_QQBOT_PLUGIN_VERSION,
+    version: process.env.AI_MONITOR_QQBOT_PLUGIN_VERSION || '2.0.1',
   },
   {
     id: 'openclaw-weixin',
     packageName: '@tencent-weixin/openclaw-weixin',
-    version: process.env.AI_MONITOR_WEIXIN_PLUGIN_VERSION,
+    version: process.env.AI_MONITOR_WEIXIN_PLUGIN_VERSION || '2.4.6',
   },
   {
     id: 'ai-monitor-replies',
     localPath: process.env.AIMONITOR_REPLY_PLUGIN_PATH?.trim()
       || join(resourceRoot, 'plugins', 'openclaw-ai-monitor-replies'),
-    version: '1.0.0',
-    requiredHook: 'inbound_claim',
+    version: '1.0.4',
+    requiredHook: 'before_dispatch',
+    requiredStartupCapability: 'hook',
   },
 ]
 
@@ -75,6 +78,22 @@ const readPluginVersion = (plugin) => {
   }
 }
 
+const verifyStartupCapability = (definition, plugin) => {
+  if (!definition.requiredStartupCapability) return
+  let manifest
+  try {
+    manifest = JSON.parse(readFileSync(join(plugin.rootDir, 'openclaw.plugin.json'), 'utf8'))
+  } catch {
+    throw new Error(`OpenClaw plugin ${definition.id} has no readable manifest`)
+  }
+  const capabilities = manifest?.activation?.onCapabilities
+  if (!Array.isArray(capabilities) || !capabilities.includes(definition.requiredStartupCapability)) {
+    throw new Error(
+      `OpenClaw plugin ${definition.id} is not eligible for Gateway startup capability ${definition.requiredStartupCapability}`,
+    )
+  }
+}
+
 const verifyRuntimeHook = (definition) => {
   if (!definition.requiredHook) return
   const result = runOpenClaw(['plugins', 'inspect', definition.id, '--runtime', '--json'])
@@ -90,11 +109,31 @@ const verifyRuntimeHook = (definition) => {
   }
 }
 
+const configureReplyPlugin = () => {
+  const replyToken = process.env.AIMONITOR_REPLY_TOKEN?.trim()
+    || process.env.AIMONITOR_INGEST_TOKEN?.trim()
+  if (!replyToken) return
+  const replyUrl = process.env.AIMONITOR_REPLY_URL?.trim()
+    || 'http://127.0.0.1:8787/api/replies/inbound'
+  const configuredTimeout = Number(process.env.AIMONITOR_REPLY_TIMEOUT_MS || 30_000)
+  const timeoutMs = Number.isFinite(configuredTimeout)
+    ? Math.max(1_000, Math.min(configuredTimeout, 60_000))
+    : 30_000
+  runOpenClaw([
+    'config',
+    'set',
+    'plugins.entries.ai-monitor-replies.config',
+    JSON.stringify({ replyToken, replyUrl, timeoutMs }),
+    '--strict-json',
+  ])
+}
+
 let registry = loadRegistry()
 for (const definition of definitions) {
   const plugin = registry.plugins?.find((item) => item.id === definition.id)
   const installedVersion = readPluginVersion(plugin)
   if (plugin?.status === 'loaded' && installedVersion === definition.version) {
+    verifyStartupCapability(definition, plugin)
     verifyRuntimeHook(definition)
     continue
   }
@@ -117,5 +156,8 @@ for (const definition of definitions) {
   if (installed?.status !== 'loaded' || readPluginVersion(installed) !== definition.version) {
     throw new Error(`OpenClaw plugin ${definition.id} did not load at version ${definition.version}`)
   }
+  verifyStartupCapability(definition, installed)
   verifyRuntimeHook(definition)
 }
+
+configureReplyPlugin()

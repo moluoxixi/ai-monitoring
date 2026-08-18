@@ -13,10 +13,18 @@ import type { CreateInboundReplyDto } from './dto/create-inbound-reply.dto';
 import { PlatformReplyDispatcherService } from './platform-reply-dispatcher.service';
 
 const ROUTE_PATTERN = /\[AI-MONITOR-REPLY:([A-Za-z0-9_-]{43})\]/g;
+const TASK_ID_PATTERN = /\[任务ID:([1-9][0-9]*)\]/g;
 
 export const extractReplyToken = (body: string): string | null => {
   const matches = [...body.matchAll(ROUTE_PATTERN)];
   return matches.length === 1 ? matches[0]?.[1] || null : null;
+};
+
+export const extractReplyTaskId = (body: string): number | null => {
+  const matches = [...body.matchAll(TASK_ID_PATTERN)];
+  if (matches.length !== 1) return null;
+  const value = Number(matches[0]?.[1]);
+  return Number.isSafeInteger(value) ? value : null;
 };
 
 @Injectable()
@@ -31,9 +39,22 @@ export class RepliesService {
     const text = input.text.trim();
     if (!text) throw new BadRequestException('reply text must not be empty');
     const token = extractReplyToken(input.reply_to_body);
-    if (!token) throw new BadRequestException('quoted message does not contain one valid AI Monitor reply token');
-    const route = this.database.resolveReplyRoute(token);
-    if (!route) throw new NotFoundException('reply route was not found');
+    const taskId = extractReplyTaskId(input.reply_to_body);
+    if (!token && taskId === null) {
+      throw new BadRequestException('quoted message does not contain one valid AI Monitor reply route');
+    }
+    const route = token
+      ? this.database.resolveReplyRoute(token)
+      : taskId === null ? null : this.database.resolveReplyRouteForEvent(taskId);
+    if (!route) {
+      if (taskId !== null) {
+        throw new BadRequestException(`任务 ${taskId} 当前不支持引用续接（仅支持 Codex CLI 完成通知）`);
+      }
+      throw new NotFoundException('reply route was not found');
+    }
+    if (taskId !== null && route.event_id !== taskId) {
+      throw new BadRequestException('quoted task ID does not match the reply route');
+    }
     if (!Number.isFinite(Date.parse(route.reply_expires_at)) || Date.parse(route.reply_expires_at) <= Date.now()) {
       throw new GoneException('reply route has expired');
     }

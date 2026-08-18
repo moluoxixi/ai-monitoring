@@ -11,6 +11,34 @@ export type CodexProcessFactory = (
   options: SpawnOptionsWithoutStdio,
 ) => ChildProcessWithoutNullStreams;
 
+export type CodexSpawn = typeof spawn;
+
+interface CodexProcessInvocation {
+  command: string;
+  args: string[];
+}
+
+const WINDOWS_COMMAND_ARG = /^[A-Za-z0-9._/-]+$/;
+
+export const codexProcessInvocation = (
+  command: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+  comSpec = process.env.ComSpec,
+): CodexProcessInvocation => {
+  const normalized = command.trim().toLowerCase();
+  if (platform !== 'win32' || !['codex', 'codex.cmd'].includes(normalized)) {
+    return { command, args: [...args] };
+  }
+  if (!args.every((arg) => WINDOWS_COMMAND_ARG.test(arg))) {
+    throw new Error('Codex command arguments cannot be safely passed through cmd.exe');
+  }
+  return {
+    command: comSpec?.trim() || 'cmd.exe',
+    args: ['/d', '/s', '/c', ['codex.CMD', ...args].join(' ')],
+  };
+};
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -36,6 +64,7 @@ export class CodexAppServerConnection {
   private readonly completionWaiters = new Map<string, CompletionWaiter>();
   private nextId = 1;
   private closed = false;
+  private cleanedUp = false;
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams,
@@ -43,8 +72,11 @@ export class CodexAppServerConnection {
   ) {
     this.reader = createInterface({ input: child.stdout });
     this.reader.on('line', (line) => this.consume(line));
+    this.reader.on('error', (error) => this.fail(new Error(`Codex App Server stdout failed: ${error.message}`)));
     child.stderr.on('data', () => undefined);
     child.stdin.on('error', (error) => this.fail(new Error(`Codex App Server stdin failed: ${error.message}`)));
+    child.stdout.on('error', (error) => this.fail(new Error(`Codex App Server stdout failed: ${error.message}`)));
+    child.stderr.on('error', (error) => this.fail(new Error(`Codex App Server stderr failed: ${error.message}`)));
     child.once('error', (error) => this.fail(new Error(`Codex App Server failed to start: ${error.message}`)));
     child.once('exit', (code, signal) => {
       if (!this.closed) this.fail(new Error(`Codex App Server exited before completion (${signal ?? code ?? 'unknown'})`));
@@ -83,12 +115,11 @@ export class CodexAppServerConnection {
   }
 
   close(): void {
-    if (this.closed) return;
-    this.closed = true;
-    this.reader.close();
-    this.rejectAll(new Error('Codex App Server connection closed'));
-    if (!this.child.stdin.destroyed) this.child.stdin.end();
-    if (this.child.exitCode === null && this.child.signalCode === null) this.child.kill();
+    if (!this.closed) {
+      this.closed = true;
+      this.rejectAll(new Error('Codex App Server connection closed'));
+    }
+    this.cleanup();
   }
 
   private write(payload: Record<string, unknown>): void {
@@ -130,8 +161,16 @@ export class CodexAppServerConnection {
   private fail(error: Error): void {
     if (this.closed) return;
     this.closed = true;
-    this.reader.close();
     this.rejectAll(error);
+    this.cleanup();
+  }
+
+  private cleanup(): void {
+    if (this.cleanedUp) return;
+    this.cleanedUp = true;
+    this.reader.close();
+    if (!this.child.stdin.destroyed) this.child.stdin.end();
+    if (this.child.exitCode === null && this.child.signalCode === null) this.child.kill();
   }
 
   private rejectAll(error: Error): void {
@@ -202,7 +241,16 @@ export class CodexAppServerReplyService implements OnModuleDestroy {
   }
 }
 
-export const defaultCodexProcessFactory: CodexProcessFactory = (command, args, options) => spawn(command, args, {
-  ...options,
-  stdio: ['pipe', 'pipe', 'pipe'],
-});
+export const createCodexProcessFactory = (
+  spawnProcess: CodexSpawn = spawn,
+  platform: NodeJS.Platform = process.platform,
+  comSpec = process.env.ComSpec,
+): CodexProcessFactory => (command, args, options) => {
+    const invocation = codexProcessInvocation(command, args, platform, comSpec);
+    return spawnProcess(invocation.command, invocation.args, {
+      ...options,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  };
+
+export const defaultCodexProcessFactory = createCodexProcessFactory();

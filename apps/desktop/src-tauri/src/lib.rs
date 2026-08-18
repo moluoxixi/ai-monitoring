@@ -259,7 +259,7 @@ fn gateway_healthy(
     command.status().is_ok_and(|status| status.success())
 }
 
-fn run_openclaw_bootstrap(resources: &Path, data_root: &Path) -> AppResult<()> {
+fn run_openclaw_bootstrap(resources: &Path, data_root: &Path, reply_token: &str) -> AppResult<()> {
     let Some(cli_module) = openclaw_cli_module(resources) else {
         return Ok(());
     };
@@ -280,6 +280,11 @@ fn run_openclaw_bootstrap(resources: &Path, data_root: &Path) -> AppResult<()> {
         .env("AIMONITOR_DATA_ROOT", data_root)
         .env("OPENCLAW_STATE_DIR", &state_root)
         .env("AIMONITOR_OPENCLAW_CLI_PATH", cli_module)
+        .env("AIMONITOR_REPLY_TOKEN", reply_token)
+        .env(
+            "AIMONITOR_REPLY_URL",
+            format!("http://127.0.0.1:{}/api/replies/inbound", monitor_port()),
+        )
         .stdout(if cfg!(debug_assertions) {
             Stdio::inherit()
         } else {
@@ -326,17 +331,17 @@ fn launch_gateway(resources: &Path, data_root: &Path, reply_token: &str) -> AppR
             port,
             gateway_token.as_deref(),
         ) {
-            return Ok(GatewayLaunch {
-                child: None,
-                state_root: Some(state_root),
-            });
+            return Err(format!(
+                "端口 {port} 已有 OpenClaw Gateway。桌面端无法验证外部 Gateway 的插件和回复令牌；请先关闭该 Gateway，或继续使用当前已运行的通知中心。"
+            )
+            .into());
         }
         return Err(format!(
             "端口 {port} 已被占用，但未通过 OpenClaw Gateway RPC 健康检查。请停止占用程序，或提供正确的 OPENCLAW_GATEWAY_TOKEN 后重试。"
         )
         .into());
     }
-    run_openclaw_bootstrap(resources, data_root)?;
+    run_openclaw_bootstrap(resources, data_root, reply_token)?;
     let mut gateway_args = vec![
         "gateway".to_owned(),
         "run".to_owned(),

@@ -6,7 +6,7 @@ import type { OpenClawProvider } from '../src/channels/openclaw.provider';
 import type { PlatformReplyDispatcherService } from '../src/replies/platform-reply-dispatcher.service';
 import { PlatformReplyDispatcherService as ReplyDispatcher } from '../src/replies/platform-reply-dispatcher.service';
 import { RepliesController } from '../src/replies/replies.controller';
-import { extractReplyToken, RepliesService } from '../src/replies/replies.service';
+import { extractReplyTaskId, extractReplyToken, RepliesService } from '../src/replies/replies.service';
 
 const token = 'A'.repeat(43);
 const input = {
@@ -23,6 +23,7 @@ const serviceFor = (overrides: { bound?: boolean; duplicateState?: 'processing' 
   };
   const database = {
     resolveReplyRoute: vi.fn(() => route),
+    resolveReplyRouteForEvent: vi.fn(() => route),
     claimInboundReply: vi.fn(() => overrides.duplicateState
       ? { inserted: false, reply: {
         id: 7, state: overrides.duplicateState, delivery_id: 10, sender_id: 'user-1', account_id: 'default',
@@ -45,6 +46,12 @@ describe('RepliesService', () => {
     expect(extractReplyToken(`${input.reply_to_body}${input.reply_to_body}`)).toBeNull();
   });
 
+  it('extracts exactly one positive task ID', () => {
+    expect(extractReplyTaskId('[任务ID:5]')).toBe(5);
+    expect(extractReplyTaskId('[任务ID:5]\n[任务ID:5]')).toBeNull();
+    expect(extractReplyTaskId('[任务ID:0]')).toBeNull();
+  });
+
   it('validates the binding and dispatches one reply to the original route', async () => {
     const { service, database, dispatcher } = serviceFor();
 
@@ -55,6 +62,33 @@ describe('RepliesService', () => {
       delivery_id: 10, metadata: { thread_id: 'thread-1' },
     }), 'continue');
     expect(database.markInboundReply).toHaveBeenCalledWith(7, 'accepted');
+  });
+
+  it('resolves a reply by task ID when QQ omits the route token', async () => {
+    const { service, database, dispatcher } = serviceFor();
+
+    await expect(service.accept({ ...input, reply_to_body: '[任务ID:5]' })).resolves.toMatchObject({
+      ok: true, accepted: true, duplicate: false,
+    });
+    expect(database.resolveReplyRoute).not.toHaveBeenCalled();
+    expect(database.resolveReplyRouteForEvent).toHaveBeenCalledWith(5);
+    expect(dispatcher.dispatch).toHaveBeenCalledOnce();
+  });
+
+  it('rejects task IDs that are not reply-enabled without dispatching', async () => {
+    const { service, database, dispatcher } = serviceFor();
+    vi.mocked(database.resolveReplyRouteForEvent).mockReturnValue(null);
+
+    await expect(service.accept({ ...input, reply_to_body: '[任务ID:548]' }))
+      .rejects.toThrow('任务 548 当前不支持引用续接');
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a task ID that conflicts with the opaque route token', async () => {
+    const { service, dispatcher } = serviceFor();
+    await expect(service.accept({ ...input, reply_to_body: `[任务ID:6]\n${input.reply_to_body}` }))
+      .rejects.toBeInstanceOf(BadRequestException);
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
   it('rejects a sender that does not match the QQ delivery binding', async () => {
@@ -69,7 +103,7 @@ describe('RepliesService', () => {
     expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
-  it('rejects quoted bodies without one valid route token', async () => {
+  it('rejects quoted bodies without one valid route candidate', async () => {
     const { service } = serviceFor();
     await expect(service.accept({ ...input, reply_to_body: 'ordinary notification' }))
       .rejects.toBeInstanceOf(BadRequestException);

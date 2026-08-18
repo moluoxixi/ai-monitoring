@@ -2,9 +2,28 @@
   "id": "ai-monitor-replies",
   "name": "AI Monitor Replies",
   "description": "Routes quoted AI Monitor QQ notifications back to their original AI conversation.",
+  "activation": {
+    "onCapabilities": [
+      "hook"
+    ]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "replyToken": {
+        "type": "string",
+        "minLength": 1
+      },
+      "replyUrl": {
+        "type": "string",
+        "minLength": 1
+      },
+      "timeoutMs": {
+        "type": "number",
+        "minimum": 1000,
+        "maximum": 60000
+      }
+    }
   }
 }

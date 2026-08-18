@@ -6,9 +6,9 @@ import { DeliveryOutcomeUnknownError } from '../channels/channel-provider';
 import { DatabaseService, utcNow } from '../database/database.service';
 import type { DeliveryRow } from '../database/database.types';
 import { cleanAnswerText, truncateText } from '../utils/event-text';
+import { formatEventTiming } from '../utils/event-timing';
 import { UserSettingsService } from '../settings/user-settings.service';
 import { DEFAULT_RESULT_LIMIT, DEFAULT_TASK_LIMIT, type NotificationSettings } from '../settings/user-settings.types';
-import { formatEventTiming } from '../utils/event-timing';
 const LEASE_MS = 5 * 60_000;
 const LEASE_RENEWAL_MS = 60_000;
 const MAX_IN_FLIGHT_DELIVERIES = 4;
@@ -48,7 +48,9 @@ export const notificationContent = (
     : '';
   const message = cleanText(row.message);
   const summary = taskSummary || message || cleanText(row.title);
-  const timing = formatEventTiming(row.metadata, row.event_created_at);
+  const timing = row.channel === 'openclaw-qq'
+    ? ''
+    : formatEventTiming(row.metadata, row.event_created_at);
   const withTiming = (content: string): string => timing ? `${timing}\n${content}` : content;
   const automationId = cleanText(row.metadata?.automation_id);
   if (row.status === 'completed' && automationId && row.metadata?.automation_decision === 'NOTIFY') {
@@ -71,9 +73,11 @@ export const notificationContent = (
   };
 };
 
-export const withReplyRoute = (body: string, token: string | null): string => token
-  ? `${body}\n\n[AI-MONITOR-REPLY:${token}]`
-  : body;
+export const withReplyRoute = (body: string, token: string | null, taskId: number): string => [
+  `[任务ID:${taskId}]`,
+  ...(token ? [`[AI-MONITOR-REPLY:${token}]`] : []),
+  body,
+].join('\n\n');
 
 @Injectable()
 export class DeliveryWorkerService implements OnModuleDestroy {
@@ -149,7 +153,12 @@ export class DeliveryWorkerService implements OnModuleDestroy {
     try {
       const notification = notificationContent(row, this.settings?.notification());
       const replyToken = this.database.ensureDeliveryReplyRoute(row.id, this.config.replyRouteTtlMs);
-      await this.channels.send(row.channel, notification.title, withReplyRoute(notification.body, replyToken));
+      const body = withReplyRoute(
+        notification.body,
+        row.channel === 'openclaw-qq' ? replyToken : null,
+        row.event_id,
+      );
+      await this.channels.send(row.channel, notification.title, body);
       if (this.abandoning) return;
       const now = utcNow();
       this.database.markClaimedDelivery(row.id, row.lease_token, {
