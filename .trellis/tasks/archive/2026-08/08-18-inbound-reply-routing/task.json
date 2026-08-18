@@ -3,7 +3,7 @@
   "name": "inbound-reply-routing",
   "title": "QQ inbound reply routing",
   "description": "",
-  "status": "in_progress",
+  "status": "completed",
   "complexity": {
     "level": "complex",
     "signals": [],
@@ -23,7 +23,7 @@
   "creator": "wl",
   "assignee": "wl",
   "createdAt": "2026-08-18",
-  "completedAt": null,
+  "completedAt": "2026-08-18",
   "branch": null,
   "base_branch": "main",
   "worktree_path": null,
