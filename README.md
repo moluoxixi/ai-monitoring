@@ -210,6 +210,17 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 - **Claude Desktop**：本地 watcher 只监听 session transcript；启动时跳过已有历史，只监测后续新增消息。路径可通过 `AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH` 覆盖。
 - **Qoder sessions/logs**：默认监听 `~/.qoder/projects` 与 Qoder 应用数据目录下的 `logs`，路径可分别通过 `AIMONITOR_QODER_SESSIONS_PATH`、`AIMONITOR_QODER_LOGS_PATH` 覆盖；启动时读取已有文件建立上下文但不创建历史通知。
 
+## v1.0.10 发布报告
+
+发布日期：2026-08-18。该版本修复 Windows GitHub Actions hosted runner 上 Claude Desktop 文件监听回归测试触发 Node/libuv `fs-event` 进程崩溃的问题，并重新发布 `v1.0.8` 引入的 QQ 引用续接功能。
+
+### CI 修复
+
+- 原始 job 日志确认 25 个 server test files 已完成 24 个，唯一未完成的是包含真实 Chokidar 文件监听场景的 Claude Desktop watcher；故障发生在测试断言之外，由 Windows Server 2025 的原生 `fs.watch` 后端中止 worker。
+- Windows CI 的 `Test workspaces` 步骤设置 Chokidar 内置环境开关 `CHOKIDAR_USEPOLLING=1`，使用 polling 后端验证相同的新增、变更和忽略文件行为；macOS runner 显式保持原生监听后端。
+- `v1.0.9` 的单 worker 尝试未解决底层 `fs-event` 崩溃，因此 `v1.0.10` 恢复测试文件并行；没有删除、跳过或改写任何测试。
+- `v1.0.8`、`v1.0.9` tag 保留失败流水线记录，不进行重写；安装包由 `v1.0.10` tag 构建和发布。
+
 ## v1.0.9 发布报告
 
 发布日期：2026-08-18。该版本保留 `v1.0.8` 的 QQ 引用续接功能，并修复 Windows GitHub Actions 在全量测试阶段无法进入安装包构建的问题。
@@ -218,7 +229,7 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 
 - Vitest 4 默认并行 fork 多个 test file worker；Windows runner 上的文件监听测试会触发 Node/libuv `fs-event` 断言，导致 `Test workspaces` 失败，而本地 Windows 和 macOS runner 的同一测试集均可通过。
 - 根 workspace 测试改为对 server/web 使用 `--no-file-parallelism`，在单个 fork worker 中顺序执行所有 test files；没有删除、跳过或改写任何测试，Node 工具链与 OpenClaw 插件测试仍按原顺序执行。
-- `v1.0.8` tag 保留失败流水线记录，不进行重写；实际修复后的安装包由 `v1.0.9` tag 构建和发布。
+- `v1.0.8` tag 保留失败流水线记录，不进行重写；`v1.0.9` tag 用于验证单 worker 修复尝试。
 
 ## v1.0.8 发布报告
 

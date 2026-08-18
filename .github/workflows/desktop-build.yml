@@ -48,6 +48,8 @@ jobs:
 
       - name: Test workspaces
         run: npm test
+        env:
+          CHOKIDAR_USEPOLLING: ${{ runner.os == 'Windows' && '1' || '0' }}
 
       - name: Create Tauri test resource directory
         run: |

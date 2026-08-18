@@ -207,7 +207,7 @@ export class CodexAppServerReplyService implements OnModuleDestroy {
     this.active.add(connection);
     try {
       await connection.request('initialize', {
-        clientInfo: { name: 'ai-monitor', title: 'AI Monitor', version: '1.0.9' },
+        clientInfo: { name: 'ai-monitor', title: 'AI Monitor', version: '1.0.10' },
         capabilities: { experimentalApi: false, optOutNotificationMethods: ['item/agentMessage/delta'] },
       });
       connection.notify('initialized', {});
