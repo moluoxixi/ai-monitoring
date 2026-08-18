@@ -210,6 +210,30 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 - **Claude Desktop**：本地 watcher 只监听 session transcript；启动时跳过已有历史，只监测后续新增消息。路径可通过 `AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH` 覆盖。
 - **Qoder sessions/logs**：默认监听 `~/.qoder/projects` 与 Qoder 应用数据目录下的 `logs`，路径可分别通过 `AIMONITOR_QODER_SESSIONS_PATH`、`AIMONITOR_QODER_LOGS_PATH` 覆盖；启动时读取已有文件建立上下文但不创建历史通知。
 
+## v1.0.8 发布报告
+
+发布日期：2026-08-18。该版本发布 QQ 引用回复到原 Codex CLI 会话的完整链路，并统一根包、server、web、desktop、Tauri 与 lockfile 的版本号为 `1.0.8`。
+
+### 主要变更
+
+- 所有 outbox 通知正文都以稳定的 `[任务ID:<id>]` 开头；可续接的 QQ 通知同时携带不可猜测、对同一 delivery 稳定的回复路由令牌。
+- QQ 私聊引用回复会在 OpenClaw 默认 agent 路由前被项目插件认领；引用预览丢失路由令牌时，可用任务 ID 定位原通知，但仍需通过 route 有效期、投递状态和 QQ sender/account 绑定校验。
+- Codex CLI 回复通过官方 App Server 协议依次执行 `initialize`、`thread/resume` 和 `turn/start`，使用原 `thread_id`、幂等消息 ID 和 `approvalPolicy: never`；续接后的用户文本会成为下一轮完成通知的提问摘要。
+- 修复 Windows 下 pnpm 裸 `codex` shim 启动 App Server 时的 `spawn EPERM`，改由 `codex.CMD` 与 `cmd.exe` 启动。
+- 回复插件已接入 Docker 与桌面资源，补齐 Gateway 启动 capability、运行时 hook 校验和持久化 reply token/URL 配置，避免 Gateway 与 Monitor 独立重启后继续使用旧 token 导致 401。
+- 不可续接的任务会被插件认领并返回明确错误，不再落回 OpenClaw provider；普通 QQ 消息、群消息和其他渠道不受影响。
+
+### 安全与兼容边界
+
+- 任务 ID 只是路由候选，不是授权凭据；服务端只允许已发送、已生成有效 route、未过期且属于 Codex CLI 的 QQ delivery 续接，并对同一 QQ message id 保证幂等。
+- Codex Desktop 会话由 Desktop 内部 App Server 持有 active writer，当前无法由第三方进程安全续接；这类通知会明确提示不支持，不会绕过单写者约束。
+- 入站接口使用 `AIMONITOR_REPLY_TOKEN`，未配置时可回退到 `AIMONITOR_INGEST_TOKEN`；二者都为空时 fail closed。内部 URL 和 token 不会写入通知正文或日志。
+
+### 验证记录
+
+- 根 workspace 测试、server/web 类型检查与构建、OpenClaw 回复插件测试、桌面工具链检查和 Tauri Rust 测试通过。
+- `git diff --check` 通过；Windows/macOS 安装包继续由 `v*` tag 触发 GitHub Actions 构建和发布。
+
 ## v1.0.7 发布报告
 
 发布日期：2026-08-15。该版本把桌面端生命周期和多平台监控支持一起发布，并统一根包、server、web、desktop 与 lockfile 的版本号为 `1.0.7`。
