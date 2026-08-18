@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .moluoxixi/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".moluoxixi/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify the complete inbound-to-platform data flow."}
+{"file": ".moluoxixi/spec/guides/code-reuse-thinking-guide.md", "reason": "Check local ownership and reuse boundaries."}
+{"file": ".moluoxixi/spec/guides/cross-platform-thinking-guide.md", "reason": "Verify Docker and desktop runtime integration."}

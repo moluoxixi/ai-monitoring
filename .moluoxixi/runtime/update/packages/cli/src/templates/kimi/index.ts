@@ -1,0 +1,25 @@
+/**
+ * Kimi Code template module.
+ *
+ * Kimi Code is a class-2 pull-based platform:
+ * - Workflow/bundled skills go to the shared `.agents/skills/` root via the
+ *   neutral resolver (byte-identical to Codex/Gemini/Pi writes).
+ * - User-invocable entry points (`moluoxixi-start` / `moluoxixi-continue` /
+ *   `moluoxixi-finish-work`, invoked as `/skill:moluoxixi-<name>`) and the Moluoxixi
+ *   agent prompts live under `.kimi-code/skills/<name>/SKILL.md`.
+ * - The same agent prompts are also installed as project-level custom
+ *   sub-agent definitions under `.kimi-code/agents/<name>.md`.
+ *
+ * Kimi has no project-level hooks/settings file Moluoxixi may write, so no
+ * hooks or settings are shipped; moluoxixi-implement / moluoxixi-check get the
+ * pull-based prelude, moluoxixi-research stays standalone.
+ */
+
+import { createTemplateReader, type AgentTemplate } from "../template-utils.js";
+
+const { listMdAgents } = createTemplateReader(import.meta.url);
+
+/** Moluoxixi agent prompts (moluoxixi-implement, moluoxixi-check, moluoxixi-research), installed as Kimi skills. */
+export function getAllAgents(): AgentTemplate[] {
+  return listMdAgents();
+}

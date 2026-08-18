@@ -1,0 +1,9 @@
+{
+  "enableSkillCommands": true,
+  "extensions": [
+    "./extensions/moluoxixi/index.ts"
+  ],
+  "prompts": [
+    "./prompts"
+  ]
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Trellis per-turn breadcrumb hook (UserPromptSubmit / BeforeAgent equivalent).
+"""Moluoxixi per-turn breadcrumb hook (UserPromptSubmit / BeforeAgent equivalent).
 
-Runs on every user prompt. Resolves the active task through Trellis'
+Runs on every user prompt. Resolves the active task through Moluoxixi'
 session-aware active task resolver and emits a short <workflow-state>
 block reminding the main AI what task is active and its expected flow.
 
@@ -17,18 +17,16 @@ missing or a tag is absent, the breadcrumb degrades to a generic
 "Refer to workflow.md for current step." line so users see (and fix)
 the broken state instead of the hook silently masking it.
 
-Which platforms register this hook is decided by SHARED_HOOKS_BY_PLATFORM
-in templates/shared-hooks/index.ts — currently Claude, Codex, Gemini,
-Qoder, Copilot, CodeBuddy, Droid, Kiro, Trae and ZCode. That table is the
-source of truth; each listed platform's collect<Platform>Templates() pulls
-this file into its template map through collectSharedHooks(), and a single
-writer puts that map on disk at init time. Kiro wires this via the CLI
+Which platforms receive this hook is defined by ``CORE_HOOKS`` in
+``scripts/hosts/catalog.mjs``. The initializer projects this canonical file
+through ``buildPlan()`` instead of duplicating per-host implementations. Kiro
+wires it via the CLI
 custom agent's ``hooks.userPromptSubmit`` and the IDE ``.kiro.hook``
 ``promptSubmit`` event; its output branch emits a plain-text breadcrumb
 (Kiro adds hook stdout directly to the conversation context).
 
 Silent exit 0 cases (no output):
-  - No .trellis/ directory found (not a Trellis project)
+  - No .moluoxixi/ directory found (not a Moluoxixi project)
   - task.json malformed or missing status
 """
 from __future__ import annotations
@@ -64,32 +62,34 @@ if sys.platform.startswith("win"):
                 pass  # Optional Windows stream setup; keep hook startup non-fatal.
 from typing import Optional
 
-
 # Bootstrap notice for Codex while the session has no active task. Codex does not
 # get the full SessionStart overview; this short reminder points the main session
 # at the start skill once and leaves the per-turn state block compact.
-CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<trellis-bootstrap>
-If you have not already loaded Trellis context this session, read the `trellis-start` skill once.
-</trellis-bootstrap>"""
-
+CODEX_NO_TASK_BOOTSTRAP_NOTICE = """<moluoxixi-bootstrap>
+If you have not already loaded Moluoxixi context this session, read the `start` skill once.
+</moluoxixi-bootstrap>"""
 
 # ---------------------------------------------------------------------------
-# CWD-robust Trellis root discovery (fixes hook-path-robustness for this hook)
+# CWD-robust Moluoxixi root discovery (fixes hook-path-robustness for this hook)
 # ---------------------------------------------------------------------------
 
-def find_trellis_root(start: Path) -> Optional[Path]:
-    """Walk up from start to find directory containing .trellis/.
+def find_moluoxixi_root(start: Path) -> Optional[Path]:
+    """Walk up from start to find an initialized Moluoxixi project.
 
     Handles CWD drift: subdirectory launches, monorepo packages, etc.
-    Returns None if no .trellis/ found (silent no-op).
+    A bare user-level ``.moluoxixi`` directory is not a project; requiring the
+    active-task runtime also prevents hooks from importing through an
+    incomplete or unrelated ancestor directory.
     """
     cur = start.resolve()
     while cur != cur.parent:
-        if (cur / ".trellis").is_dir():
+        active_task_runtime = (
+            cur / ".moluoxixi" / "scripts" / "common" / "active_task.py"
+        )
+        if active_task_runtime.is_file():
             return cur
         cur = cur.parent
     return None
-
 
 # ---------------------------------------------------------------------------
 # Active task discovery
@@ -98,14 +98,6 @@ def find_trellis_root(start: Path) -> Optional[Path]:
 def _detect_platform(input_data: dict) -> str | None:
     if isinstance(input_data.get("cursor_version"), str):
         return "cursor"
-    # CLAUDE_PROJECT_DIR is a compatibility alias that several hosts set
-    # alongside their own variable — CodeBuddy, ZCode and Trae all do. It must
-    # therefore be checked LAST, or every one of them is detected as claude and
-    # the context key becomes `claude_<their-session-id>`. That key does not
-    # match the session file `task.py start` wrote under the host's real name,
-    # so every turn reports no_task while the pointer exists on disk.
-    # Observed on CodeBuddy IDE 4.10.4: session file `codebuddy_ae54840e….json`
-    # alongside marker `update-check-claude_ae54840e….marker`, same id.
     env_map = {
         "ZCODE_PROJECT_DIR": "zcode",
         "CURSOR_PROJECT_DIR": "cursor",
@@ -116,7 +108,7 @@ def _detect_platform(input_data: dict) -> str | None:
         "KIRO_PROJECT_DIR": "kiro",
         "COPILOT_PROJECT_DIR": "copilot",
         "TRAE_PROJECT_DIR": "trae",
-        # Last: the shared alias, only meaningful once no vendor key matched.
+        # Compatibility alias shared by several hosts; check it last.
         "CLAUDE_PROJECT_DIR": "claude",
     }
     for env_name, platform in env_map.items():
@@ -145,18 +137,16 @@ def _detect_platform(input_data: dict) -> str | None:
         return "zcode"
     return None
 
-
 def _resolve_active_task(root: Path, input_data: dict):
-    scripts_dir = root / ".trellis" / "scripts"
+    scripts_dir = root / ".moluoxixi" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     from common.active_task import resolve_active_task  # type: ignore[import-not-found]
 
     return resolve_active_task(root, input_data, platform=_detect_platform(input_data))
 
-
-def get_active_task(root: Path, input_data: dict) -> Optional[tuple[str, str, str]]:
-    """Return (task_id, status, source) from the current active task."""
+def get_active_task(root: Path, input_data: dict) -> Optional[tuple[str, str, str, str, str]]:
+    """Return task id, status, source, complexity, and execution mode."""
     active = _resolve_active_task(root, input_data)
     if not active.task_path:
         return None
@@ -165,7 +155,7 @@ def get_active_task(root: Path, input_data: dict) -> Optional[tuple[str, str, st
     if not task_dir.is_absolute():
         task_dir = root / task_dir
     if active.stale:
-        return task_dir.name, f"stale_{active.source_type}", active.source
+        return task_dir.name, f"stale_{active.source_type}", active.source, "unknown", "manual"
 
     task_json = task_dir / "task.json"
     if not task_json.is_file():
@@ -179,8 +169,11 @@ def get_active_task(root: Path, input_data: dict) -> Optional[tuple[str, str, st
     status = data.get("status", "")
     if not isinstance(status, str) or not status:
         return None
-    return task_id, status, active.source
-
+    complexity = data.get("complexity")
+    complexity_level = complexity.get("level") if isinstance(complexity, dict) else "legacy"
+    approval = data.get("executionApproval")
+    execution_mode = approval.get("mode") if isinstance(approval, dict) else "legacy"
+    return task_id, status, active.source, str(complexity_level), str(execution_mode)
 
 # ---------------------------------------------------------------------------
 # Breadcrumb loading: parse workflow.md, fall back to hardcoded defaults
@@ -202,7 +195,7 @@ def load_breadcrumbs(root: Path) -> dict[str, str]:
     in build_breadcrumb so users see the broken state and fix
     workflow.md, rather than the hook silently masking the issue.
     """
-    workflow = root / ".trellis" / "workflow.md"
+    workflow = root / ".moluoxixi" / "workflow.md"
     if not workflow.is_file():
         return {}
     try:
@@ -218,36 +211,28 @@ def load_breadcrumbs(root: Path) -> dict[str, str]:
             result[status] = body
     return result
 
+def _read_moluoxixi_config(root: Path) -> dict:
+    """Load .moluoxixi/config.yaml via the bundled moluoxixi_config helper.
 
-def _read_trellis_config(root: Path) -> dict:
-    """Load .trellis/config.yaml via the bundled trellis_config helper.
-
-    The helper lives in .trellis/scripts/common; the hook lives outside the
+    The helper lives in .moluoxixi/scripts/common; the hook lives outside the
     scripts tree, so we extend sys.path before importing.
     """
-    scripts_dir = root / ".trellis" / "scripts"
+    scripts_dir = root / ".moluoxixi" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     try:
-        from common.trellis_config import read_trellis_config  # type: ignore[import-not-found]
+        from common.moluoxixi_config import read_moluoxixi_config  # type: ignore[import-not-found]
     except Exception:
         return {}
     try:
-        return read_trellis_config(root)
+        return read_moluoxixi_config(root)
     except Exception:
         return {}
 
-
-DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD = "no-trellis"
-
+DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD = "no-moluoxixi"
 
 def _resolve_skip_keyword(config: dict) -> str:
-    """Read `prompt_injection.skip_keyword` from parsed .trellis/config.yaml.
-
-    Mirrors `common.config.get_prompt_injection_config()`. Defaults to
-    "no-trellis"; "" disables the escape hatch entirely. A non-string value
-    falls back to the default.
-    """
+    """Read ``prompt_injection.skip_keyword`` from parsed project config."""
     if isinstance(config, dict):
         section = config.get("prompt_injection")
         if isinstance(section, dict):
@@ -256,63 +241,45 @@ def _resolve_skip_keyword(config: dict) -> str:
                 return raw
     return DEFAULT_PROMPT_INJECTION_SKIP_KEYWORD
 
-
 def prompt_has_skip_keyword(prompt: str, keyword: str) -> bool:
-    """Case-insensitive, word-boundary match of `keyword` in `prompt`.
-
-    Hyphen counts as a word char so "no-trellisx" / "xno-trellis" /
-    "foo-no-trellis" don't match, but punctuation/whitespace boundaries do.
-    Empty keyword never matches (disables the escape hatch).
-    """
+    """Match a case-insensitive standalone keyword; an empty value disables it."""
     if not keyword or not isinstance(prompt, str):
         return False
     pattern = r"(?<![\w-])" + re.escape(keyword) + r"(?![\w-])"
     return re.search(pattern, prompt, re.IGNORECASE) is not None
 
-
 def _resolve_codex_dispatch_mode(config: dict) -> str:
-    """Normalize `codex.dispatch_mode` from .trellis/config.yaml to "auto" or "inline".
-
-    Defaults to `auto`. The legacy `sub-agent` value is an alias for `auto`.
-    Any other explicit value (including invalid ones) falls back to `inline`
-    without per-turn warnings. Shared by `_codex_mode_banner` (the per-turn
-    banner) and `resolve_breadcrumb_key` (the breadcrumb tag key) so the two
-    stay in lockstep.
-    """
+    """Normalize codex.dispatch_mode to auto or inline exactly once."""
     mode = "auto"
-    if isinstance(config, dict):
-        codex_cfg = config.get("codex")
-        if isinstance(codex_cfg, dict):
-            cfg_mode = str(codex_cfg.get("dispatch_mode", mode)).strip().lower()
-            if cfg_mode == "inline":
-                mode = "inline"
-            elif cfg_mode in ("auto", "sub-agent"):
-                mode = "auto"
-            else:
-                mode = "inline"
-    return mode
-
+    if not isinstance(config, dict):
+        return mode
+    codex_cfg = config.get("codex")
+    if codex_cfg is None:
+        return mode
+    if not isinstance(codex_cfg, dict):
+        return "inline"
+    cfg_mode = str(codex_cfg.get("dispatch_mode", mode)).strip().lower()
+    if cfg_mode == "inline":
+        return "inline"
+    if cfg_mode in ("auto", "sub-agent"):
+        return "auto"
+    return "inline"
 
 def _codex_mode_banner(config: dict) -> str:
     """Emit a `<codex-mode>` banner for the additionalContext payload.
 
-    Reads `codex.dispatch_mode` from .trellis/config.yaml; defaults to
-    `auto`, which dispatches Trellis sub-agents using native Codex context
-    injection with a child-side fallback. This does not rely on inherited
-    parent transcripts: `fork_turns` remains caller-controlled, and
-    fresh-history sub-agents still receive their explicit delegated task and
-    inherited session configuration. `inline` is an explicit opt-out; the
-    legacy `sub-agent` value is an alias for `auto`. Invalid explicit values
-    fall back to `inline` without per-turn warnings. The banner makes the
-    active mode explicit to Codex AI per turn, complementing the workflow-state
-    body which is per-status. Mode tells AI which dispatch protocol to follow;
-    workflow-state tells AI what step it's at.
+    Reads `codex.dispatch_mode` from .moluoxixi/config.yaml. Moluoxixi defaults
+    to `auto` because its native SubagentStart hook supplies task context;
+    `inline` is the explicit opt-out and `sub-agent` is a compatibility alias
+    for `auto`. Invalid explicit values fail closed to `inline`. The banner
+    makes the active mode explicit to Codex AI per turn, complementing the
+    workflow-state body which is per-status.
     """
     mode = _resolve_codex_dispatch_mode(config)
     if mode == "auto":
         meaning = (
-            "auto: implement/check work defaults to Trellis sub-agents; native Codex "
-            "context injection is preferred and child-side loading is the fallback. "
+            "auto: implement/check work defaults to Moluoxixi sub-agents; "
+            "native Codex context injection is preferred and child-side loading is the fallback. "
             "The main session still coordinates, clarifies, updates specs, commits, and finishes."
         )
     else:
@@ -322,26 +289,22 @@ def _codex_mode_banner(config: dict) -> str:
         )
     return f"<codex-mode>{meaning}</codex-mode>"
 
-
 def resolve_breadcrumb_key(
     status: str, platform: str | None, config: dict
 ) -> str:
     """Pick the breadcrumb tag key based on Codex dispatch_mode.
 
-    Codex defaults to ``auto`` and therefore uses the ordinary ``<status>``
-    breadcrumb for native SubagentStart dispatch with child-side fallback;
-    it does not depend on an inherited parent transcript. ``inline`` selects
-    the parallel ``<status>-inline`` tag; ``sub-agent`` remains an alias for
-    ``auto``. Invalid explicit values fall back to inline without per-turn
-    warnings.
+    Codex defaults to ``auto`` because Moluoxixi's native SubagentStart hook
+    supplies task context. ``inline`` is an explicit opt-out and ``sub-agent``
+    is a backwards-compatible alias for ``auto``. Invalid explicit values fall
+    back to inline.
 
     Non-codex platforms return the plain status unchanged.
     """
     if platform == "codex":
         mode = _resolve_codex_dispatch_mode(config)
-        return f"{status}-inline" if mode == "inline" else status
+        return status if mode == "auto" else f"{status}-inline"
     return status
-
 
 def build_breadcrumb(
     task_id: Optional[str],
@@ -349,6 +312,8 @@ def build_breadcrumb(
     templates: dict[str, str],
     source: str | None = None,
     breadcrumb_key: str | None = None,
+    complexity: str | None = None,
+    execution_mode: str | None = None,
 ) -> str:
     """Build the <workflow-state>...</workflow-state> block.
 
@@ -364,8 +329,9 @@ def build_breadcrumb(
     if body is None:
         body = "Refer to workflow.md for current step."
     header = f"Status: {status}" if task_id is None else f"Task: {task_id} ({status})"
+    if task_id is not None and complexity and execution_mode:
+        header += f"; complexity={complexity}; execution={execution_mode}"
     return f"<workflow-state>\n{header}\n{body}\n</workflow-state>"
-
 
 # ---------------------------------------------------------------------------
 # Entry
@@ -403,9 +369,8 @@ def _load_hook_input() -> dict:
         return {}
     return data if isinstance(data, dict) else {}
 
-
 def main() -> int:
-    if os.environ.get("TRELLIS_HOOKS") == "0" or os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+    if os.environ.get("MOLUOXIXI_HOOKS") == "0" or os.environ.get("MOLUOXIXI_DISABLE_HOOKS") == "1":
         return 0
 
     data = _load_hook_input()
@@ -413,30 +378,36 @@ def main() -> int:
     cwd_str = data.get("cwd") or os.getcwd()
     cwd = Path(cwd_str)
 
-    root = find_trellis_root(cwd)
+    root = find_moluoxixi_root(cwd)
     if root is None:
-        return 0  # not a Trellis project
+        return 0  # not a Moluoxixi project
 
-    config = _read_trellis_config(root)
+    config = _read_moluoxixi_config(root)
     if prompt_has_skip_keyword(data.get("prompt", ""), _resolve_skip_keyword(config)):
-        return 0  # user opted out of the per-turn breadcrumb for this turn
+        return 0
 
     templates = load_breadcrumbs(root)
     platform = _detect_platform(data)
     task = get_active_task(root, data)
     if task is None:
         # No active task — still emit a breadcrumb nudging AI toward
-        # trellis-brainstorm + task.py create when user describes real work.
+        # brainstorm + task.py create when user describes real work.
         no_task_key = resolve_breadcrumb_key("no_task", platform, config)
         breadcrumb = build_breadcrumb(
             None, "no_task", templates, breadcrumb_key=no_task_key
         )
     else:
-        task_id, status, source = task
+        task_id, status, source, complexity, execution_mode = task
         status_key = resolve_breadcrumb_key(status, platform, config)
         source_for_breadcrumb = None if platform == "codex" else source
         breadcrumb = build_breadcrumb(
-            task_id, status, templates, source_for_breadcrumb, breadcrumb_key=status_key
+            task_id,
+            status,
+            templates,
+            source_for_breadcrumb,
+            breadcrumb_key=status_key,
+            complexity=complexity,
+            execution_mode=execution_mode,
         )
     if platform == "codex":
         parts: list[str] = []
@@ -469,7 +440,6 @@ def main() -> int:
     }
     print(json.dumps(output))
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

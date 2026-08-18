@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Codex Session Start Hook - Inject Trellis context into Codex sessions.
+Codex Session Start Hook - Inject Moluoxixi context into Codex sessions.
 
 Output format follows Codex hook protocol:
   stdout JSON → { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: "..." } }
@@ -39,7 +39,6 @@ if sys.platform.startswith("win"):
                 setattr(sys, _stream_name, _io.TextIOWrapper(_stream.detach(), encoding="utf-8", errors="replace"))
             except Exception:
                 pass  # Optional Windows stream setup; keep hook startup non-fatal.
-
 
 def _normalize_windows_shell_path(path_str: str) -> str:
     """Normalize Unix-style shell paths to real Windows paths.
@@ -88,32 +87,29 @@ def _normalize_windows_shell_path(path_str: str) -> str:
 
     return path_str
 
-
 warnings.filterwarnings("ignore")
 
 FIRST_REPLY_NOTICE = """<first-reply-notice>
-On the first visible assistant reply in this session, briefly acknowledge that Trellis SessionStart context loaded.
+On the first visible assistant reply in this session, briefly acknowledge that Moluoxixi SessionStart context loaded.
 Choose the acknowledgment language in this order:
 1. Use the language of the user's current request (the user message that triggered this reply).
 2. If that request has no clear natural language, use an explicitly established project communication language.
-3. If neither provides a language, output the language-neutral fallback exactly: `Trellis SessionStart ✓`.
+3. If neither provides a language, output the language-neutral fallback exactly: `Moluoxixi SessionStart ✓`.
 Continue directly with the user's request after the acknowledgment.
 The acknowledgment must not alter the language used for the remainder of the response.
 This notice is one-shot: do not repeat it after the first visible assistant reply in this session.
 </first-reply-notice>"""
 
-
 def should_skip_injection() -> bool:
-    if os.environ.get("TRELLIS_HOOKS") == "0":
+    if os.environ.get("MOLUOXIXI_HOOKS") == "0":
         return True
-    if os.environ.get("TRELLIS_DISABLE_HOOKS") == "1":
+    if os.environ.get("MOLUOXIXI_DISABLE_HOOKS") == "1":
         return True
     return os.environ.get("CODEX_NON_INTERACTIVE") == "1"
 
-
 def configure_project_encoding(project_dir: Path) -> None:
-    """Reuse Trellis' shared Windows stdio encoding helper before JSON output."""
-    scripts_dir = project_dir / ".trellis" / "scripts"
+    """Reuse Moluoxixi' shared Windows stdio encoding helper before JSON output."""
+    scripts_dir = project_dir / ".moluoxixi" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
 
@@ -123,7 +119,6 @@ def configure_project_encoding(project_dir: Path) -> None:
         configure_encoding()
     except Exception:
         pass  # Optional encoding helper; host defaults are still usable.
-
 
 def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
     """Return True iff jsonl has at least one row with a ``file`` field.
@@ -147,16 +142,14 @@ def _has_curated_jsonl_entry(jsonl_path: Path) -> bool:
         return False
     return False
 
-
 def read_file(path: Path, fallback: str = "") -> str:
     try:
         return path.read_text(encoding="utf-8")
     except (FileNotFoundError, PermissionError):
         return fallback
 
-
 def _resolve_context_key(project_dir: Path, hook_input: dict) -> str | None:
-    scripts_dir = project_dir / ".trellis" / "scripts"
+    scripts_dir = project_dir / ".moluoxixi" / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     try:
@@ -165,22 +158,20 @@ def _resolve_context_key(project_dir: Path, hook_input: dict) -> str | None:
         return None
     return resolve_context_key(hook_input, platform="codex")
 
-
-def _resolve_active_task(trellis_dir: Path, hook_input: dict):
-    scripts_dir = trellis_dir / "scripts"
+def _resolve_active_task(moluoxixi_dir: Path, hook_input: dict):
+    scripts_dir = moluoxixi_dir / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     from common.active_task import resolve_active_task  # type: ignore[import-not-found]
 
-    return resolve_active_task(trellis_dir.parent, hook_input, platform="codex")
-
+    return resolve_active_task(moluoxixi_dir.parent, hook_input, platform="codex")
 
 def run_script(script_path: Path, context_key: str | None = None) -> str:
     try:
         env = os.environ.copy()
         env["PYTHONIOENCODING"] = "utf-8"
         if context_key:
-            env["TRELLIS_CONTEXT_ID"] = context_key
+            env["MOLUOXIXI_CONTEXT_ID"] = context_key
         cmd = [sys.executable, "-W", "ignore", str(script_path)]
         result = subprocess.run(
             cmd,
@@ -196,7 +187,6 @@ def run_script(script_path: Path, context_key: str | None = None) -> str:
     except (subprocess.TimeoutExpired, FileNotFoundError, PermissionError):
         return "No context available"
 
-
 def _normalize_task_ref(task_ref: str) -> str:
     normalized = task_ref.strip()
     if not normalized:
@@ -211,36 +201,34 @@ def _normalize_task_ref(task_ref: str) -> str:
         normalized = normalized[2:]
 
     if normalized.startswith("tasks/"):
-        return f".trellis/{normalized}"
+        return f".moluoxixi/{normalized}"
 
     return normalized
 
-
-def _resolve_task_dir(trellis_dir: Path, task_ref: str) -> Path:
+def _resolve_task_dir(moluoxixi_dir: Path, task_ref: str) -> Path:
     normalized = _normalize_task_ref(task_ref)
     path_obj = Path(normalized)
     if path_obj.is_absolute():
         return path_obj
-    if normalized.startswith(".trellis/"):
-        return trellis_dir.parent / path_obj
-    return trellis_dir / "tasks" / path_obj
+    if normalized.startswith(".moluoxixi/"):
+        return moluoxixi_dir.parent / path_obj
+    return moluoxixi_dir / "tasks" / path_obj
 
-
-def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
-    active = _resolve_active_task(trellis_dir, hook_input)
+def _get_task_status(moluoxixi_dir: Path, hook_input: dict) -> str:
+    active = _resolve_active_task(moluoxixi_dir, hook_input)
     if not active.task_path:
         return (
             "Status: NO ACTIVE TASK\n"
             "Next: Classify the current turn and ask for task-creation consent "
-            "before creating any Trellis task."
+            "before creating any Moluoxixi task."
         )
 
     task_ref = active.task_path
-    task_dir = _resolve_task_dir(trellis_dir, task_ref)
+    task_dir = _resolve_task_dir(moluoxixi_dir, task_ref)
     if active.stale or not task_dir.is_dir():
         return (
             f"Status: STALE POINTER\nTask: {task_ref}\n"
-            "Next: Task directory not found. Run: python ./.trellis/scripts/task.py finish"
+            "Next: Task directory not found. Run: python ./.moluoxixi/scripts/task.py finish"
         )
 
     task_json_path = task_dir / "task.json"
@@ -257,7 +245,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if task_status == "completed":
         return (
             f"Status: COMPLETED\nTask: {task_title}\n"
-            f"Next: Archive with `python ./.trellis/scripts/task.py archive {task_dir.name}` "
+            f"Next: Archive with `python ./.moluoxixi/scripts/task.py archive {task_dir.name}` "
             "or start a new task."
         )
 
@@ -274,7 +262,7 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
     if not has_prd:
         return (
             f"Status: PLANNING\nTask: {task_title}\nPresent: {present_line}\n"
-            "Next: Load trellis-brainstorm and write prd.md. Stay in planning."
+            "Next: Load brainstorm and write prd.md. Stay in planning."
         )
 
     if task_status == "planning":
@@ -296,7 +284,6 @@ def _get_task_status(trellis_dir: Path, hook_input: dict) -> str:
         "prd.md, design.md if present, implement.md if present."
     )
 
-
 def _run_git(repo_root: Path, args: list[str]) -> str:
     try:
         result = subprocess.run(
@@ -314,7 +301,6 @@ def _run_git(repo_root: Path, args: list[str]) -> str:
         return ""
     return result.stdout.strip()
 
-
 def _format_git_state(repo_root: Path) -> str:
     branch = _run_git(repo_root, ["branch", "--show-current"]) or "(detached)"
     dirty_lines = [
@@ -324,21 +310,19 @@ def _format_git_state(repo_root: Path) -> str:
     dirty_text = "clean" if not dirty_lines else f"dirty {len(dirty_lines)} paths"
     return f"Git: branch {branch}; {dirty_text}."
 
-
 def _repo_relative(repo_root: Path, path: Path) -> str:
     try:
         return path.relative_to(repo_root).as_posix()
     except ValueError:
         return str(path)
 
-
-def _collect_spec_index_paths(trellis_dir: Path) -> list[str]:
+def _collect_spec_index_paths(moluoxixi_dir: Path) -> list[str]:
     paths: list[str] = []
-    guides_index = trellis_dir / "spec" / "guides" / "index.md"
+    guides_index = moluoxixi_dir / "spec" / "guides" / "index.md"
     if guides_index.is_file():
-        paths.append(".trellis/spec/guides/index.md")
+        paths.append(".moluoxixi/spec/guides/index.md")
 
-    spec_dir = trellis_dir / "spec"
+    spec_dir = moluoxixi_dir / "spec"
     if not spec_dir.is_dir():
         return paths
 
@@ -347,24 +331,23 @@ def _collect_spec_index_paths(trellis_dir: Path) -> list[str]:
             continue
         index_file = sub / "index.md"
         if index_file.is_file():
-            paths.append(f".trellis/spec/{sub.name}/index.md")
+            paths.append(f".moluoxixi/spec/{sub.name}/index.md")
             continue
         for nested in sorted(sub.iterdir()):
             if not nested.is_dir():
                 continue
             nested_index = nested / "index.md"
             if nested_index.is_file():
-                paths.append(f".trellis/spec/{sub.name}/{nested.name}/index.md")
+                paths.append(f".moluoxixi/spec/{sub.name}/{nested.name}/index.md")
 
     return paths
 
-
 def _build_compact_current_state(
-    trellis_dir: Path,
+    moluoxixi_dir: Path,
     hook_input: dict,
     spec_index_paths: list[str],
 ) -> str:
-    repo_root = trellis_dir.parent
+    repo_root = moluoxixi_dir.parent
     lines: list[str] = []
 
     try:
@@ -381,9 +364,9 @@ def _build_compact_current_state(
     lines.append(f"Developer: {developer or '(not initialized)'}")
     lines.append(_format_git_state(repo_root))
 
-    active = _resolve_active_task(trellis_dir, hook_input)
+    active = _resolve_active_task(moluoxixi_dir, hook_input)
     if active.task_path:
-        task_dir = _resolve_task_dir(trellis_dir, active.task_path)
+        task_dir = _resolve_task_dir(moluoxixi_dir, active.task_path)
         status = "unknown"
         task_json = task_dir / "task.json"
         if task_json.is_file():
@@ -401,7 +384,7 @@ def _build_compact_current_state(
         try:
             task_count = sum(1 for _ in iter_active_tasks(get_tasks_dir(repo_root)))
             lines.append(
-                f"Active tasks: {task_count} total. Use `python ./.trellis/scripts/task.py list --mine` only if needed."
+                f"Active tasks: {task_count} total. Use `python ./.moluoxixi/scripts/task.py list --mine` only if needed."
             )
         except Exception:
             pass  # Optional task summary; keep compact state available.
@@ -417,7 +400,6 @@ def _build_compact_current_state(
         lines.append(f"Spec indexes: {len(spec_index_paths)} available.")
 
     return "\n".join(lines)
-
 
 def _extract_range(content: str, start_header: str, end_header: str) -> str:
     """Extract lines starting at `## start_header` up to (but excluding) `## end_header`."""
@@ -438,19 +420,16 @@ def _extract_range(content: str, start_header: str, end_header: str) -> str:
         return ""
     return "\n".join(lines[start:end]).rstrip()
 
-
 _BREADCRUMB_TAG_RE = re.compile(
     r"\[workflow-state:([A-Za-z0-9_-]+)\]\s*\n.*?\n\s*\[/workflow-state:\1\]",
     re.DOTALL,
 )
-
 
 def _strip_breadcrumb_tag_blocks(content: str) -> str:
     stripped = _BREADCRUMB_TAG_RE.sub("", content)
     stripped = re.sub(r"<!--.*?-->", "", stripped, flags=re.DOTALL)
     stripped = re.sub(r"^\[(?!/?workflow-state:)/?[^\]\n]+\]\s*\n?", "", stripped, flags=re.MULTILINE)
     return re.sub(r"\n{3,}", "\n\n", stripped).strip()
-
 
 def _build_workflow_toc(workflow_path: Path) -> str:
     """Inject only the compact Phase Index summary for SessionStart."""
@@ -460,7 +439,7 @@ def _build_workflow_toc(workflow_path: Path) -> str:
 
     out_lines = [
         "# Development Workflow - Session Summary",
-        "Full guide: .trellis/workflow.md. Step detail: `python ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.",
+        "Full guide: .moluoxixi/workflow.md. Step detail: `python ./.moluoxixi/scripts/get_context.py --mode phase --step <X.Y>`.",
         "",
     ]
 
@@ -469,7 +448,6 @@ def _build_workflow_toc(workflow_path: Path) -> str:
         out_lines.append(_strip_breadcrumb_tag_blocks(phases).rstrip())
 
     return "\n".join(out_lines).rstrip()
-
 
 def main() -> None:
     if should_skip_injection():
@@ -487,13 +465,13 @@ def main() -> None:
 
     configure_project_encoding(project_dir)
 
-    trellis_dir = project_dir / ".trellis"
-    spec_index_paths = _collect_spec_index_paths(trellis_dir)
+    moluoxixi_dir = project_dir / ".moluoxixi"
+    spec_index_paths = _collect_spec_index_paths(moluoxixi_dir)
 
     output = StringIO()
 
     output.write("""<session-context>
-Trellis compact SessionStart context. Use it to orient the session; load details on demand.
+Moluoxixi compact SessionStart context. Use it to orient the session; load details on demand.
 </session-context>
 
 """)
@@ -501,12 +479,12 @@ Trellis compact SessionStart context. Use it to orient the session; load details
     output.write("\n\n")
 
     output.write("<current-state>\n")
-    output.write(_build_compact_current_state(trellis_dir, hook_input, spec_index_paths))
+    output.write(_build_compact_current_state(moluoxixi_dir, hook_input, spec_index_paths))
     output.write("\n</current-state>\n\n")
 
-    output.write("<trellis-workflow>\n")
-    output.write(_build_workflow_toc(trellis_dir / "workflow.md"))
-    output.write("\n</trellis-workflow>\n\n")
+    output.write("<moluoxixi-workflow>\n")
+    output.write(_build_workflow_toc(moluoxixi_dir / "workflow.md"))
+    output.write("\n</moluoxixi-workflow>\n\n")
 
     output.write("<guidelines>\n")
     output.write(
@@ -523,11 +501,11 @@ Trellis compact SessionStart context. Use it to orient the session; load details
 
     output.write(
         "Discover more via: "
-        "`python ./.trellis/scripts/get_context.py --mode packages`\n"
+        "`python ./.moluoxixi/scripts/get_context.py --mode packages`\n"
     )
     output.write("</guidelines>\n\n")
 
-    task_status = _get_task_status(trellis_dir, hook_input)
+    task_status = _get_task_status(moluoxixi_dir, hook_input)
     output.write(f"<task-status>\n{task_status}\n</task-status>\n\n")
 
     output.write("""<ready>
@@ -537,7 +515,7 @@ Context loaded. Follow <task-status>. Load workflow/spec/task details only when 
     context = output.getvalue()
     result = {
         "suppressOutput": True,
-        "systemMessage": f"Trellis context injected ({len(context)} chars)",
+        "systemMessage": f"Moluoxixi context injected ({len(context)} chars)",
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
             "additionalContext": context,
@@ -545,7 +523,6 @@ Context loaded. Follow <task-status>. Load workflow/spec/task details only when 
     }
 
     print(json.dumps(result, ensure_ascii=False), flush=True)
-
 
 if __name__ == "__main__":
     main()
