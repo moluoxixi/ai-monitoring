@@ -210,6 +210,16 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 - **Claude Desktop**：本地 watcher 只监听 session transcript；启动时跳过已有历史，只监测后续新增消息。路径可通过 `AIMONITOR_CLAUDE_DESKTOP_TRANSCRIPTS_PATH` 覆盖。
 - **Qoder sessions/logs**：默认监听 `~/.qoder/projects` 与 Qoder 应用数据目录下的 `logs`，路径可分别通过 `AIMONITOR_QODER_SESSIONS_PATH`、`AIMONITOR_QODER_LOGS_PATH` 覆盖；启动时读取已有文件建立上下文但不创建历史通知。
 
+## v1.0.9 发布报告
+
+发布日期：2026-08-18。该版本保留 `v1.0.8` 的 QQ 引用续接功能，并修复 Windows GitHub Actions 在全量测试阶段无法进入安装包构建的问题。
+
+### CI 修复
+
+- Vitest 4 默认并行 fork 多个 test file worker；Windows runner 上的文件监听测试会触发 Node/libuv `fs-event` 断言，导致 `Test workspaces` 失败，而本地 Windows 和 macOS runner 的同一测试集均可通过。
+- 根 workspace 测试改为对 server/web 使用 `--no-file-parallelism`，在单个 fork worker 中顺序执行所有 test files；没有删除、跳过或改写任何测试，Node 工具链与 OpenClaw 插件测试仍按原顺序执行。
+- `v1.0.8` tag 保留失败流水线记录，不进行重写；实际修复后的安装包由 `v1.0.9` tag 构建和发布。
+
 ## v1.0.8 发布报告
 
 发布日期：2026-08-18。该版本发布 QQ 引用回复到原 Codex CLI 会话的完整链路，并统一根包、server、web、desktop、Tauri 与 lockfile 的版本号为 `1.0.8`。
