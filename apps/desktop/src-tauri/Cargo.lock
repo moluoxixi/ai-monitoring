@@ -21,6 +21,7 @@ dependencies = [
 name = "ai-monitor-desktop"
 version = "1.0.7"
 dependencies = [
+ "getrandom 0.3.4",
  "serde_json",
  "tauri",
  "tauri-build",

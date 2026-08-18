@@ -73,6 +73,20 @@ export class AppConfigService {
   );
   readonly codexBackfillMinutes = numberValue(process.env.AIMONITOR_CODEX_BACKFILL_MINUTES, 120);
   readonly ingestToken = process.env.AIMONITOR_INGEST_TOKEN || '';
+  readonly replyToken = process.env.AIMONITOR_REPLY_TOKEN?.trim() || this.ingestToken;
+  readonly replyRouteTtlMs = Math.max(
+    60_000,
+    numberValue(process.env.AIMONITOR_REPLY_ROUTE_TTL_DAYS, 30) * 24 * 60 * 60_000,
+  );
+  readonly codexCommand = process.env.AIMONITOR_CODEX_COMMAND?.trim() || 'codex';
+  readonly codexReplyRequestTimeoutMs = Math.max(
+    1_000,
+    numberValue(process.env.AIMONITOR_CODEX_REPLY_REQUEST_TIMEOUT_MS, 30_000),
+  );
+  readonly codexReplyTurnTimeoutMs = Math.max(
+    60_000,
+    numberValue(process.env.AIMONITOR_CODEX_REPLY_TURN_TIMEOUT_MS, 12 * 60 * 60_000),
+  );
   readonly appriseUrls = (process.env.AIMONITOR_APPRISE_URLS || '')
     .split(',')
     .map((value) => value.trim())

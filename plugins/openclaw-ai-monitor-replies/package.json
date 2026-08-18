@@ -1,0 +1,20 @@
+{
+  "name": "@ai-monitor/openclaw-replies",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "index.cjs",
+  "files": [
+    "index.cjs",
+    "openclaw.plugin.json"
+  ],
+  "openclaw": {
+    "id": "ai-monitor-replies",
+    "extensions": [
+      "./index.cjs"
+    ],
+    "runtimeExtensions": [
+      "./index.cjs"
+    ]
+  }
+}

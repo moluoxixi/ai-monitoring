@@ -10,6 +10,7 @@ import { EventsModule } from './events/events.module';
 import { ExtensionsController } from './extensions/extensions.controller';
 import { ExtensionsModule } from './extensions/extensions.module';
 import { SettingsModule } from './settings/settings.module';
+import { RepliesModule } from './replies/replies.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SettingsModule } from './settings/settings.module';
     ChannelsModule,
     EventsModule,
     DeliveriesModule,
+    RepliesModule,
     DashboardModule,
   ],
   controllers: [ExtensionsController],

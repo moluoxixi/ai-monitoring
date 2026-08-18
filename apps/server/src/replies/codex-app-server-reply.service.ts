@@ -1,0 +1,208 @@
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from 'node:child_process';
+import { createInterface, type Interface as ReadLineInterface } from 'node:readline';
+import { AppConfigService } from '../config/app-config.service';
+
+export const CODEX_PROCESS_FACTORY = Symbol('CODEX_PROCESS_FACTORY');
+
+export type CodexProcessFactory = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptionsWithoutStdio,
+) => ChildProcessWithoutNullStreams;
+
+interface PendingRequest {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+interface CompletionWaiter {
+  resolve: (value: Record<string, unknown>) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+const objectValue = (value: unknown): Record<string, unknown> => value !== null
+  && typeof value === 'object'
+  && !Array.isArray(value)
+  ? value as Record<string, unknown>
+  : {};
+
+export class CodexAppServerConnection {
+  private readonly reader: ReadLineInterface;
+  private readonly pending = new Map<number, PendingRequest>();
+  private readonly completions = new Map<string, Record<string, unknown>>();
+  private readonly completionWaiters = new Map<string, CompletionWaiter>();
+  private nextId = 1;
+  private closed = false;
+
+  constructor(
+    private readonly child: ChildProcessWithoutNullStreams,
+    private readonly requestTimeoutMs: number,
+  ) {
+    this.reader = createInterface({ input: child.stdout });
+    this.reader.on('line', (line) => this.consume(line));
+    child.stderr.on('data', () => undefined);
+    child.stdin.on('error', (error) => this.fail(new Error(`Codex App Server stdin failed: ${error.message}`)));
+    child.once('error', (error) => this.fail(new Error(`Codex App Server failed to start: ${error.message}`)));
+    child.once('exit', (code, signal) => {
+      if (!this.closed) this.fail(new Error(`Codex App Server exited before completion (${signal ?? code ?? 'unknown'})`));
+    });
+  }
+
+  async request(method: string, params: Record<string, unknown>): Promise<unknown> {
+    if (this.closed) throw new Error('Codex App Server connection is closed');
+    const id = this.nextId++;
+    const result = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`Codex App Server request timed out: ${method}`));
+      }, this.requestTimeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+    });
+    this.write({ id, method, params });
+    return result;
+  }
+
+  notify(method: string, params: Record<string, unknown>): void {
+    if (this.closed) throw new Error('Codex App Server connection is closed');
+    this.write({ method, params });
+  }
+
+  waitForTurn(turnId: string, timeoutMs: number): Promise<Record<string, unknown>> {
+    const completed = this.completions.get(turnId);
+    if (completed) return Promise.resolve(completed);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.completionWaiters.delete(turnId);
+        reject(new Error(`Codex turn timed out: ${turnId}`));
+      }, timeoutMs);
+      this.completionWaiters.set(turnId, { resolve, reject, timer });
+    });
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.reader.close();
+    this.rejectAll(new Error('Codex App Server connection closed'));
+    if (!this.child.stdin.destroyed) this.child.stdin.end();
+    if (this.child.exitCode === null && this.child.signalCode === null) this.child.kill();
+  }
+
+  private write(payload: Record<string, unknown>): void {
+    this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+  }
+
+  private consume(line: string): void {
+    let payload: Record<string, unknown>;
+    try {
+      payload = objectValue(JSON.parse(line));
+    } catch {
+      return;
+    }
+    if (typeof payload.id === 'number') {
+      const pending = this.pending.get(payload.id);
+      if (!pending) return;
+      this.pending.delete(payload.id);
+      clearTimeout(pending.timer);
+      if (payload.error) {
+        const error = objectValue(payload.error);
+        pending.reject(new Error(typeof error.message === 'string' ? error.message : 'Codex App Server request failed'));
+      } else {
+        pending.resolve(payload.result);
+      }
+      return;
+    }
+    if (payload.method !== 'turn/completed') return;
+    const turn = objectValue(objectValue(payload.params).turn);
+    const turnId = typeof turn.id === 'string' ? turn.id : '';
+    if (!turnId) return;
+    this.completions.set(turnId, turn);
+    const waiter = this.completionWaiters.get(turnId);
+    if (!waiter) return;
+    this.completionWaiters.delete(turnId);
+    clearTimeout(waiter.timer);
+    waiter.resolve(turn);
+  }
+
+  private fail(error: Error): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.reader.close();
+    this.rejectAll(error);
+  }
+
+  private rejectAll(error: Error): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pending.clear();
+    for (const waiter of this.completionWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    this.completionWaiters.clear();
+  }
+}
+
+@Injectable()
+export class CodexAppServerReplyService implements OnModuleDestroy {
+  private readonly logger = new Logger(CodexAppServerReplyService.name);
+  private readonly active = new Set<CodexAppServerConnection>();
+
+  constructor(
+    private readonly config: AppConfigService,
+    @Inject(CODEX_PROCESS_FACTORY) private readonly processFactory: CodexProcessFactory,
+  ) {}
+
+  async dispatch(threadId: string, text: string): Promise<{ threadId: string; turnId: string }> {
+    const child = this.processFactory(this.config.codexCommand, ['app-server'], {
+      cwd: this.config.projectRoot,
+      env: process.env,
+      windowsHide: true,
+    });
+    const connection = new CodexAppServerConnection(child, this.config.codexReplyRequestTimeoutMs);
+    this.active.add(connection);
+    try {
+      await connection.request('initialize', {
+        clientInfo: { name: 'ai-monitor', title: 'AI Monitor', version: '1.0.7' },
+        capabilities: { experimentalApi: false, optOutNotificationMethods: ['item/agentMessage/delta'] },
+      });
+      connection.notify('initialized', {});
+      await connection.request('thread/resume', { threadId });
+      const response = objectValue(await connection.request('turn/start', {
+        threadId,
+        input: [{ type: 'text', text }],
+        approvalPolicy: 'never',
+      }));
+      const turnId = typeof objectValue(response.turn).id === 'string' ? objectValue(response.turn).id as string : '';
+      if (!turnId) throw new Error('Codex App Server did not return a turn id');
+      void connection.waitForTurn(turnId, this.config.codexReplyTurnTimeoutMs)
+        .catch((error: unknown) => {
+          this.logger.warn(error instanceof Error ? error.message : String(error));
+        })
+        .finally(() => {
+          this.active.delete(connection);
+          connection.close();
+        });
+      return { threadId, turnId };
+    } catch (error) {
+      this.active.delete(connection);
+      connection.close();
+      throw error;
+    }
+  }
+
+  onModuleDestroy(): void {
+    for (const connection of this.active) connection.close();
+    this.active.clear();
+  }
+}
+
+export const defaultCodexProcessFactory: CodexProcessFactory = (command, args, options) => spawn(command, args, {
+  ...options,
+  stdio: ['pipe', 'pipe', 'pipe'],
+});

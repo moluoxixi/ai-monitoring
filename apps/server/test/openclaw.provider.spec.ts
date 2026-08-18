@@ -121,6 +121,17 @@ describe('OpenClawProvider binding', () => {
     expect(provider.availableChannels()).not.toContain(OPENCLAW_QQ);
   });
 
+  it('matches inbound QQ identity against the persisted outbound binding', () => {
+    writeFileSync(config.openClawBindingsPath, JSON.stringify({
+      version: 2,
+      bindings: { [OPENCLAW_QQ]: { provider: 'qqbot', target: 'qqbot:c2c:user-openid', account_id: 'default' } },
+    }));
+
+    expect(provider.matchesQqBinding('user-openid', 'default')).toBe(true);
+    expect(provider.matchesQqBinding('another-user', 'default')).toBe(false);
+    expect(provider.matchesQqBinding('user-openid', 'another-account')).toBe(false);
+  });
+
   it('does not bind incomplete QR credentials', async () => {
     await provider.startBinding(OPENCLAW_QQ);
     connectorCallbacks?.onSuccess([{ appId: 'app-id', appSecret: 'app-secret' }]);

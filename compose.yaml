@@ -20,6 +20,10 @@ services:
     environment:
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Run scripts/docker-start.ps1 to generate OPENCLAW_GATEWAY_TOKEN}
       OPENCLAW_STATE_DIR: /home/node/.openclaw
+      AIMONITOR_REPLY_URL: http://monitor:8787/api/replies/inbound
+    env_file:
+      - path: .env
+        required: false
     ports:
       - "127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
     volumes:

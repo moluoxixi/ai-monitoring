@@ -65,6 +65,14 @@ export class OpenClawProvider implements ChannelProvider {
     return this.ids.filter((id) => Boolean(bindings[id]));
   }
 
+  matchesQqBinding(senderId: string, accountId: string): boolean {
+    const binding = this.loadBindings()[OPENCLAW_QQ];
+    return Boolean(binding)
+      && binding!.provider === 'qqbot'
+      && binding!.target === `qqbot:c2c:${senderId}`
+      && binding!.account_id === accountId;
+  }
+
   async status(): Promise<ChannelStatus[]> {
     const bindings = this.loadBindings();
     let payload: Record<string, unknown> = {};

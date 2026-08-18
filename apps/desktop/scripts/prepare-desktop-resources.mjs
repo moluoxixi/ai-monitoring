@@ -9,13 +9,14 @@ const resourceRoot = join(desktopRoot, 'src-tauri', 'resources')
 const serverDist = join(projectRoot, 'apps', 'server', 'dist')
 const webDist = join(projectRoot, 'apps', 'web', 'dist')
 const scriptsRoot = join(projectRoot, 'scripts')
+const pluginsRoot = join(projectRoot, 'plugins')
 const openClawVersion = process.env.AIMONITOR_OPENCLAW_VERSION || '2026.7.1-2'
 const qqPluginVersion = process.env.AI_MONITOR_QQBOT_PLUGIN_VERSION || '2.0.1'
 const weixinPluginVersion = process.env.AI_MONITOR_WEIXIN_PLUGIN_VERSION || '2.4.6'
 const skipOpenClaw = process.env.AIMONITOR_DESKTOP_SKIP_OPENCLAW_INSTALL === '1'
 const reuseResources = process.env.AIMONITOR_DESKTOP_REUSE_RESOURCES === '1'
 
-for (const required of [serverDist, webDist, scriptsRoot]) {
+for (const required of [serverDist, webDist, scriptsRoot, pluginsRoot]) {
   if (!existsSync(required)) throw new Error(`缺少桌面包资源，请先构建: ${required}`)
 }
 
@@ -26,6 +27,7 @@ if (reuseResources) {
     join(resourceRoot, 'apps', 'web', 'dist', 'index.html'),
     join(resourceRoot, 'node_modules', 'better-sqlite3'),
     join(resourceRoot, 'node_modules', 'openclaw', 'openclaw.mjs'),
+    join(resourceRoot, 'plugins', 'openclaw-ai-monitor-replies', 'package.json'),
   ]
   if (requiredResources.every((resource) => existsSync(resource))) {
     console.log(`Reusing prepared desktop resources at ${resourceRoot}`)
@@ -39,6 +41,7 @@ mkdirSync(resourceRoot, { recursive: true })
 cpSync(serverDist, join(resourceRoot, 'apps', 'server', 'dist'), { recursive: true })
 cpSync(webDist, join(resourceRoot, 'apps', 'web', 'dist'), { recursive: true })
 cpSync(scriptsRoot, join(resourceRoot, 'scripts'), { recursive: true })
+cpSync(pluginsRoot, join(resourceRoot, 'plugins'), { recursive: true })
 
 const runtimeDir = join(resourceRoot, 'runtime')
 mkdirSync(runtimeDir, { recursive: true })

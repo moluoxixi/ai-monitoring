@@ -9,6 +9,7 @@ const templateRoot = join(resourceRoot, 'openclaw-state-template')
 const openClawVersion = process.env.AIMONITOR_OPENCLAW_VERSION || '2026.7.1-2'
 const qqPluginVersion = process.env.AI_MONITOR_QQBOT_PLUGIN_VERSION || '2.0.1'
 const weixinPluginVersion = process.env.AI_MONITOR_WEIXIN_PLUGIN_VERSION || '2.4.6'
+const replyPluginVersion = '1.0.0'
 const markerPath = join(stateRoot, '.ai-monitor-openclaw')
 
 const copyTemplate = () => {
@@ -33,6 +34,7 @@ const expected = {
   openclaw: openClawVersion,
   qqbot: qqPluginVersion,
   weixin: weixinPluginVersion,
+  replies: replyPluginVersion,
 }
 
 copyTemplate()

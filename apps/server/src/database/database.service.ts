@@ -1,11 +1,18 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import { ExtensionsService } from '../extensions/extensions.service';
-import type { DeliveryRow, EventRow, NormalizedEvent } from './database.types';
+import type {
+  DeliveryRow,
+  EventRow,
+  InboundReplyRow,
+  InboundReplyState,
+  NormalizedEvent,
+  ReplyRoute,
+} from './database.types';
 import { MAX_ANSWER_TEXT_LENGTH, truncateTail } from '../utils/event-text';
 
 export const utcNow = (): string => new Date().toISOString().replace(/\.\d{3}Z$/, '+00:00');
@@ -271,19 +278,14 @@ export class DatabaseService implements OnModuleDestroy {
           SELECT id FROM deliveries
           WHERE ((state IN ('pending', 'retrying') AND next_attempt_at <= ?)
              OR (state = 'claimed' AND lease_expires_at <= ?))
-          AND event_id = (
-            SELECT event_id FROM deliveries
-            WHERE (state IN ('pending', 'retrying') AND next_attempt_at <= ?)
-               OR (state = 'claimed' AND lease_expires_at <= ?)
-            ORDER BY id LIMIT 1
-          )
           ORDER BY id LIMIT ?
         )
         AND ((state IN ('pending', 'retrying') AND next_attempt_at <= ?)
           OR (state = 'claimed' AND lease_expires_at <= ?))
-      `).run(token, leaseExpiresAt, now, now, now, now, safeLimit, now, now);
+      `).run(token, leaseExpiresAt, now, now, safeLimit, now, now);
       const rows = this.db.prepare(`
-        SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code, e.metadata_json, e.answer_text
+        SELECT d.*, e.source, e.client, e.kind, e.status, e.title, e.message, e.error_code,
+               e.metadata_json, e.answer_text, e.created_at AS event_created_at
         FROM deliveries d JOIN events e ON e.id = d.event_id
         WHERE d.state = 'claimed' AND d.lease_token = ?
         ORDER BY d.id
@@ -333,6 +335,88 @@ export class DatabaseService implements OnModuleDestroy {
     return result.changes > 0;
   }
 
+  ensureDeliveryReplyRoute(deliveryId: number, ttlMs: number): string | null {
+    return this.db.transaction(() => {
+      const row = this.db.prepare(`
+        SELECT d.channel, d.reply_token, e.client, e.status, e.metadata_json
+        FROM deliveries d JOIN events e ON e.id = d.event_id
+        WHERE d.id = ?
+      `).get(deliveryId) as {
+        channel: string;
+        reply_token: string | null;
+        client: string;
+        status: string;
+        metadata_json: string;
+      } | undefined;
+      if (!row || row.channel !== 'openclaw-qq' || row.client !== 'codex-cli' || row.status !== 'completed') return null;
+      const threadId = parseMetadata(row.metadata_json).thread_id;
+      if (typeof threadId !== 'string' || !threadId.trim()) return null;
+      if (row.reply_token) return row.reply_token;
+
+      const token = randomBytes(32).toString('base64url');
+      const expiresAt = new Date(Date.now() + Math.max(60_000, ttlMs))
+        .toISOString().replace(/\.\d{3}Z$/, '+00:00');
+      const result = this.db.prepare(`
+        UPDATE deliveries SET reply_token = ?, reply_expires_at = ?
+        WHERE id = ? AND reply_token IS NULL
+      `).run(token, expiresAt, deliveryId);
+      if (result.changes > 0) return token;
+      const existing = this.db.prepare('SELECT reply_token FROM deliveries WHERE id = ?').get(deliveryId) as
+        { reply_token: string | null } | undefined;
+      return existing?.reply_token || null;
+    })();
+  }
+
+  resolveReplyRoute(token: string): ReplyRoute | null {
+    const row = this.db.prepare(`
+      SELECT d.id AS delivery_id, d.event_id, d.channel, d.state AS delivery_state,
+             d.reply_token, d.reply_expires_at, e.client, e.metadata_json
+      FROM deliveries d JOIN events e ON e.id = d.event_id
+      WHERE d.reply_token = ?
+    `).get(token) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const { metadata_json, ...rest } = row;
+    return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as ReplyRoute;
+  }
+
+  claimInboundReply(input: {
+    channel: string;
+    externalMessageId: string;
+    deliveryId: number;
+    senderId: string;
+    accountId: string;
+    text: string;
+  }): { inserted: boolean; reply: InboundReplyRow } {
+    return this.db.transaction(() => {
+      const result = this.db.prepare(`
+        INSERT OR IGNORE INTO inbound_replies
+          (channel, external_message_id, delivery_id, sender_id, account_id, text, state, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 'processing', ?)
+      `).run(
+        input.channel,
+        input.externalMessageId,
+        input.deliveryId,
+        input.senderId,
+        input.accountId,
+        input.text,
+        utcNow(),
+      );
+      const row = this.db.prepare(`
+        SELECT * FROM inbound_replies WHERE channel = ? AND external_message_id = ?
+      `).get(input.channel, input.externalMessageId) as InboundReplyRow | undefined;
+      if (!row) throw new Error('inbound reply idempotency record was not persisted');
+      return { inserted: result.changes > 0, reply: row };
+    })();
+  }
+
+  markInboundReply(id: number, state: Exclude<InboundReplyState, 'processing'>, lastError?: string): void {
+    this.db.prepare(`
+      UPDATE inbound_replies
+      SET state = ?, last_error = ?, accepted_at = CASE WHEN ? = 'accepted' THEN ? ELSE NULL END
+      WHERE id = ? AND state = 'processing'
+    `).run(state, lastError?.slice(0, 2_000) || null, state, utcNow(), id);
+  }
+
   private initialize(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS events (
@@ -362,9 +446,25 @@ export class DatabaseService implements OnModuleDestroy {
         sent_at TEXT,
         lease_token TEXT,
         lease_expires_at TEXT,
+        reply_token TEXT,
+        reply_expires_at TEXT,
         UNIQUE(event_id, channel)
       );
       CREATE INDEX IF NOT EXISTS idx_deliveries_due ON deliveries(state, next_attempt_at);
+      CREATE TABLE IF NOT EXISTS inbound_replies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel TEXT NOT NULL,
+        external_message_id TEXT NOT NULL,
+        delivery_id INTEGER NOT NULL REFERENCES deliveries(id) ON DELETE CASCADE,
+        sender_id TEXT NOT NULL,
+        account_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        state TEXT NOT NULL,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        accepted_at TEXT,
+        UNIQUE(channel, external_message_id)
+      );
     `);
     const eventColumns = new Set(
       (this.db.pragma('table_info(events)') as Array<{ name: string }>).map((column) => column.name),
@@ -375,7 +475,10 @@ export class DatabaseService implements OnModuleDestroy {
     );
     if (!deliveryColumns.has('lease_token')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_token TEXT');
     if (!deliveryColumns.has('lease_expires_at')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_expires_at TEXT');
+    if (!deliveryColumns.has('reply_token')) this.db.exec('ALTER TABLE deliveries ADD COLUMN reply_token TEXT');
+    if (!deliveryColumns.has('reply_expires_at')) this.db.exec('ALTER TABLE deliveries ADD COLUMN reply_expires_at TEXT');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_deliveries_lease ON deliveries(state, lease_expires_at)');
+    this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_reply_token ON deliveries(reply_token) WHERE reply_token IS NOT NULL');
     this.migrateLegacyClients();
   }
 
@@ -397,11 +500,15 @@ export class DatabaseService implements OnModuleDestroy {
   }
 
   private deliveryRow(row: Record<string, unknown>, includeAnswerText = false): DeliveryRow {
-    const { metadata_json, answer_text, ...rest } = row;
+    const { metadata_json, answer_text, reply_token, reply_expires_at, ...rest } = row;
     return {
       ...rest,
       client: typeof rest.client === 'string' ? this.extensions.resolve(rest.client) : rest.client,
       ...(includeAnswerText && typeof answer_text === 'string' && answer_text ? { answer_text } : {}),
+      ...(includeAnswerText ? {
+        reply_token: typeof reply_token === 'string' ? reply_token : null,
+        reply_expires_at: typeof reply_expires_at === 'string' ? reply_expires_at : null,
+      } : {}),
       metadata: parseMetadata(metadata_json),
     } as unknown as DeliveryRow;
   }

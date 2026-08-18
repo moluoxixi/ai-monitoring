@@ -61,6 +61,88 @@ describe('Codex session watcher parser', () => {
     expect(prompt.suppressProvisional).toBe(true);
   });
 
+  it('records task start, completion, and duration from Codex timestamps', () => {
+    const started = parseCodexSessionLine(
+      terminalLine({ type: 'task_started', turn_id: 'turn-timing' }, '2026-08-17T12:00:00.000Z'),
+      'session-timing',
+    );
+    const completed = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'turn-timing' }, '2026-08-17T12:04:12.500Z'),
+      started.sessionId,
+      started.taskSummary,
+      started.isSubagent,
+      started.answerSource,
+      started.client,
+      started.startedAt,
+      started.startedTurnId,
+    );
+
+    expect(completed.event?.metadata).toMatchObject({
+      timing: {
+        started_at: '2026-08-17T12:00:00.000Z',
+        completed_at: '2026-08-17T12:04:12.500Z',
+        duration_ms: 252_500,
+      },
+    });
+  });
+
+  it('does not reuse an earlier turn start time after a new user message', () => {
+    const earlierStarted = parseCodexSessionLine(
+      terminalLine({ type: 'task_started', turn_id: 'turn-earlier' }, '2026-08-17T12:00:00.000Z'),
+      'session-timing',
+    );
+    const nextPrompt = parseCodexSessionLine(
+      terminalLine({ type: 'user_message', message: 'new turn' }, '2026-08-17T12:05:00.000Z'),
+      earlierStarted.sessionId,
+      earlierStarted.taskSummary,
+      earlierStarted.isSubagent,
+      earlierStarted.answerSource,
+      earlierStarted.client,
+      earlierStarted.startedAt,
+      earlierStarted.startedTurnId,
+    );
+    const nextCompleted = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'turn-next' }, '2026-08-17T12:06:00.000Z'),
+      nextPrompt.sessionId,
+      nextPrompt.taskSummary,
+      nextPrompt.isSubagent,
+      nextPrompt.answerSource,
+      nextPrompt.client,
+      nextPrompt.startedAt,
+      nextPrompt.startedTurnId,
+    );
+
+    expect(nextPrompt.startedAt).toBe('');
+    expect(nextCompleted.event?.metadata).toMatchObject({
+      timing: { completed_at: '2026-08-17T12:06:00.000Z' },
+    });
+    expect(nextCompleted.event?.metadata?.timing).not.toHaveProperty('started_at');
+    expect(nextCompleted.event?.metadata?.timing).not.toHaveProperty('duration_ms');
+  });
+
+  it('does not apply another turn start time to a mismatched completion', () => {
+    const started = parseCodexSessionLine(
+      terminalLine({ type: 'task_started', turn_id: 'turn-b' }, '2026-08-17T12:05:00.000Z'),
+      'session-timing',
+    );
+    const completed = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'turn-a' }, '2026-08-17T12:06:00.000Z'),
+      started.sessionId,
+      started.taskSummary,
+      started.isSubagent,
+      started.answerSource,
+      started.client,
+      started.startedAt,
+      started.startedTurnId,
+    );
+
+    expect(completed.event?.metadata).toMatchObject({
+      timing: { completed_at: '2026-08-17T12:06:00.000Z' },
+    });
+    expect(completed.event?.metadata?.timing).not.toHaveProperty('started_at');
+    expect(completed.event?.metadata?.timing).not.toHaveProperty('duration_ms');
+  });
+
   it('uses the last agent message for the current terminal event and clears it for the next turn', () => {
     const answer = parseCodexSessionLine(
       terminalLine({ type: 'agent_message', message: 'first final answer' }),
@@ -223,10 +305,13 @@ describe('Codex session file synchronization', () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);
     const path = join(directory, 'large-summary.jsonl');
+    const completedAt = new Date();
+    const startedAt = new Date(completedAt.getTime() - 90_000);
     writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'large-summary-session' } })}\n`);
     appendFileSync(path, `${terminalLine({ type: 'user_message', message: '优化主题并发送消息摘要' })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_started', turn_id: 'large-summary-turn' }, startedAt.toISOString())}\n`);
     appendFileSync(path, `${'x'.repeat(1024)}\n`.repeat(1100));
-    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'large-summary-turn' })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'large-summary-turn' }, completedAt.toISOString())}\n`);
     const { service, insertEvent } = serviceFor(directory);
 
     await service.syncFile(path);
@@ -234,7 +319,42 @@ describe('Codex session file synchronization', () => {
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       source_event_id: 'large-summary-session:large-summary-turn:completed',
       message: '提问：优化主题并发送消息摘要',
-      metadata: expect.objectContaining({ task_summary: '优化主题并发送消息摘要' }),
+      metadata: expect.objectContaining({
+        task_summary: '优化主题并发送消息摘要',
+        timing: {
+          started_at: startedAt.toISOString(),
+          completed_at: completedAt.toISOString(),
+          duration_ms: 90_000,
+        },
+      }),
+    }), []);
+  });
+
+  it('preserves a turn start across an earlier mismatched terminal event', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'out-of-order-timing.jsonl');
+    const turnBCompletedAt = new Date();
+    const mismatchedCompletedAt = new Date(turnBCompletedAt.getTime() - 60_000);
+    const turnBStartedAt = new Date(turnBCompletedAt.getTime() - 120_000);
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'out-of-order-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_started', turn_id: 'turn-b' }, turnBStartedAt.toISOString())}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'turn-a' }, mismatchedCompletedAt.toISOString())}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'turn-b' }, turnBCompletedAt.toISOString())}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+
+    await service.syncFile(path);
+
+    expect(insertEvent).toHaveBeenCalledTimes(2);
+    expect(insertEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      source_event_id: 'out-of-order-session:turn-b:completed',
+      metadata: expect.objectContaining({
+        timing: {
+          started_at: turnBStartedAt.toISOString(),
+          completed_at: turnBCompletedAt.toISOString(),
+          duration_ms: 120_000,
+        },
+      }),
     }), []);
   });
 
@@ -422,5 +542,63 @@ describe('Codex session file synchronization', () => {
       source_event_id: 'startup-session:startup-live-turn:completed',
     }), ['openclaw-qq', 'openclaw-weixin']), { timeout: 3000 });
     await service.onModuleDestroy();
+  });
+
+  it('discovers appended terminal events when the filesystem change event is missed', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'missed-change.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'short-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'user_message', message: '你好' })}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+    const internals = service as unknown as { discoverFiles(): void; queue: Promise<void> };
+
+    await service.syncFile(path);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'short-turn' })}\n`);
+    internals.discoverFiles();
+    await internals.queue;
+    internals.discoverFiles();
+    await internals.queue;
+
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'short-session:short-turn:completed',
+      message: '提问：你好',
+    }), []);
+  });
+
+  it('retries a discovered session file after a transient read failure', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'retry-discovery.jsonl');
+    writeFileSync(path, `${JSON.stringify({ type: 'session_meta', payload: { id: 'retry-discovery-session' } })}\n`);
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'retry-discovery-turn' })}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+    const internals = service as unknown as {
+      discoverFiles(): void;
+      queue: Promise<void>;
+      readBytes(path: string, start: number, end: number): Promise<Buffer>;
+    };
+    let rejectFirstRead: (error: Error) => void = () => undefined;
+    const firstRead = new Promise<Buffer>((_resolve, reject) => {
+      rejectFirstRead = reject;
+    });
+    const readBytes = vi.spyOn(internals, 'readBytes').mockImplementationOnce(() => firstRead);
+
+    internals.discoverFiles();
+    await vi.waitFor(() => expect(readBytes).toHaveBeenCalledOnce());
+    internals.discoverFiles();
+    expect(readBytes).toHaveBeenCalledOnce();
+    rejectFirstRead(new Error('temporarily locked'));
+    await internals.queue;
+    expect(insertEvent).not.toHaveBeenCalled();
+    internals.discoverFiles();
+    await internals.queue;
+
+    expect(readBytes).toHaveBeenCalledTimes(2);
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'retry-discovery-session:retry-discovery-turn:completed',
+    }), []);
   });
 });

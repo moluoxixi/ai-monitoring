@@ -9,6 +9,7 @@ import type { NormalizedEvent } from '../database/database.types';
 import { EventIngestionService } from './event-ingestion.service';
 import { recordValue } from '../utils/event-record';
 import { sanitizeFailureMessage, summarizeTask, truncateTail } from '../utils/event-text';
+import { eventTiming, normalizeEventTimestamp } from '../utils/event-timing';
 
 // Preserve the pre-refactor import path for integrations outside this workspace.
 export { sanitizeFailureMessage, summarizeTask } from '../utils/event-text';
@@ -21,6 +22,8 @@ interface FileState {
   sessionId: string;
   taskSummary: string;
   answerSource: string;
+  startedAt: string;
+  startedTurnId: string;
   isSubagent: boolean;
   client: 'codex-cli' | 'codex-desktop';
 }
@@ -33,6 +36,10 @@ interface ParsedTerminalEvent {
   isSubagent: boolean;
   client: 'codex-cli' | 'codex-desktop';
   timestampMs: number | null;
+  /** Present only when a task_started record changes the active turn timing. */
+  startedAt?: string;
+  startedTurnId?: string;
+  consumeStartedTiming?: boolean;
   /** A new user turn supersedes a provisional provider failure. */
   suppressProvisional?: boolean;
 }
@@ -69,6 +76,8 @@ export const parseCodexSessionLine = (
   currentIsSubagent = false,
   currentAnswerSource = '',
   currentClient: 'codex-cli' | 'codex-desktop' = 'codex-desktop',
+  currentStartedAt = '',
+  currentStartedTurnId = '',
 ): ParsedTerminalEvent => {
   let raw: unknown;
   try {
@@ -95,6 +104,8 @@ export const parseCodexSessionLine = (
       isSubagent: currentIsSubagent,
       client: currentClient,
       timestampMs: null,
+      startedAt: '',
+      startedTurnId: '',
       suppressProvisional: Boolean(currentSessionId && !currentIsSubagent),
     };
   }
@@ -106,6 +117,8 @@ export const parseCodexSessionLine = (
       isSubagent: currentIsSubagent,
       client: currentClient,
       timestampMs: null,
+      startedAt: normalizeEventTimestamp(item.timestamp),
+      startedTurnId: String(payload.turn_id || ''),
       suppressProvisional: Boolean(currentSessionId && !currentIsSubagent),
     };
   }
@@ -139,12 +152,15 @@ export const parseCodexSessionLine = (
   } as const;
   const timestamp = typeof item.timestamp === 'string' ? Date.parse(item.timestamp) : Number.NaN;
   const terminalTimestamp = Number.isFinite(timestamp) ? timestamp : null;
+  const matchesStartedTurn = currentStartedTurnId === turnId;
+  const timing = eventTiming(matchesStartedTurn ? currentStartedAt : '', item.timestamp);
   return {
     sessionId: currentSessionId,
     taskSummary: '',
     isSubagent: currentIsSubagent,
     client: currentClient,
     timestampMs: terminalTimestamp,
+    consumeStartedTiming: matchesStartedTurn,
     answerSource: status === 'completed'
       ? (typeof payload.last_agent_message === 'string' ? truncateTail(payload.last_agent_message, 24_000) : currentAnswerSource)
       : '',
@@ -162,6 +178,7 @@ export const parseCodexSessionLine = (
         turn_id: turnId,
         ...(currentTaskSummary ? { task_summary: currentTaskSummary } : {}),
         ...(failureMessage ? { failure_message: failureMessage } : {}),
+        ...(timing ? { timing } : {}),
       },
     },
   };
@@ -176,6 +193,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
   private watcher: FSWatcher | null = null;
   private queue = Promise.resolve();
   private discoveryTimer: NodeJS.Timeout | null = null;
+  private readonly discoveryPending = new Set<string>();
 
   constructor(
     private readonly config: AppConfigService,
@@ -213,13 +231,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     this.watcher.on('error', (error) => {
       this.logger.error(`Codex session watcher failed: ${error instanceof Error ? error.message : String(error)}`);
     });
-    this.discoveryTimer = setInterval(() => {
-      for (const path of this.captureStartupFiles(this.config.codexSessionsPath).keys()) {
-        if (this.files.has(path)) continue;
-        this.files.set(path, { identity: '', offset: 0, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false, client: 'codex-desktop' });
-        this.enqueue(path, true);
-      }
-    }, 2_000);
+    this.discoveryTimer = setInterval(() => this.discoverFiles(), 2_000);
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -237,7 +249,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     if (!state || state.identity !== identity || readableSize < state.offset) {
       const cutoff = Date.now() - this.config.codexBackfillMinutes * 60_000;
       if (stats.mtimeMs < cutoff) {
-        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '', answerSource: '', isSubagent: false, client: 'codex-desktop' });
+        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '', answerSource: '', startedAt: '', startedTurnId: '', isSubagent: false, client: 'codex-desktop' });
         return;
       }
       state = {
@@ -246,6 +258,8 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
         sessionId: '',
         taskSummary: '',
         answerSource: '',
+        startedAt: '',
+        startedTurnId: '',
         isSubagent: false,
         client: 'codex-desktop',
       };
@@ -254,6 +268,8 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
         state.sessionId = context.sessionId;
         state.taskSummary = context.taskSummary;
         state.answerSource = context.answerSource;
+        state.startedAt = context.startedAt;
+        state.startedTurnId = context.startedTurnId;
         state.isSubagent = context.isSubagent;
         state.client = context.client;
       }
@@ -273,10 +289,12 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     for (const rawLine of lines) {
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       if (!line) continue;
-      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary, state.isSubagent, state.answerSource, state.client);
+      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary, state.isSubagent, state.answerSource, state.client, state.startedAt, state.startedTurnId);
       state.sessionId = parsed.sessionId;
       state.taskSummary = parsed.taskSummary;
       state.answerSource = parsed.event ? '' : parsed.answerSource;
+      state.startedAt = parsed.consumeStartedTiming ? '' : parsed.startedAt ?? state.startedAt;
+      state.startedTurnId = parsed.consumeStartedTiming ? '' : parsed.startedTurnId ?? state.startedTurnId;
       state.isSubagent = parsed.isSubagent;
       state.client = parsed.client;
       if (parsed.suppressProvisional && parsed.sessionId) {
@@ -291,10 +309,25 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     state.offset = start + lastNewline + 1;
   }
 
-  private enqueue(path: string, createDeliveries: boolean, readLimit?: number): void {
+  private enqueue(path: string, createDeliveries: boolean, readLimit?: number, fromDiscovery = false): void {
+    if (fromDiscovery && this.discoveryPending.has(path)) return;
+    if (fromDiscovery) this.discoveryPending.add(path);
     this.queue = this.queue.then(() => this.syncFile(path, createDeliveries, readLimit)).catch((error: unknown) => {
       this.logger.warn(`Unable to read Codex session update: ${error instanceof Error ? error.message : String(error)}`);
+    }).finally(() => {
+      if (fromDiscovery) this.discoveryPending.delete(path);
     });
+  }
+
+  private discoverFiles(): void {
+    for (const [path, size] of this.captureStartupFiles(this.config.codexSessionsPath)) {
+      const state = this.files.get(path);
+      if (state?.offset === size) continue;
+      if (!state) {
+        this.files.set(path, { identity: '', offset: 0, sessionId: '', taskSummary: '', answerSource: '', startedAt: '', startedTurnId: '', isSubagent: false, client: 'codex-desktop' });
+      }
+      this.enqueue(path, true, undefined, true);
+    }
   }
 
   private captureStartupFiles(root: string): Map<string, number> {
@@ -325,24 +358,28 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     }
   }
 
-  private async readContextBefore(path: string, end: number): Promise<Pick<FileState, 'sessionId' | 'taskSummary' | 'answerSource' | 'isSubagent' | 'client'>> {
+  private async readContextBefore(path: string, end: number): Promise<Pick<FileState, 'sessionId' | 'taskSummary' | 'answerSource' | 'startedAt' | 'startedTurnId' | 'isSubagent' | 'client'>> {
     let sessionId = '';
     let taskSummary = '';
     let answerSource = '';
+    let startedAt = '';
+    let startedTurnId = '';
     let isSubagent = false;
     let client: 'codex-cli' | 'codex-desktop' = 'codex-desktop';
     const stream = createReadStream(path, { encoding: 'utf8', end: end - 1 });
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
     try {
       for await (const line of lines) {
-        const parsed = parseCodexSessionLine(line, sessionId, taskSummary, isSubagent, answerSource, client);
+        const parsed = parseCodexSessionLine(line, sessionId, taskSummary, isSubagent, answerSource, client, startedAt, startedTurnId);
         sessionId = parsed.sessionId;
         taskSummary = parsed.taskSummary;
         answerSource = parsed.event ? '' : parsed.answerSource;
+        startedAt = parsed.consumeStartedTiming ? '' : parsed.startedAt ?? startedAt;
+        startedTurnId = parsed.consumeStartedTiming ? '' : parsed.startedTurnId ?? startedTurnId;
         isSubagent = parsed.isSubagent;
         client = parsed.client;
       }
-      return { sessionId, taskSummary, answerSource, isSubagent, client };
+      return { sessionId, taskSummary, answerSource, startedAt, startedTurnId, isSubagent, client };
     } finally {
       lines.close();
       stream.destroy();

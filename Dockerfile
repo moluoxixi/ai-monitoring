@@ -40,6 +40,7 @@ COPY --from=build /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/apps/web/package.json ./apps/web/package.json
 COPY scripts/ensure-openclaw-plugins.mjs scripts/openclaw-emit-notification.mjs scripts/patch-openclaw-weixin.mjs scripts/docker-entrypoint.sh ./scripts/
+COPY plugins/openclaw-ai-monitor-replies ./plugins/openclaw-ai-monitor-replies
 
 RUN mkdir -p /app/data /home/node/.openclaw \
     && chown -R node:node /app /home/node/.openclaw \

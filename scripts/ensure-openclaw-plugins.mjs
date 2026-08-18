@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const resourceRoot = resolve(process.env.AIMONITOR_RESOURCE_ROOT?.trim() || resolve(dirname(fileURLToPath(import.meta.url)), '..'))
 
 const definitions = [
   {
@@ -12,6 +15,13 @@ const definitions = [
     id: 'openclaw-weixin',
     packageName: '@tencent-weixin/openclaw-weixin',
     version: process.env.AI_MONITOR_WEIXIN_PLUGIN_VERSION,
+  },
+  {
+    id: 'ai-monitor-replies',
+    localPath: process.env.AIMONITOR_REPLY_PLUGIN_PATH?.trim()
+      || join(resourceRoot, 'plugins', 'openclaw-ai-monitor-replies'),
+    version: '1.0.0',
+    requiredHook: 'inbound_claim',
   },
 ]
 
@@ -65,19 +75,37 @@ const readPluginVersion = (plugin) => {
   }
 }
 
+const verifyRuntimeHook = (definition) => {
+  if (!definition.requiredHook) return
+  const result = runOpenClaw(['plugins', 'inspect', definition.id, '--runtime', '--json'])
+  let payload
+  try {
+    payload = JSON.parse(result.stdout)
+  } catch {
+    throw new Error(`OpenClaw returned invalid runtime metadata for ${definition.id}`)
+  }
+  const hooks = Array.isArray(payload?.typedHooks) ? payload.typedHooks : []
+  if (!hooks.some((hook) => hook?.name === definition.requiredHook)) {
+    throw new Error(`OpenClaw plugin ${definition.id} did not register ${definition.requiredHook}`)
+  }
+}
+
 let registry = loadRegistry()
 for (const definition of definitions) {
   const plugin = registry.plugins?.find((item) => item.id === definition.id)
   const installedVersion = readPluginVersion(plugin)
-  if (plugin?.status === 'loaded' && installedVersion === definition.version) continue
+  if (plugin?.status === 'loaded' && installedVersion === definition.version) {
+    verifyRuntimeHook(definition)
+    continue
+  }
 
   console.log(`Installing ${definition.id} ${definition.version} into the OpenClaw state volume.`)
   const installArgs = [
     'plugins',
     'install',
-    `${definition.packageName}@${definition.version}`,
-    '--pin',
+    definition.localPath || `${definition.packageName}@${definition.version}`,
   ]
+  if (!definition.localPath) installArgs.push('--pin')
   if (plugin) installArgs.push('--force')
   runOpenClaw(
     installArgs,
@@ -89,4 +117,5 @@ for (const definition of definitions) {
   if (installed?.status !== 'loaded' || readPluginVersion(installed) !== definition.version) {
     throw new Error(`OpenClaw plugin ${definition.id} did not load at version ${definition.version}`)
   }
+  verifyRuntimeHook(definition)
 }

@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
@@ -8,8 +8,11 @@ import type { DeliveryRow } from '../database/database.types';
 import { cleanAnswerText, truncateText } from '../utils/event-text';
 import { UserSettingsService } from '../settings/user-settings.service';
 import { DEFAULT_RESULT_LIMIT, DEFAULT_TASK_LIMIT, type NotificationSettings } from '../settings/user-settings.types';
+import { formatEventTiming } from '../utils/event-timing';
 const LEASE_MS = 5 * 60_000;
 const LEASE_RENEWAL_MS = 60_000;
+const MAX_IN_FLIGHT_DELIVERIES = 4;
+const SHUTDOWN_GRACE_MS = 5_000;
 
 const cleanText = (value: unknown): string => {
   if (typeof value !== 'string') return '';
@@ -45,11 +48,13 @@ export const notificationContent = (
     : '';
   const message = cleanText(row.message);
   const summary = taskSummary || message || cleanText(row.title);
+  const timing = formatEventTiming(row.metadata, row.event_created_at);
+  const withTiming = (content: string): string => timing ? `${timing}\n${content}` : content;
   const automationId = cleanText(row.metadata?.automation_id);
   if (row.status === 'completed' && automationId && row.metadata?.automation_decision === 'NOTIFY') {
     return {
       title: `${automationId} 有新进展`,
-      body: truncateText(answer || message || '未提供进展内容', limits.resultLimit),
+      body: withTiming(truncateText(answer || message || '未提供进展内容', limits.resultLimit)),
     };
   }
   const failureMessage = cleanText(row.metadata?.failure_message)
@@ -60,16 +65,22 @@ export const notificationContent = (
   const failed = ['failed', 'tool_failed'].includes(row.status);
   return {
     title: `(${clientLabel(row.client)}) ${statusLabel(row.status)}`,
-    body: failed
+    body: withTiming(failed
       ? `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n失败消息：${truncateText(failureMessage, limits.resultLimit)}`
-      : `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n任务结果：${truncateText(answer || '未采集到最终回答', limits.resultLimit)}`,
+      : `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n任务结果：${truncateText(answer || '未采集到最终回答', limits.resultLimit)}`),
   };
 };
 
+export const withReplyRoute = (body: string, token: string | null): string => token
+  ? `${body}\n\n[AI-MONITOR-REPLY:${token}]`
+  : body;
+
 @Injectable()
-export class DeliveryWorkerService {
+export class DeliveryWorkerService implements OnModuleDestroy {
   private readonly logger = new Logger(DeliveryWorkerService.name);
-  private processing = false;
+  private readonly inFlight = new Set<Promise<void>>();
+  private stopping = false;
+  private abandoning = false;
 
   constructor(
     private readonly database: DatabaseService,
@@ -79,24 +90,44 @@ export class DeliveryWorkerService {
   ) {}
 
   @Interval(1500)
-  async processOnce(): Promise<void> {
-    if (this.processing) return;
-    this.processing = true;
+  processOnce(): void {
+    if (this.stopping) return;
+    const capacity = MAX_IN_FLIGHT_DELIVERIES - this.inFlight.size;
+    if (capacity <= 0) return;
     try {
-      const byEvent = new Map<number, DeliveryRow[]>();
-      for (const delivery of this.database.claimDueDeliveries(utcNow(), 20, LEASE_MS)) {
-        const group = byEvent.get(delivery.event_id) || [];
-        group.push(delivery);
-        byEvent.set(delivery.event_id, group);
-      }
-      for (const deliveries of byEvent.values()) {
-        await Promise.all(deliveries.map((delivery) => this.deliver(delivery)));
+      for (const delivery of this.database.claimDueDeliveries(utcNow(), capacity, LEASE_MS)) {
+        this.startDelivery(delivery);
       }
     } catch (error) {
       this.logger.error('Delivery loop failed', error instanceof Error ? error.stack : undefined);
-    } finally {
-      this.processing = false;
     }
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    this.stopping = true;
+    if (!this.inFlight.size) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = await Promise.race([
+      Promise.allSettled([...this.inFlight]).then(() => false),
+      new Promise<true>((resolve) => {
+        timer = setTimeout(() => resolve(true), SHUTDOWN_GRACE_MS);
+      }),
+    ]);
+    if (timer) clearTimeout(timer);
+    if (timedOut) {
+      this.abandoning = true;
+      this.logger.warn(`Shutdown continued with ${this.inFlight.size} delivery send(s) still in flight`);
+    }
+  }
+
+  private startDelivery(row: DeliveryRow): void {
+    let task: Promise<void>;
+    task = this.deliver(row)
+      .catch((error: unknown) => {
+        this.logger.error('Delivery execution failed', error instanceof Error ? error.stack : undefined);
+      })
+      .finally(() => this.inFlight.delete(task));
+    this.inFlight.add(task);
   }
 
   private async deliver(row: DeliveryRow): Promise<void> {
@@ -107,6 +138,7 @@ export class DeliveryWorkerService {
     if (!this.database.isClaimedDeliveryActive(row.id, row.lease_token)) return;
     const attempts = row.attempts + 1;
     const renewal = setInterval(() => {
+      if (this.abandoning) return;
       try {
         this.database.renewClaimedDelivery(row.id, row.lease_token!, utcNow(), LEASE_MS);
       } catch {
@@ -116,7 +148,9 @@ export class DeliveryWorkerService {
     renewal.unref();
     try {
       const notification = notificationContent(row, this.settings?.notification());
-      await this.channels.send(row.channel, notification.title, notification.body);
+      const replyToken = this.database.ensureDeliveryReplyRoute(row.id, this.config.replyRouteTtlMs);
+      await this.channels.send(row.channel, notification.title, withReplyRoute(notification.body, replyToken));
+      if (this.abandoning) return;
       const now = utcNow();
       this.database.markClaimedDelivery(row.id, row.lease_token, {
         state: 'sent',
@@ -125,6 +159,7 @@ export class DeliveryWorkerService {
         sentAt: now,
       });
     } catch (error) {
+      if (this.abandoning) return;
       if (error instanceof DeliveryOutcomeUnknownError) {
         const now = utcNow();
         this.database.markClaimedDelivery(row.id, row.lease_token, {

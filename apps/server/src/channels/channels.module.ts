@@ -9,6 +9,6 @@ import { PushPlusProvider } from './pushplus.provider';
 @Module({
   controllers: [ChannelsController],
   providers: [ProcessRunnerService, AppriseProvider, PushPlusProvider, OpenClawProvider, ChannelsService],
-  exports: [ChannelsService],
+  exports: [ChannelsService, OpenClawProvider],
 })
 export class ChannelsModule {}

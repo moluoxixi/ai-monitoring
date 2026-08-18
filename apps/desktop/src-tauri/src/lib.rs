@@ -31,6 +31,39 @@ struct GatewayLaunch {
     state_root: Option<PathBuf>,
 }
 
+fn load_or_create_reply_token(data_root: &Path) -> AppResult<String> {
+    if let Some(token) = std::env::var("AIMONITOR_REPLY_TOKEN")
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(token);
+    }
+    let token_path = data_root.join("reply-token");
+    if let Ok(value) = fs::read_to_string(&token_path) {
+        let token = value.trim();
+        if token.len() >= 32 {
+            return Ok(token.to_owned());
+        }
+    }
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes)?;
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut token = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        token.push(HEX[(byte >> 4) as usize] as char);
+        token.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    fs::create_dir_all(data_root)?;
+    fs::write(&token_path, format!("{token}\n"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&token_path, fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(token)
+}
+
 const MAIN_WINDOW_LABEL: &str = "main";
 const SHOW_MAIN_MENU_ID: &str = "show-main";
 const QUIT_MENU_ID: &str = "quit";
@@ -264,7 +297,7 @@ fn run_openclaw_bootstrap(resources: &Path, data_root: &Path) -> AppResult<()> {
     Ok(())
 }
 
-fn launch_gateway(resources: &Path, data_root: &Path) -> AppResult<GatewayLaunch> {
+fn launch_gateway(resources: &Path, data_root: &Path, reply_token: &str) -> AppResult<GatewayLaunch> {
     let port = gateway_port();
     let Some(cli_module) = openclaw_cli_module(resources) else {
         if cfg!(debug_assertions) {
@@ -333,6 +366,11 @@ fn launch_gateway(resources: &Path, data_root: &Path) -> AppResult<GatewayLaunch
         .env("OPENCLAW_STATE_DIR", &state_root)
         .env("OPENCLAW_GATEWAY_PORT", port.to_string())
         .env("OPENCLAW_GATEWAY_URL", format!("ws://127.0.0.1:{port}"))
+        .env("AIMONITOR_REPLY_TOKEN", reply_token)
+        .env(
+            "AIMONITOR_REPLY_URL",
+            format!("http://127.0.0.1:{}/api/replies/inbound", monitor_port()),
+        )
         .stdout(if cfg!(debug_assertions) {
             Stdio::inherit()
         } else {
@@ -353,6 +391,7 @@ fn launch_gateway(resources: &Path, data_root: &Path) -> AppResult<GatewayLaunch
 fn launch_server(
     app: &tauri::AppHandle,
     gateway_state_root: Option<&Path>,
+    reply_token: &str,
 ) -> AppResult<ServerLaunch> {
     let resources = resource_root(app)?;
     let data_root = writable_data_root(app)?;
@@ -379,6 +418,7 @@ fn launch_server(
         .env("AIMONITOR_RESOURCE_ROOT", &resources)
         .env("AIMONITOR_PROJECT_ROOT", &resources)
         .env("AIMONITOR_DATA_ROOT", &data_root)
+        .env("AIMONITOR_REPLY_TOKEN", reply_token)
         .env("AIMONITOR_WEB_DIST_PATH", resources.join("apps/web/dist"))
         .env(
             "OPENCLAW_GATEWAY_URL",
@@ -517,6 +557,7 @@ pub fn run() {
                 create_tray(app.handle())?;
                 let resources = resource_root(app.handle())?;
                 let data_root = writable_data_root(app.handle())?;
+                let reply_token = load_or_create_reply_token(&data_root)?;
                 append_startup_log(
                     app.handle(),
                     &format!(
@@ -534,9 +575,9 @@ pub fn run() {
                         state_root: None,
                     }
                 } else {
-                    launch_gateway(&resources, &data_root)?
+                    launch_gateway(&resources, &data_root, &reply_token)?
                 };
-                let mut launch = match launch_server(app.handle(), gateway.state_root.as_deref()) {
+                let mut launch = match launch_server(app.handle(), gateway.state_root.as_deref(), &reply_token) {
                     Ok(value) => value,
                     Err(error) => {
                         if let Some(child) = gateway.child.as_mut() {

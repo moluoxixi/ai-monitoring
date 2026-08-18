@@ -1,0 +1,10 @@
+{
+  "id": "ai-monitor-replies",
+  "name": "AI Monitor Replies",
+  "description": "Routes quoted AI Monitor QQ notifications back to their original AI conversation.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

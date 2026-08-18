@@ -37,6 +37,9 @@ export interface DeliveryRow {
   sent_at: string | null;
   lease_token: string | null;
   lease_expires_at: string | null;
+  /** Internal delivery projection only; never returned by delivery APIs. */
+  reply_token?: string | null;
+  reply_expires_at?: string | null;
   source: string;
   client: string;
   kind: string;
@@ -45,6 +48,35 @@ export interface DeliveryRow {
   message: string;
   error_code?: string | null;
   metadata?: Record<string, unknown>;
+  /** Event ingestion time, included only while the worker formats a notification. */
+  event_created_at?: string;
   /** Internal delivery projection only; never returned by delivery APIs. */
   answer_text?: string;
+}
+
+export interface ReplyRoute {
+  delivery_id: number;
+  event_id: number;
+  channel: string;
+  delivery_state: string;
+  reply_token: string;
+  reply_expires_at: string;
+  client: string;
+  metadata: Record<string, unknown>;
+}
+
+export type InboundReplyState = 'processing' | 'accepted' | 'failed';
+
+export interface InboundReplyRow {
+  id: number;
+  channel: string;
+  external_message_id: string;
+  delivery_id: number;
+  sender_id: string;
+  account_id: string;
+  text: string;
+  state: InboundReplyState;
+  last_error: string | null;
+  created_at: string;
+  accepted_at: string | null;
 }

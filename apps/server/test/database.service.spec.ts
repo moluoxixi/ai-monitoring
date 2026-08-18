@@ -151,6 +151,52 @@ describe('DatabaseService idempotent event enrichment', () => {
     database.onModuleDestroy();
   });
 
+  it('adds reply routing columns and the inbound idempotency table to an existing outbox', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const dbPath = join(directory, 'monitor.db');
+    const legacy = new Sqlite(dbPath);
+    legacy.exec(`
+      CREATE TABLE events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_event_id TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        client TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        error_code TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        answer_text TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        channel TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT NOT NULL,
+        last_error TEXT,
+        sent_at TEXT,
+        lease_token TEXT,
+        lease_expires_at TEXT,
+        UNIQUE(event_id, channel)
+      );
+    `);
+    legacy.close();
+
+    const database = new DatabaseService({ dbPath } as AppConfigService, new ExtensionsService());
+    database.onModuleDestroy();
+    const migrated = new Sqlite(dbPath, { readonly: true });
+    const deliveryColumns = (migrated.pragma('table_info(deliveries)') as Array<{ name: string }>).map((column) => column.name);
+    expect(deliveryColumns).toEqual(expect.arrayContaining(['reply_token', 'reply_expires_at']));
+    expect(migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inbound_replies'").get())
+      .toEqual({ name: 'inbound_replies' });
+    migrated.close();
+  });
+
   it('migrates legacy client values to canonical runtime keys on startup', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);
@@ -197,6 +243,29 @@ describe('DatabaseService idempotent event enrichment', () => {
     expect(database.getDeliveriesForEvent(first)).toEqual([
       expect.objectContaining({ event_id: first, channel: 'pushplus', state: 'pending' }),
     ]);
+    database.onModuleDestroy();
+  });
+
+  it('claims due deliveries from different events in the same batch', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+    const first = database.insertEvent(event({}, '第一个任务'), ['openclaw-qq'])[0];
+    const second = database.insertEvent({
+      ...event({}, '第二个任务'),
+      source_event_id: 'session:turn:second',
+    }, ['openclaw-weixin'])[0];
+
+    const claimed = database.claimDueDeliveries(
+      new Date(Date.now() + 1_000).toISOString().replace(/\.\d{3}Z$/, '+00:00'),
+      2,
+    );
+
+    expect(claimed.map((row) => row.event_id)).toEqual([first, second]);
+    expect(claimed.every((row) => typeof row.event_created_at === 'string')).toBe(true);
     database.onModuleDestroy();
   });
 
@@ -273,6 +342,69 @@ describe('DatabaseService idempotent event enrichment', () => {
 
     first.onModuleDestroy();
     second.onModuleDestroy();
+  });
+
+  it('creates one stable reply route for a completed Codex QQ delivery', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+    const [eventId] = database.insertEvent({
+      ...event({ thread_id: 'thread-123', answer_text: 'done' }, 'finish the task'),
+      source_event_id: 'thread-123:turn-1:completed',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq', 'pushplus']);
+    const qq = database.getDeliveriesForEvent(eventId).find((row) => row.channel === 'openclaw-qq')!;
+    const pushplus = database.getDeliveriesForEvent(eventId).find((row) => row.channel === 'pushplus')!;
+
+    const first = database.ensureDeliveryReplyRoute(qq.id, 86_400_000);
+    const second = database.ensureDeliveryReplyRoute(qq.id, 86_400_000);
+
+    expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(second).toBe(first);
+    expect(database.ensureDeliveryReplyRoute(pushplus.id, 86_400_000)).toBeNull();
+    expect(database.listDeliveries(10).some((row) => 'reply_token' in row)).toBe(false);
+    expect(database.resolveReplyRoute(first!)).toMatchObject({
+      delivery_id: qq.id,
+      event_id: eventId,
+      channel: 'openclaw-qq',
+      client: 'codex-cli',
+      metadata: { thread_id: 'thread-123' },
+    });
+    database.onModuleDestroy();
+  });
+
+  it('deduplicates inbound replies by channel and external message id', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+    const [eventId] = database.insertEvent({
+      ...event({ thread_id: 'thread-123' }, 'finish the task'),
+      source_event_id: 'thread-123:turn-2:completed',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    const deliveryId = database.getDeliveriesForEvent(eventId)[0]!.id;
+    const input = {
+      channel: 'openclaw-qq', externalMessageId: 'qq-message-1', deliveryId,
+      senderId: 'user-1', accountId: 'default', text: 'continue',
+    };
+
+    const first = database.claimInboundReply(input);
+    const duplicate = database.claimInboundReply(input);
+    database.markInboundReply(first.reply.id, 'accepted');
+    const accepted = database.claimInboundReply(input);
+
+    expect(first.inserted).toBe(true);
+    expect(duplicate).toMatchObject({ inserted: false, reply: { id: first.reply.id, state: 'processing' } });
+    expect(accepted).toMatchObject({ inserted: false, reply: { id: first.reply.id, state: 'accepted' } });
+    database.onModuleDestroy();
   });
 });
 

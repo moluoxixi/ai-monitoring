@@ -17,6 +17,10 @@ Codex CLI
   -> notify multiplexer / App Server proxy
   -> 通知中心 :8787
 
+QQ 引用回复 Codex 完成通知
+  -> OpenClaw inbound_claim 插件 -> 通知中心 :8787
+  -> Codex App Server thread/resume + turn/start -> 原 Codex CLI 会话
+
 Codex Desktop
   -> Codex session watcher
   -> 通知中心 :8787
@@ -93,7 +97,7 @@ npm run desktop:dev
 npm run desktop:build
 ```
 
-桌面包默认内置固定版本的 OpenClaw、QQ 插件和微信插件，用户无需另装 Node.js 或 OpenClaw；首次使用仍需在界面扫码登录，凭据不会写进安装包。Windows 和 macOS 必须分别在目标系统构建，因为安装包会嵌入当前系统的 Node runtime 与 `better-sqlite3` 原生模块；macOS 还需按 Intel/Apple Silicon 分别构建，除非另行配置 universal pipeline。
+桌面包默认内置固定版本的 OpenClaw、QQ 插件、微信插件和 AI Monitor 引用回复插件，用户无需另装 Node.js 或 OpenClaw；首次使用仍需在界面扫码登录，凭据不会写进安装包。Windows 和 macOS 必须分别在目标系统构建，因为安装包会嵌入当前系统的 Node runtime 与 `better-sqlite3` 原生模块；macOS 还需按 Intel/Apple Silicon 分别构建，除非另行配置 universal pipeline。
 
 仓库提供 `desktop-build` GitHub Actions（手动触发或推送 `v*` 标签）分别构建 Windows x64、macOS Intel 和 macOS Apple Silicon 安装包；手动构建产物位于 Actions artifacts，`v*` 标签构建还会把 MSI/EXE/DMG 汇总到对应 GitHub Release。当前未配置 Windows 代码签名或 macOS 签名/公证，公开分发前应接入平台证书。
 
@@ -141,6 +145,10 @@ QQ 可直接在通知中心绑定：
 3. 扫码凭据由腾讯官方 `@tencent-connect/qqbot-connector` 获取并写入 OpenClaw；本项目自己的绑定文件只保存发送所需的不透明 target/account ID，UI 和日志不展示这些值。
 4. 绑定完成后立即生效，之后所有 AI 软件的新事件都会发送到 QQ。
 
+Codex CLI 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。通知末尾的 `[AI-MONITOR-REPLY:...]` 是不透明路由标记；OpenClaw 只会认领“私聊 + 引用 + 有效标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端还会重新校验当前 QQ 绑定、标记有效期和 QQ message id 幂等，再通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 的 `thread/resume`、`turn/start` 将文本放回原会话。远程 turn 使用 `approvalPolicy: never`，不会停在无人处理的审批上，也不会绕过 Codex 自身安全限制。
+
+当前回复 MVP 仅覆盖 `openclaw-qq + codex-cli + 纯文本引用回复`，不支持 Codex Desktop、Claude/Qoder/Hermes/Cursor 或图片/语音。标记默认 30 天过期。同一 QQ message id 只会提交一次；未知的跨进程执行结果不会自动重放，避免向 Codex 创建重复 turn。
+
 微信也可在通知中心点击“绑定”。服务调用腾讯插件官方 `openclaw channels login --channel openclaw-weixin` 流程，并把插件生成的二维码显示在页面中；扫码确认后，需要先在微信中给机器人发送任意一条消息，使腾讯协议签发主动回复所需的 context token。页面验证该 token 已由插件落盘后，才会读取当前账号 ID 和扫码用户 ID 作为通知路由并显示绑定成功。本项目自己的绑定文件不保存微信 token，也不会通过“最近私聊”猜测接收目标。
 
 QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，Docker 启动入口会校验固定插件版本并应用跨平台兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
@@ -176,6 +184,8 @@ AIMONITOR_APPRISE_URLS=SERVICE_URL_1,SERVICE_URL_2
 通知正文直接使用采集到的最终回答，不调用在线模型改写或摘要。完成通知包含“提问”和“任务结果”，失败通知包含“提问”和“失败消息”。扩展设置可在线配置外发正文上限：提问范围为 1-2,000 字，任务结果或失败消息范围为 1-24,000 字，默认仍为 100/2,000；超出部分以省略号截断，并保留换行和 Markdown。上游适配器会保留不低于上述范围的安全上限，避免配置较大值时数据已在采集阶段丢失。回答会先经过敏感信息清洗，最多保存末尾 24,000 字到本地 SQLite，仅在单条任务详情中查看，不出现在消息列表、投递列表或日志中。
 
 若设置 `AIMONITOR_INGEST_TOKEN`，relay 的事件、查询、测试和重试 API 都要求同一个 Bearer token。已安装的 Claude/Codex 生产者会直接读取仓库 `.env`，不需要把 token 写进用户级 Claude/Codex 配置。
+
+QQ 入站回复使用 `AIMONITOR_REPLY_TOKEN`，未单独配置时回退到 `AIMONITOR_INGEST_TOKEN`；两者均为空时 reply endpoint 必须拒绝请求。桌面 App 会在用户数据目录生成受限权限的本地回复令牌并同时注入 Gateway 与 server。可用 `AIMONITOR_REPLY_ROUTE_TTL_DAYS` 调整标记有效天数，用 `AIMONITOR_CODEX_COMMAND` 指定 Codex CLI。Docker 默认会安装并加载引用回复插件，但 Compose 内的 Monitor 无法直接启动宿主机 Codex；若要在容器部署中续接会话，需要显式提供容器内可执行的 Codex CLI、认证和可写会话数据，否则 endpoint 会返回明确的 Codex 启动错误。
 
 Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指数退避，连续 10 次失败后进入 `dead` 状态。这个保证从 relay 成功接收事件开始，生产者到 relay 的短暂不可用会记录到 stderr，但当前没有跨进程的入口持久队列。
 

@@ -5,7 +5,7 @@ import type { Request } from 'express';
 import { AppConfigService } from '../config/app-config.service';
 import { IS_PUBLIC_KEY } from './public.decorator';
 
-const safeEqual = (left: string, right: string): boolean => {
+export const safeEqual = (left: string, right: string): boolean => {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
   return a.length === b.length && timingSafeEqual(a, b);
