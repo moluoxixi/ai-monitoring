@@ -300,18 +300,3 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 | OpenClaw Gateway | `127.0.0.1:18789` | 后台 QQ/微信机器人网关，不作为用户入口 |
 
 可用 `.\scripts\install-task.ps1` 将通知 relay 注册为当前用户登录时启动项。脚本优先使用 Task Scheduler；权限不足时自动回退到当前用户 Startup 快捷方式，无需管理员权限。使用 `.\scripts\install-task.ps1 -Remove` 可移除。
-
-<!-- AIRULES:MOLUOXIXI:START -->
-## Moluoxixi 工作流
-
-本项目使用 Moluoxixi 管理 AI 辅助开发流程。在本项目中使用 AI 编程助手时，可以直接发送以下提示词：
-
-```text
-请使用 Moluoxixi 开始处理这个需求：<描述需求>
-请使用 Moluoxixi 继续当前任务。
-请使用 Moluoxixi 检查当前改动。
-请使用 Moluoxixi 完成本次工作。
-```
-
-AI 编程助手会根据当前宿主选择可用的命令或技能。项目的工作流、任务和规范状态位于 `.moluoxixi/`；无需安装或调用全局 Moluoxixi CLI。
-<!-- AIRULES:MOLUOXIXI:END -->
