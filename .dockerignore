@@ -4,7 +4,7 @@
 .vscode
 .codex
 .agents
-.moluoxixi
+.trellis
 .venv
 node_modules
 apps/server/dist
