@@ -2,11 +2,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Sqlite from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { DatabaseService } from '../src/database/database.service';
 import { ExtensionsService } from '../src/extensions/extensions.service';
 import type { NormalizedEvent } from '../src/database/database.types';
+import { parseClaudeDesktopTranscriptLine } from '../src/events/claude-desktop-audit-watcher.service';
+import { EventIngestionService } from '../src/events/event-ingestion.service';
+import { normalizeEvent } from '../src/events/event-normalizer';
 
 const directories: string[] = [];
 
@@ -27,6 +30,65 @@ afterEach(() => {
 });
 
 describe('DatabaseService idempotent event enrichment', () => {
+  it.each(['hook-first', 'watcher-first'] as const)(
+    'deduplicates Claude Desktop hook and watcher terminals when %s',
+    (order) => {
+      const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+      directories.push(directory);
+      const database = new DatabaseService(
+        { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+        new ExtensionsService(),
+      );
+      const ingestion = new EventIngestionService(
+        database,
+        { answerCaptureGraceMs: 0, recoverableFailureGraceMs: 0 } as AppConfigService,
+        new ExtensionsService(),
+        { markMonitorVerified: vi.fn() } as never,
+      );
+      const producerEventId = 'claude-desktop:assistant:message-1:completed';
+      const hookEvent = normalizeEvent({
+        source: 'claude-desktop',
+        client: 'claude-desktop',
+        event_id: producerEventId,
+        kind: 'Stop',
+        status: 'completed',
+        title: 'Claude Desktop task completed',
+        message: 'Claude Desktop task completed',
+        metadata: { session_id: 'session', turn_id: 'message-1' },
+      });
+      const prompt = parseClaudeDesktopTranscriptLine(JSON.stringify({
+        type: 'user', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+        message: { role: 'user', content: 'desktop question' },
+      }));
+      const watcher = parseClaudeDesktopTranscriptLine(JSON.stringify({
+        type: 'assistant', entrypoint: 'claude-desktop-3p', sessionId: 'session',
+        message: { id: 'message-1', role: 'assistant', stop_reason: 'end_turn', content: 'desktop answer' },
+      }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript);
+      expect(watcher.event?.source_event_id).toBe(hookEvent.source_event_id);
+
+      const ingestHook = () => ingestion.ingest(hookEvent, ['pushplus']);
+      const ingestWatcher = () => ingestion.ingest(watcher.event!, ['pushplus'], watcher.answerSource);
+      if (order === 'hook-first') {
+        ingestHook();
+        ingestWatcher();
+      } else {
+        ingestWatcher();
+        ingestHook();
+      }
+
+      const events = database.listEvents(10);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        source: 'claude-desktop',
+        client: 'claude-desktop',
+        metadata: { session_id: 'session', turn_id: 'message-1', task_summary: 'desktop question' },
+      });
+      expect(database.getEvent(events[0]!.id, true)?.answer_text).toBe('desktop answer');
+      expect(database.getDeliveriesForEvent(events[0]!.id)).toHaveLength(1);
+      database.onModuleDestroy();
+    },
+  );
+
   it('adds missing task and failure details without creating a duplicate event', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);

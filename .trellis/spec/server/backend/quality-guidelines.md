@@ -131,6 +131,101 @@ does not prevent the libuv process abort.
     CHOKIDAR_USEPOLLING: ${{ runner.os == 'Windows' && '1' || '0' }}
 ```
 
+## Scenario: Cross-Producer Transcript Event Idempotency
+
+### 1. Scope / Trigger
+
+- Apply this contract when an external-runtime hook and a server transcript
+  watcher can report the same terminal event, or when transcript files can be
+  copied, truncated, rewritten, or appended while watcher startup is in flight.
+- The goal is one database event and one delivery per channel without relying
+  on timing windows or user-visible text.
+
+### 2. Signatures
+
+```typescript
+scopedSourceEventId(source: string, client: string, producerEventId: string): string
+claudeDesktopTerminalEventId(kind: string, stableId: string, status: string): string
+```
+
+- Completed producer ID:
+  `claude-desktop:assistant:<message.id-or-record-uuid>:completed`.
+- Persisted ID:
+  `v1:<encoded-source>:<encoded-client>:<producer-event-id>`.
+- Database barrier: `events.source_event_id UNIQUE`.
+
+### 3. Contracts
+
+- Hook and watcher must derive the same producer ID from the stable terminal
+  identity. Do not include session ID: copied branches can preserve terminal
+  IDs while rewriting session ID.
+- Runtime classification uses only exact structured evidence from a non-
+  sidechain record. For Claude Desktop that evidence is top-level
+  `entrypoint === 'claude-desktop-3p'`; message text and paths are not evidence.
+- Sidechain and synthetic/tool-result records must not mutate main-chain source
+  or turn state.
+- A watcher must retain a digest of the bytes already consumed. Length checks
+  alone do not detect equal-size or growth rewrites.
+- Startup enumeration must snapshot each file's byte size. Seed identities and
+  parser state only through the last complete newline at or before that size;
+  bytes appended afterward, including the completion of a split JSONL record,
+  are live input.
+- Startup seeding never ingests. Runtime parsing adds every stable terminal ID
+  to the process-level seen set, including skipped copied history.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Hook and watcher race on one stable terminal ID | SQLite retains one event and one delivery per channel |
+| Same terminal ID appears under a different session ID | Treat as copied history; do not deliver again |
+| Desktop `Stop` has no stable assistant ID | Hook skips it; watcher remains authoritative |
+| Transcript prefix digest changes at the consumed offset | Reset file parser state and rescan; keep the global seen-ID set |
+| Startup snapshot ends inside a JSONL record | Keep offset at the preceding newline and consume the completed record later |
+| Sidechain carries a Desktop marker | Ignore it without changing main-chain classification |
+| Terminal timestamp is strictly before file birth watermark | Skip as copied-history fallback and remember its stable ID |
+
+### 5. Good/Base/Bad Cases
+
+- Good: hook-first and watcher-first paths converge on one scoped ID, while the
+  later arrival may enrich the existing summary or answer.
+- Base: a new transcript containing prompt and terminal in its first write is
+  parsed from byte zero and delivers once.
+- Bad: IDs include session ID, source is inferred from text, startup `add`
+  silently seeds bytes written after enumeration, or rewrite detection checks
+  only `bytes.length < offset`.
+
+### 6. Tests Required
+
+- Unit-test exact producer/scoped ID equality, including record UUID fallback.
+- Integration-test hook-first and watcher-first arrival: one event, one
+  delivery per channel, and enrichment after the second arrival.
+- Watcher-test startup history seeding, copied history, multiple old terminals
+  followed by a new terminal, equal/growth rewrite, and cross-session replay.
+- Deterministically append after startup enumeration but before Chokidar `add`;
+  assert only the appended terminal is ingested.
+- Split one terminal across the startup byte snapshot; assert it is not lost.
+- Test sidechain and synthetic/tool-result records as state-contamination
+  negatives, not only as non-emitting records.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+const eventId = `${sessionId}:${message.id}`;
+if (bytes.length < state.offset) resetParser();
+state.offset = startupFileSize;
+```
+
+#### Correct
+
+```typescript
+const eventId = claudeDesktopTerminalEventId('assistant', message.id, 'completed');
+if (prefixDigest(bytes, state.offset) !== state.prefixDigest) resetParser();
+state.offset = lastCompleteNewlineAtOrBefore(startupSnapshotSize);
+```
+
 ---
 
 ## Code Review Checklist

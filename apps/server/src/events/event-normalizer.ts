@@ -30,6 +30,9 @@ const messageFromMetadata = (metadata: Record<string, unknown>): string | undefi
   return undefined;
 };
 
+export const scopedSourceEventId = (source: string, client: string, producerEventId: string): string =>
+  `v1:${encodeURIComponent(source)}:${encodeURIComponent(client)}:${producerEventId}`;
+
 export const normalizeEvent = (item: CreateEventDto): NormalizedEvent => {
   const metadata = item.metadata || {};
   const source = String(item.source || metadata.source || 'unknown');
@@ -41,7 +44,7 @@ export const normalizeEvent = (item: CreateEventDto): NormalizedEvent => {
   const producerEventId = String(item.event_id || metadata.event_id || `${source}:${kind}:${digest}`);
   // source_event_id is globally unique in SQLite. Scope producer-local IDs so
   // equal session/turn IDs from different products or runtimes cannot merge.
-  const eventId = `v1:${encodeURIComponent(source)}:${encodeURIComponent(client)}:${producerEventId}`;
+  const eventId = scopedSourceEventId(source, client, producerEventId);
   const labels: Record<string, string> = {
     completed: '任务完成',
     failed: '任务失败',

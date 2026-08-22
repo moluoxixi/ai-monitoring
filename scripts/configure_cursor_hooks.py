@@ -10,6 +10,11 @@ from typing import Any
 # Relay only stop so a completed task produces one notification.
 EVENTS = ("stop", "postToolUseFailure")
 CLEANUP_EVENTS = ("afterAgentResponse", *EVENTS)
+ADAPTER_MARKER = "cursor_event_adapter.py"
+
+
+def _is_monitor_command(value: object) -> bool:
+    return ADAPTER_MARKER in str(value or "").lower()
 
 
 def configure(config_path: Path, command: str) -> None:
@@ -29,7 +34,7 @@ def configure(config_path: Path, command: str) -> None:
         entries[:] = [
             item
             for item in entries
-            if not (isinstance(item, dict) and "cursor_event_adapter.py" in str(item.get("command", "")))
+            if not (isinstance(item, dict) and _is_monitor_command(item.get("command")))
         ]
         commands = {
             str(item.get("command"))
@@ -40,6 +45,41 @@ def configure(config_path: Path, command: str) -> None:
             entries.append({"type": "command", "command": command})
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def remove(config_path: Path) -> bool:
+    try:
+        document: dict[str, Any] = json.loads(config_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid Cursor hooks JSON: {config_path}") from exc
+    hooks = document.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    changed = False
+    for event in CLEANUP_EVENTS:
+        entries = hooks.get(event)
+        if not isinstance(entries, list):
+            continue
+        cleaned = [
+            item
+            for item in entries
+            if not (isinstance(item, dict) and _is_monitor_command(item.get("command")))
+        ]
+        if cleaned == entries:
+            continue
+        changed = True
+        if cleaned:
+            hooks[event] = cleaned
+        else:
+            hooks.pop(event, None)
+    if not changed:
+        return False
+    if not hooks:
+        document.pop("hooks", None)
+    config_path.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return True
 
 
 def main() -> int:

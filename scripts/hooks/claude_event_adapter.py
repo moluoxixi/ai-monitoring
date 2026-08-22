@@ -6,6 +6,7 @@ import sys
 import time
 import urllib.request
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,6 +14,15 @@ from dotenv import load_dotenv
 
 RELAY_EVENTS = {"Stop", "StopFailure", "PostToolUseFailure"}
 load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+
+
+@dataclass(frozen=True)
+class TranscriptProjection:
+    summary: str = ""
+    answer: str = ""
+    desktop_transcript: bool = False
+    terminal_id: str = ""
+    error_id: str = ""
 
 
 def _text(value: object, limit: int = 24_000) -> str:
@@ -57,14 +67,17 @@ def _transcript_path(item: dict) -> Path | None:
         return None
     return None
 
-def _transcript_context(value: object) -> tuple[str, str]:
+def _transcript_context(value: object) -> TranscriptProjection:
     if not isinstance(value, str):
-        return "", ""
+        return TranscriptProjection()
     path = Path(value)
     if path.suffix.lower() != ".jsonl" or not path.is_file():
-        return "", ""
+        return TranscriptProjection()
     summary = ""
     answer = ""
+    desktop_transcript = False
+    terminal_id = ""
+    error_id = ""
     try:
         with path.open("r", encoding="utf-8") as transcript:
             for line in transcript:
@@ -74,6 +87,10 @@ def _transcript_context(value: object) -> tuple[str, str]:
                     continue
                 if not isinstance(record, dict):
                     continue
+                if record.get("isSidechain") is True:
+                    continue
+                if record.get("entrypoint") == "claude-desktop-3p":
+                    desktop_transcript = True
                 if record.get("type") == "user":
                     # Claude Code writes tool results as user-shaped records. They
                     # are not prompts and must never replace the task summary.
@@ -86,6 +103,15 @@ def _transcript_context(value: object) -> tuple[str, str]:
                         text = _content_text(message.get("content")).strip()
                         if text:
                             summary = text[-2_000:]
+                            answer = ""
+                            terminal_id = ""
+                            error_id = ""
+                    continue
+                if record.get("type") == "system" and record.get("subtype") == "api_error":
+                    stable_error_id = str(record.get("uuid") or "").strip()
+                    if stable_error_id:
+                        error_id = stable_error_id
+                        answer = ""
                     continue
                 if record.get("type") != "assistant":
                     continue
@@ -95,36 +121,57 @@ def _transcript_context(value: object) -> tuple[str, str]:
                 text = _content_text(message.get("content")).strip()
                 if text:
                     answer = text[-24_000:]
+                if str(message.get("stop_reason") or "").lower() == "end_turn":
+                    stable_terminal_id = str(message.get("id") or record.get("uuid") or "").strip()
+                    if stable_terminal_id and answer:
+                        terminal_id = stable_terminal_id
+                        error_id = ""
     except OSError:
-        return "", ""
-    return summary, answer
+        return TranscriptProjection()
+    return TranscriptProjection(summary, answer, desktop_transcript, terminal_id, error_id)
 
 
-def _transcript_answer(value: object) -> str:
-    return _transcript_context(value)[1]
-
-
-def _transcript_context_retry(value: object) -> tuple[str, str]:
+def _transcript_context_retry(value: object, event_name: str, expected_error_ids: set[str]) -> TranscriptProjection:
     if not isinstance(value, str) or not Path(value).is_file():
         return _transcript_context(value)
     for attempt in range(5):
-        summary, answer = _transcript_context(value)
-        if summary and answer or attempt == 4:
-            return summary, answer
+        projection = _transcript_context(value)
+        ready = projection.summary and projection.answer
+        if projection.desktop_transcript:
+            if event_name == "Stop":
+                ready = bool(projection.terminal_id and projection.answer)
+            elif event_name == "StopFailure":
+                ready = bool(projection.error_id and projection.error_id in expected_error_ids)
+            else:
+                ready = True
+        if ready or attempt == 4:
+            return projection
         time.sleep(0.1)
-    return "", ""
+    return TranscriptProjection()
 
-def _assistant_answer(item: dict, transcript_path: Path | None = None) -> str:
+def _assistant_answer(item: dict) -> str:
     for key in ("last_assistant_message", "last-assistant-message", "lastAssistantMessage", "assistant_message", "assistantMessage"):
         value = item.get(key)
         text = _content_text(value).strip()
         if text:
             return text[-24_000:]
-    return _transcript_answer(str(transcript_path)) if transcript_path else ""
+    return ""
 
 def _turn_id(item: dict) -> str:
     value = item.get("turn_id") or item.get("tool_use_id") or item.get("uuid") or item.get("timestamp")
     return str(value) if value else f"hook-{uuid.uuid4().hex}"
+
+
+def _explicit_turn_ids(item: dict) -> set[str]:
+    return {
+        str(value).strip()
+        for key in ("turn_id", "tool_use_id", "uuid", "timestamp")
+        if (value := item.get(key)) is not None and str(value).strip()
+    }
+
+
+def _desktop_terminal_event_id(kind: str, stable_id: str, status: str) -> str:
+    return f"claude-desktop:{kind}:{stable_id}:{status}"
 
 def main() -> int:
     raw = sys.stdin.read().strip()
@@ -141,24 +188,51 @@ def main() -> int:
         return 0
     status = "tool_failed" if name == "PostToolUseFailure" else "failed" if name != "Stop" else "completed"
     session_id = str(item.get("session_id") or item.get("agent_id") or "unknown-session")
-    turn_id = _turn_id(item)
-    event_id = str(item.get("event_id") or f"{session_id}:{name}:{turn_id}")
     error = _text(item.get("error") or item.get("error_details"))
-    message = _text(item.get("message") or error or item.get("stop_reason") or name)
     task_summary = _summary(item)
     transcript_path = _transcript_path(item)
-    transcript_summary, transcript_answer = _transcript_context_retry(str(transcript_path) if transcript_path else None)
+    explicit_turn_ids = _explicit_turn_ids(item)
+    transcript = _transcript_context_retry(
+        str(transcript_path) if transcript_path else None,
+        name,
+        explicit_turn_ids,
+    )
     if not task_summary:
-        task_summary = transcript_summary
-    assistant_answer = _assistant_answer(item, transcript_path) if status == "completed" else ""
-    assistant_answer = assistant_answer or transcript_answer
+        task_summary = transcript.summary
+
+    desktop = transcript.desktop_transcript
+    source = "claude-desktop" if desktop else "claude"
+    client = "claude-desktop" if desktop else "claude-cli"
+    if desktop and name == "Stop":
+        if not transcript.terminal_id:
+            return 0
+        turn_id = transcript.terminal_id
+        event_id = _desktop_terminal_event_id("assistant", turn_id, "completed")
+        title = "Claude Desktop task completed"
+        message = title
+    elif desktop and name == "StopFailure":
+        if not transcript.error_id or transcript.error_id not in explicit_turn_ids:
+            return 0
+        turn_id = transcript.error_id
+        event_id = _desktop_terminal_event_id("system", turn_id, "failed")
+        title = "Claude Desktop task failed"
+        message = _text(item.get("message") or error or title)
+    else:
+        turn_id = _turn_id(item)
+        event_id = str(item.get("event_id") or f"{session_id}:{name}:{turn_id}")
+        title = f"Claude Desktop {name}" if desktop else f"Claude {name}"
+        message = _text(item.get("message") or error or item.get("stop_reason") or name)
+
+    assistant_answer = ""
+    if status == "completed":
+        assistant_answer = _assistant_answer(item) or transcript.answer
     event = {
-        "source": "claude",
-        "client": "claude-cli",
+        "source": source,
+        "client": client,
         "event_id": event_id,
         "kind": name,
         "status": status,
-        "title": f"Claude {name}",
+        "title": title,
         "message": message,
         "error_code": _text(item.get("error_code") or (error if status in {"failed", "tool_failed"} else ""), 200) or None,
         "metadata": {

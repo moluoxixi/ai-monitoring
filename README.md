@@ -75,7 +75,22 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 主界面：[http://127.0.0.1:8787](http://127.0.0.1:8787)。任务详情和通知记录使用 `data/monitor.db` 下的本地 SQLite，单机部署不需要 Docker、PostgreSQL、ClickHouse、Redis 或 MinIO。
 
-安装脚本注册 Claude、Codex、Hermes 和 Cursor 的 hooks/notify 适配器，并只读监听 Qoder 的 `~/.qoder/projects` session 与 Qoder 自身 `agent.log`。安装或升级时会备份 Qoder 设置并精确移除旧版 `qoder_event_adapter.py` 条目，不会改动其它 Qoder hooks。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，不进入仓库。Hermes 首次运行还需要用 `hermes --accept-hooks` 启动一次实际任务，或在交互终端确认本项目 hook；未获 Hermes 安全同意前不会报告已配置。
+安装脚本注册 Claude、Codex、Hermes 和 Cursor 的 hooks/notify 适配器，并只读监听 Qoder 的 `~/.qoder/projects` session 与 Qoder 自身 `agent.log`。每个集成通过稳定的 adapter 文件名标识本项目条目，重复安装会替换旧条目而不会叠加。安装或升级时会备份 Codex、Claude、Qoder、Hermes、Cursor 配置和 Codex notify targets，并精确移除旧版 `qoder_event_adapter.py` 条目，不会改动其它 Qoder hooks。配置备份保存在 `%LOCALAPPDATA%\AI-Monitor\config-backups`，每个新备份含 `manifest.json`，不进入仓库。Hermes 首次运行还需要用 `hermes --accept-hooks` 启动一次实际任务，或在交互终端确认本项目 hook；未获 Hermes 安全同意前不会报告已配置。
+
+卸载时默认使用精确 marker 删除 AI Monitor 条目，保留用户其他 hooks 和设置：
+
+```powershell
+.\scripts\uninstall-hooks.ps1 -RemoveOnly
+```
+
+如需完整恢复某次安装前的配置，必须显式指定带 manifest 的备份目录：
+
+```powershell
+.\scripts\uninstall-hooks.ps1 -RestoreBackup `
+  -BackupPath "$env:LOCALAPPDATA\AI-Monitor\config-backups\20260819-120000-000"
+```
+
+`RestoreBackup` 会覆盖备份时已存在的配置文件；对当时不存在的文件，只移除本项目 marker，保留安装后新增的用户配置。两种模式都会卸载 OpenClaw `ai-monitor-replies`，但保留 `openclaw-qqbot`、`openclaw-weixin`、扫码登录态和整个 OpenClaw state 目录。已知 state 路径时还会移除其中的精确 bootstrap marker；桌面包或外部 Gateway 使用非默认 state 时传入 `-OpenClawStateDir <path>`。只清理 AI 客户 hooks 时使用 `-SkipOpenClaw`。
 
 扩展页首次启动会按当前环境的进程、PATH 命令和 canonical 配置目录做隔离扫描；Windows 主机显示检测结果，容器或不支持的平台扫描会回退到全部支持目录。用户可在扩展设置中保存要展示的平台集合，这只影响界面，不会停止事件采集、数据库归类或通知投递。消息平台绑定后全局生效：绑定多少个，所有 AI 软件的新事件就向多少个通道分别创建 outbox 投递，其中一个失败不会阻断其它通道。不绑定通道时事件仍保留在本地，但不会产生外发消息。
 

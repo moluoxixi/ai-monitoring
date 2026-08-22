@@ -1,0 +1,4 @@
+{"_example": "Fill with {\"file\": \"<path>\", \"reason\": \"<why>\"}. Put spec/research files only — no code paths. Run `python .trellis/scripts/get_context.py --mode packages` to list available specs. Delete this line once real entries are added."}
+{"file": ".trellis/spec/server/backend/quality-guidelines.md", "reason": "Runtime adapter and JSONL watcher contract requirements"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-language producer, watcher, and database ID boundary"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Shared scoped ID helper and duplicate parser contract"}

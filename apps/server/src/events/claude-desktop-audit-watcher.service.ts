@@ -1,12 +1,13 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { watch, type FSWatcher } from 'chokidar';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { AppConfigService } from '../config/app-config.service';
 import { ChannelsService } from '../channels/channels.service';
 import type { NormalizedEvent } from '../database/database.types';
 import { EventIngestionService } from './event-ingestion.service';
-import { hasClaudeDesktopEntrypoint } from './claude-desktop-transcript';
+import { scopedSourceEventId } from './event-normalizer';
 import { recordValue } from '../utils/event-record';
 import { sanitizeFailureMessage, summarizeTask, truncateTail } from '../utils/event-text';
 
@@ -16,6 +17,8 @@ interface TranscriptFileState {
   taskSummary: string;
   answerSource: string;
   desktopTranscript: boolean;
+  birthtimeMs: number;
+  prefixDigest: string;
 }
 
 const contentText = (value: unknown): string => {
@@ -52,8 +55,22 @@ export interface ClaudeDesktopTranscriptResult {
   answerSource: string;
   desktopTranscript: boolean;
   suppressProvisional?: boolean;
+  terminalIdentity?: string;
+  terminalTimestampMs?: number;
   event?: NormalizedEvent;
 }
+
+export const claudeDesktopTerminalEventId = (
+  kind: 'assistant' | 'system',
+  stableId: string,
+  status: 'completed' | 'failed',
+): string => `claude-desktop:${kind}:${stableId}:${status}`;
+
+const transcriptTimestampMs = (value: unknown): number | undefined => {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+  const parsed = typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
 
 export const parseClaudeDesktopTranscriptLine = (
   line: string,
@@ -74,9 +91,11 @@ export const parseClaudeDesktopTranscriptLine = (
     };
   }
   const item = recordValue(raw);
-  const desktopTranscript = currentDesktopTranscript || item.entrypoint === 'claude-desktop-3p';
+  const sidechain = item.isSidechain === true;
+  const desktopTranscript = currentDesktopTranscript
+    || (!sidechain && item.entrypoint === 'claude-desktop-3p');
   const sessionId = String(item.sessionId || item.session_id || currentSessionId);
-  if (!desktopTranscript || item.isSidechain === true) {
+  if (!desktopTranscript || sidechain) {
     return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript };
   }
 
@@ -114,7 +133,10 @@ export const parseClaudeDesktopTranscriptLine = (
     if (!answer) {
       return { sessionId, taskSummary: currentTaskSummary, answerSource: '', desktopTranscript };
     }
-    const turnId = String(message.id || item.uuid || item.timestamp || '');
+    const turnId = String(message.id || item.uuid || '');
+    const terminalIdentity = turnId
+      ? claudeDesktopTerminalEventId('assistant', turnId, 'completed')
+      : '';
     if (!sessionId || !turnId) {
       return { sessionId, taskSummary: currentTaskSummary, answerSource: answer, desktopTranscript };
     }
@@ -123,8 +145,10 @@ export const parseClaudeDesktopTranscriptLine = (
       taskSummary: currentTaskSummary,
       answerSource: answer,
       desktopTranscript,
+      terminalIdentity,
+      terminalTimestampMs: transcriptTimestampMs(item.timestamp),
       event: {
-        source_event_id: `${sessionId}:transcript:${turnId}:completed`,
+        source_event_id: scopedSourceEventId('claude-desktop', 'claude-desktop', terminalIdentity),
         source: 'claude-desktop',
         client: 'claude-desktop',
         kind: 'assistant',
@@ -145,7 +169,10 @@ export const parseClaudeDesktopTranscriptLine = (
   if (item.type === 'system' && item.subtype === 'api_error') {
     const error = recordValue(item.error);
     const failureMessage = sanitizeFailureMessage(textValue(error.message || item.error), true);
-    const turnId = String(item.uuid || item.timestamp || '');
+    const turnId = String(item.uuid || '');
+    const terminalIdentity = turnId
+      ? claudeDesktopTerminalEventId('system', turnId, 'failed')
+      : '';
     if (!sessionId || !turnId) {
       return { sessionId, taskSummary: currentTaskSummary, answerSource: '', desktopTranscript };
     }
@@ -154,8 +181,10 @@ export const parseClaudeDesktopTranscriptLine = (
       taskSummary: currentTaskSummary,
       answerSource: '',
       desktopTranscript,
+      terminalIdentity,
+      terminalTimestampMs: transcriptTimestampMs(item.timestamp),
       event: {
-        source_event_id: `${sessionId}:transcript:${turnId}:failed`,
+        source_event_id: scopedSourceEventId('claude-desktop', 'claude-desktop', terminalIdentity),
         source: 'claude-desktop',
         client: 'claude-desktop',
         kind: 'api_error',
@@ -180,7 +209,8 @@ export const parseClaudeDesktopTranscriptLine = (
 export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ClaudeDesktopTranscriptWatcherService.name);
   private readonly transcriptFiles = new Map<string, TranscriptFileState>();
-  private readonly startupTranscriptFiles = new Set<string>();
+  private readonly startupTranscriptFiles = new Map<string, number>();
+  private readonly seenTerminalIds = new Set<string>();
   private readonly watchedRoots = new Set<string>();
   private readonly watchers: FSWatcher[] = [];
   private queue = Promise.resolve();
@@ -215,7 +245,13 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
     if (this.watchedRoots.has(key)) return;
     const predicate = (path: string): boolean => extname(path).toLowerCase() === '.jsonl'
       && !path.toLowerCase().endsWith('audit.jsonl');
-    this.captureStartupFiles(resolved, predicate).forEach((path) => this.startupTranscriptFiles.add(path));
+    this.captureStartupFiles(resolved, predicate).forEach((path) => {
+      try {
+        this.startupTranscriptFiles.set(path, statSync(path).size);
+      } catch {
+        // Chokidar will treat files that disappear during discovery normally.
+      }
+    });
     const watcher = watch(resolved, {
       ignoreInitial: false,
       ignored: (path, stats) => Boolean(stats?.isFile()) && !predicate(path),
@@ -237,22 +273,24 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
 
   private addFile(path: string, predicate: (path: string) => boolean): void {
     if (!predicate(path)) return;
-    let size: number;
+    let stats: ReturnType<typeof statSync>;
     try {
-      size = statSync(path).size;
+      stats = statSync(path);
     } catch {
       return;
     }
-    const startup = this.startupTranscriptFiles.delete(path);
-    const offset = startup ? size : 0;
-    this.transcriptFiles.set(path, {
-      offset,
-      sessionId: '',
-      taskSummary: '',
-      answerSource: '',
-      desktopTranscript: startup && this.isDesktopTranscript(path),
-    });
-    if (size > 0 && this.transcriptFiles.get(path)?.offset === 0) {
+    const size = stats.size;
+    const observedAt = Date.now();
+    const birthtimeMs = Number.isFinite(stats.birthtimeMs) && stats.birthtimeMs > 0
+      ? stats.birthtimeMs
+      : observedAt;
+    const startupSize = this.startupTranscriptFiles.get(path);
+    this.startupTranscriptFiles.delete(path);
+    const state = startupSize !== undefined
+      ? this.seedStartupFile(path, startupSize, birthtimeMs)
+      : this.emptyFileState(birthtimeMs);
+    this.transcriptFiles.set(path, state);
+    if (size > state.offset) {
       this.enqueue(path);
     }
   }
@@ -263,12 +301,52 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
     });
   }
 
-  private isDesktopTranscript(path: string): boolean {
+  private emptyFileState(birthtimeMs: number): TranscriptFileState {
+    return {
+      offset: 0,
+      sessionId: '',
+      taskSummary: '',
+      answerSource: '',
+      desktopTranscript: false,
+      birthtimeMs,
+      prefixDigest: '',
+    };
+  }
+
+  private seedStartupFile(path: string, snapshotSize: number, birthtimeMs: number): TranscriptFileState {
+    const state = this.emptyFileState(birthtimeMs);
+    let bytes: Buffer;
     try {
-      return hasClaudeDesktopEntrypoint(readFileSync(path, 'utf8'));
+      bytes = readFileSync(path);
     } catch {
-      return false;
+      state.offset = snapshotSize;
+      return state;
     }
+    const snapshotEnd = Math.min(snapshotSize, bytes.length);
+    const lastNewline = bytes.subarray(0, snapshotEnd).lastIndexOf(0x0a);
+    state.offset = lastNewline < 0 ? 0 : lastNewline + 1;
+    state.prefixDigest = this.prefixDigest(bytes, state.offset);
+    const source = bytes.subarray(0, state.offset).toString('utf8');
+    for (const rawLine of source.split(/\r?\n/)) {
+      if (!rawLine.trim()) continue;
+      const parsed = parseClaudeDesktopTranscriptLine(
+        rawLine,
+        state.sessionId,
+        state.taskSummary,
+        state.answerSource,
+        state.desktopTranscript,
+      );
+      state.sessionId = parsed.sessionId;
+      state.taskSummary = parsed.taskSummary;
+      state.answerSource = parsed.event ? '' : parsed.answerSource;
+      state.desktopTranscript = parsed.desktopTranscript;
+      if (parsed.terminalIdentity) this.seenTerminalIds.add(parsed.terminalIdentity);
+    }
+    return state;
+  }
+
+  private prefixDigest(bytes: Buffer, length: number): string {
+    return createHash('sha256').update(bytes.subarray(0, length)).digest('hex');
   }
 
   private captureStartupFiles(root: string, predicate: (path: string) => boolean): string[] {
@@ -287,19 +365,18 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
   private syncTranscriptFile(path: string): void {
     if (!existsSync(path)) return;
     const bytes = readFileSync(path);
-    const current = this.transcriptFiles.get(path) || {
-      offset: 0,
-      sessionId: '',
-      taskSummary: '',
-      answerSource: '',
-      desktopTranscript: false,
-    };
-    if (bytes.length < current.offset) {
+    const current = this.transcriptFiles.get(path) || this.emptyFileState(Date.now());
+    const rewrittenPrefix = current.offset > 0
+      && bytes.length >= current.offset
+      && current.prefixDigest
+      && this.prefixDigest(bytes, current.offset) !== current.prefixDigest;
+    if (bytes.length < current.offset || rewrittenPrefix) {
       current.offset = 0;
       current.sessionId = '';
       current.taskSummary = '';
       current.answerSource = '';
       current.desktopTranscript = false;
+      current.prefixDigest = '';
     }
     const chunk = bytes.subarray(current.offset);
     const lastNewline = chunk.lastIndexOf(0x0a);
@@ -322,10 +399,18 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
         this.ingestion.suppressProvisionalFailures?.('claude-desktop', parsed.sessionId);
       }
       if (!parsed.event) continue;
+      const duplicateTerminal = Boolean(
+        parsed.terminalIdentity && this.seenTerminalIds.has(parsed.terminalIdentity),
+      );
+      const copiedHistory = parsed.terminalTimestampMs !== undefined
+        && parsed.terminalTimestampMs < current.birthtimeMs;
+      if (parsed.terminalIdentity) this.seenTerminalIds.add(parsed.terminalIdentity);
+      if (duplicateTerminal || copiedHistory) continue;
       const channels = this.channels.deliveryChannels();
       this.ingestion.ingest(parsed.event, channels, parsed.answerSource || undefined);
     }
     current.offset += lastNewline + 1;
+    current.prefixDigest = this.prefixDigest(bytes, current.offset);
     this.transcriptFiles.set(path, current);
   }
 }

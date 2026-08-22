@@ -46,25 +46,62 @@ if ($LASTEXITCODE -ne 0) {
     if ($LASTEXITCODE -ne 0) { throw "Failed to install the AI Monitor hook dependencies." }
 }
 
-$Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$BackupDir = Join-Path $env:LOCALAPPDATA "AI-Monitor\config-backups\$Timestamp"
+$Timestamp = Get-Date -Format "yyyyMMdd-HHmmss-fff"
+$BackupRoot = Join-Path $env:LOCALAPPDATA "AI-Monitor\config-backups"
+$BackupDir = Join-Path $BackupRoot $Timestamp
+$Suffix = 1
+while (Test-Path -LiteralPath $BackupDir) {
+    $BackupDir = Join-Path $BackupRoot "$Timestamp-$Suffix"
+    $Suffix += 1
+}
 New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
 
 $CodexConfig = Join-Path $env:USERPROFILE ".codex\config.toml"
 $ClaudeConfig = Join-Path $env:USERPROFILE ".claude\settings.json"
 $QoderConfig = Join-Path $env:USERPROFILE ".qoder\settings.json"
-if (Test-Path $CodexConfig) { Copy-Item -LiteralPath $CodexConfig -Destination (Join-Path $BackupDir "codex-config.toml") }
-if (Test-Path $ClaudeConfig) { Copy-Item -LiteralPath $ClaudeConfig -Destination (Join-Path $BackupDir "claude-settings.json") }
-if (Test-Path $QoderConfig) { Copy-Item -LiteralPath $QoderConfig -Destination (Join-Path $BackupDir "qoder-settings.json") }
 $HermesConfig = Join-Path $env:LOCALAPPDATA "hermes\config.yaml"
 if (-not (Test-Path $HermesConfig)) { $HermesConfig = Join-Path $env:USERPROFILE ".hermes\config.yaml" }
 $CursorConfig = Join-Path $env:USERPROFILE ".cursor\hooks.json"
-if (Test-Path $HermesConfig) { Copy-Item -LiteralPath $HermesConfig -Destination (Join-Path $BackupDir "hermes-config.yaml") }
-if (Test-Path $CursorConfig) { Copy-Item -LiteralPath $CursorConfig -Destination (Join-Path $BackupDir "cursor-hooks.json") }
+$CodexTargets = Join-Path $Root "data\codex-notify-targets.json"
+
+$BackupEntries = @()
+function Backup-ManagedFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Id,
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$BackupFile
+    )
+    $ResolvedSourcePath = [IO.Path]::GetFullPath($SourcePath)
+    $Existed = Test-Path -LiteralPath $ResolvedSourcePath -PathType Leaf
+    if ($Existed) {
+        Copy-Item -LiteralPath $ResolvedSourcePath -Destination (Join-Path $BackupDir $BackupFile)
+    }
+    $script:BackupEntries += [ordered]@{
+        id = $Id
+        path = $ResolvedSourcePath
+        existed = $Existed
+        backupFile = $BackupFile
+    }
+}
+
+Backup-ManagedFile "codex-config" $CodexConfig "codex-config.toml"
+Backup-ManagedFile "codex-notify-targets" $CodexTargets "codex-notify-targets.json"
+Backup-ManagedFile "claude-settings" $ClaudeConfig "claude-settings.json"
+Backup-ManagedFile "qoder-settings" $QoderConfig "qoder-settings.json"
+Backup-ManagedFile "hermes-config" $HermesConfig "hermes-config.yaml"
+Backup-ManagedFile "cursor-hooks" $CursorConfig "cursor-hooks.json"
+
+$Manifest = [ordered]@{
+    schemaVersion = 1
+    createdAt = (Get-Date).ToUniversalTime().ToString("o")
+    files = $BackupEntries
+}
+$ManifestJson = $Manifest | ConvertTo-Json -Depth 5
+$Utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[IO.File]::WriteAllText((Join-Path $BackupDir "manifest.json"), $ManifestJson + [Environment]::NewLine, $Utf8NoBom)
 
 $ConfigureCodex = Join-Path $PSScriptRoot "configure_codex_notify.py"
 $CodexWrapper = Join-Path $PSScriptRoot "codex_notify_multiplexer.py"
-$CodexTargets = Join-Path $Root "data\codex-notify-targets.json"
 & $ProjectPython $ConfigureCodex --config $CodexConfig --targets $CodexTargets --python $ProjectPython --wrapper $CodexWrapper
 if ($LASTEXITCODE -ne 0) { throw "Failed to configure the Codex notify multiplexer." }
 

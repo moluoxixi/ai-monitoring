@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeEvent, statusForKind } from '../src/events/event-normalizer';
+import { normalizeEvent, scopedSourceEventId, statusForKind } from '../src/events/event-normalizer';
 
 describe('event normalizer', () => {
   it('detects tool and API failures', () => {
@@ -26,5 +26,7 @@ describe('event normalizer', () => {
       qoderCli.source_event_id,
       qoderDesktop.source_event_id,
     ])).toHaveLength(3);
+    expect(scopedSourceEventId('claude-desktop', 'claude-desktop', 'claude-desktop:assistant:message-1:completed'))
+      .toBe('v1:claude-desktop:claude-desktop:claude-desktop:assistant:message-1:completed');
   });
 });

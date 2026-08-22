@@ -9,6 +9,18 @@ import yaml
 
 
 EVENTS = ("on_session_end", "api_request_error")
+ADAPTER_MARKER = "hermes_event_adapter.py"
+
+
+def _is_monitor_command(value: object) -> bool:
+    return ADAPTER_MARKER in str(value or "").lower()
+
+
+def _write_document(config_path: Path, document: dict[object, object]) -> None:
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = config_path.with_suffix(config_path.suffix + ".tmp")
+    temporary.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    temporary.replace(config_path)
 
 
 def default_config_path() -> Path:
@@ -30,7 +42,11 @@ def configure(config_path: Path, command: str) -> bool:
         entries = hooks.get(event)
         if not isinstance(entries, list):
             entries = []
-        filtered = [entry for entry in entries if not (isinstance(entry, dict) and "ai-monitor" in str(entry.get("command", "")))]
+        filtered = [
+            entry
+            for entry in entries
+            if not (isinstance(entry, dict) and _is_monitor_command(entry.get("command")))
+        ]
         desired = {"command": command, "timeout": 10}
         if desired not in filtered:
             filtered.append(desired)
@@ -41,11 +57,45 @@ def configure(config_path: Path, command: str) -> bool:
         document["hooks"] = hooks
         changed = True
     if changed:
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = config_path.with_suffix(config_path.suffix + ".tmp")
-        temporary.write_text(yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding="utf-8")
-        temporary.replace(config_path)
+        _write_document(config_path, document)
     return changed
+
+
+def remove(config_path: Path) -> bool:
+    try:
+        document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    except yaml.YAMLError as exc:
+        raise ValueError(f"invalid Hermes config YAML: {config_path}") from exc
+    if not isinstance(document, dict):
+        return False
+    hooks = document.get("hooks")
+    if not isinstance(hooks, dict):
+        return False
+    changed = False
+    for event in EVENTS:
+        entries = hooks.get(event)
+        if not isinstance(entries, list):
+            continue
+        filtered = [
+            entry
+            for entry in entries
+            if not (isinstance(entry, dict) and _is_monitor_command(entry.get("command")))
+        ]
+        if filtered == entries:
+            continue
+        changed = True
+        if filtered:
+            hooks[event] = filtered
+        else:
+            hooks.pop(event, None)
+    if not changed:
+        return False
+    if not hooks:
+        document.pop("hooks", None)
+    _write_document(config_path, document)
+    return True
 
 
 def main() -> int:
