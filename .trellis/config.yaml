@@ -165,4 +165,4 @@ packages:
     path: apps/web
   desktop:
     path: apps/desktop
-default_package: @ai-monitor/server
+default_package: server

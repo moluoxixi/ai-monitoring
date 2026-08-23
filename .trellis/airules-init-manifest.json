@@ -7,19 +7,19 @@
   "entries": {
     ".agents/skills/trellis-knowledge/references/organization.md": {
       "kind": "file",
-      "installedHash": "40e94d6a5ad094133911520b465cabc1bbdaea70d9bcfd2b7ef84e31bef96107",
+      "installedHash": "2b6a85b2163a447050f4a0fc7f89007c045d69385cef347a4bea4e48a4d134cc",
       "ownership": {
         "type": "created"
       },
-      "sourceHash": "40e94d6a5ad094133911520b465cabc1bbdaea70d9bcfd2b7ef84e31bef96107"
+      "sourceHash": "2b6a85b2163a447050f4a0fc7f89007c045d69385cef347a4bea4e48a4d134cc"
     },
     ".agents/skills/trellis-knowledge/SKILL.md": {
       "kind": "file",
-      "installedHash": "66bef47fafff249685085847133b412f0b653066f841f96e02a0f972815d4a16",
+      "installedHash": "dae063bb153daa805c668c297d18ad8caf8e53ffa99475ec6da3b3b0c3e65752",
       "ownership": {
         "type": "created"
       },
-      "sourceHash": "66bef47fafff249685085847133b412f0b653066f841f96e02a0f972815d4a16"
+      "sourceHash": "dae063bb153daa805c668c297d18ad8caf8e53ffa99475ec6da3b3b0c3e65752"
     },
     ".codex/hooks.json": {
       "kind": "json-hook",
@@ -33,46 +33,46 @@
     },
     ".trellis/knowledge/.gitignore": {
       "kind": "file",
-      "installedHash": "05066f3ef59e742365a1328b4cad2408b5b73d3981307cf3b75a02ac4c5bd666",
+      "installedHash": "1ec7c05e6ad0cdb53b6702cfbf73809933e484fbc0fc5260dc8dfe87d9b6ec72",
       "ownership": {
         "type": "created"
       },
-      "sourceHash": "05066f3ef59e742365a1328b4cad2408b5b73d3981307cf3b75a02ac4c5bd666"
+      "sourceHash": "1ec7c05e6ad0cdb53b6702cfbf73809933e484fbc0fc5260dc8dfe87d9b6ec72"
     },
     ".trellis/scripts/common/knowledge.py": {
       "kind": "file",
-      "installedHash": "7d3fb123462b339c440fe060f8f13d40bd41b121894221ea34c6520a141640cc",
+      "installedHash": "1e837867527eaf1fb4bf99c74cee33f87b32153da4195e359f43e44b40fb8384",
       "ownership": {
         "type": "created"
       },
-      "sourceHash": "7d3fb123462b339c440fe060f8f13d40bd41b121894221ea34c6520a141640cc"
+      "sourceHash": "1e837867527eaf1fb4bf99c74cee33f87b32153da4195e359f43e44b40fb8384"
     },
     ".trellis/scripts/knowledge-hook.py": {
       "kind": "file",
-      "installedHash": "1681ebaba7bd63cb9c3751d1a70881f0bbfb0fcf1336d31d6c45ed9a19908856",
+      "installedHash": "9092c7c3c051fe1b3bf2da4f5e973287196535ad7c4392a81e27a522ab890c3c",
       "ownership": {
         "type": "created"
       },
-      "sourceHash": "1681ebaba7bd63cb9c3751d1a70881f0bbfb0fcf1336d31d6c45ed9a19908856"
+      "sourceHash": "9092c7c3c051fe1b3bf2da4f5e973287196535ad7c4392a81e27a522ab890c3c"
     },
     ".trellis/scripts/knowledge.py": {
       "kind": "file",
-      "installedHash": "1860a8403701ebd828e98dbfc9c99b40251576bfe8db677e393ec46b8640f054",
+      "installedHash": "87364c1fcab42e3d835294db70bbaac3bdfa8fbc6b0d781b6b16dbb0b1307c8f",
       "ownership": {
         "type": "created"
       },
-      "sourceHash": "1860a8403701ebd828e98dbfc9c99b40251576bfe8db677e393ec46b8640f054"
+      "sourceHash": "87364c1fcab42e3d835294db70bbaac3bdfa8fbc6b0d781b6b16dbb0b1307c8f"
     },
     "AGENTS.md": {
       "kind": "block",
-      "installedHash": "650a4390945f20c895dc7696e573c2603190cde480245db4182188f5aaf72d6f",
-      "installedBlockHash": "1a47c1c7c0091a6ed592b0cda6f86f11cd8e1fb1240821ced1a72d863b4255b7",
+      "installedHash": "6f6aa6d94ce2d574add5bf6a5183f750ad6a17b4a349d03d9db875d778f9d17d",
+      "installedBlockHash": "0ac7042df3247aac707495c102b116905e298cc7e67c508513cb78bc2640115f",
       "ownership": {
         "type": "modified",
         "originalContent": "PCEtLSBUUkVMTElTOlNUQVJUIC0tPgojIFRyZWxsaXMgSW5zdHJ1Y3Rpb25zCgpUaGVzZSBpbnN0cnVjdGlvbnMgYXJlIGZvciBBSSBhc3Npc3RhbnRzIHdvcmtpbmcgaW4gdGhpcyBwcm9qZWN0LgoKVGhpcyBwcm9qZWN0IGlzIG1hbmFnZWQgYnkgVHJlbGxpcy4gVGhlIHdvcmtpbmcga25vd2xlZGdlIHlvdSBuZWVkIGxpdmVzIHVuZGVyIGAudHJlbGxpcy9gOgoKLSBgLnRyZWxsaXMvd29ya2Zsb3cubWRgIOKAlCBkZXZlbG9wbWVudCBwaGFzZXMsIHdoZW4gdG8gY3JlYXRlIHRhc2tzLCBza2lsbCByb3V0aW5nCi0gYC50cmVsbGlzL3NwZWMvYCDigJQgcGFja2FnZS0gYW5kIGxheWVyLXNjb3BlZCBjb2RpbmcgZ3VpZGVsaW5lcyAocmVhZCBiZWZvcmUgd3JpdGluZyBjb2RlIGluIGEgZ2l2ZW4gbGF5ZXIpCi0gYC50cmVsbGlzL3dvcmtzcGFjZS9gIOKAlCBwZXItZGV2ZWxvcGVyIGpvdXJuYWxzIGFuZCBzZXNzaW9uIHRyYWNlcwotIGAudHJlbGxpcy90YXNrcy9gIOKAlCBhY3RpdmUgYW5kIGFyY2hpdmVkIHRhc2tzIChQUkRzLCByZXNlYXJjaCwganNvbmwgY29udGV4dCkKCklmIGEgVHJlbGxpcyBjb21tYW5kIGlzIGF2YWlsYWJsZSBvbiB5b3VyIHBsYXRmb3JtIChlLmcuIGAvdHJlbGxpczpmaW5pc2gtd29ya2AsIGAvdHJlbGxpczpjb250aW51ZWApLCBwcmVmZXIgaXQgb3ZlciBtYW51YWwgc3RlcHMuIE5vdCBldmVyeSBwbGF0Zm9ybSBleHBvc2VzIGV2ZXJ5IGNvbW1hbmQuCgpJZiB5b3UncmUgdXNpbmcgQ29kZXggb3IgYW5vdGhlciBhZ2VudC1jYXBhYmxlIHRvb2wsIGFkZGl0aW9uYWwgcHJvamVjdC1zY29wZWQgaGVscGVycyBtYXkgbGl2ZSBpbjoKLSBgLmFnZW50cy9za2lsbHMvYCDigJQgcmV1c2FibGUgVHJlbGxpcyBza2lsbHMKLSBgLmNvZGV4L2FnZW50cy9gIOKAlCBvcHRpb25hbCBjdXN0b20gc3ViYWdlbnRzCgpNYW5hZ2VkIGJ5IFRyZWxsaXMuIEVkaXRzIG91dHNpZGUgdGhpcyBibG9jayBhcmUgcHJlc2VydmVkOyBlZGl0cyBpbnNpZGUgbWF5IGJlIG92ZXJ3cml0dGVuIGJ5IGEgZnV0dXJlIGB0cmVsbGlzIHVwZGF0ZWAuCgo8IS0tIFRSRUxMSVM6RU5EIC0tPgo=",
         "originalHash": "6cacfe99748b435d0660c2463c697bc323d53798aecf3492283ca8eac1b29682"
       },
-      "sourceHash": "259115ae2436d3312b079ba05b2f25d925c19e4acc2c250a05948e25fd62a1c3"
+      "sourceHash": "54773c990354ab9c28fdedfe336b4616983cc5b64fc7ac7305409399c3e24627"
     }
   }
 }
