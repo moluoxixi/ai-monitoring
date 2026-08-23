@@ -400,14 +400,20 @@ export class DatabaseService implements OnModuleDestroy {
     return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as ReplyRoute;
   }
 
-  setReplyThreadId(deliveryId: number, threadId: string): string | null {
-    const normalized = threadId.trim();
-    if (!normalized) return null;
-    const result = this.db.prepare(`
-      UPDATE deliveries SET reply_thread_id = ?
-      WHERE id = ? AND reply_thread_id IS NULL
-    `).run(normalized, deliveryId);
-    if (result.changes > 0) return normalized;
+  advanceReplyThreadId(deliveryId: number, expectedThreadId: string | null, nextThreadId: string): string | null {
+    const normalizedNext = nextThreadId.trim();
+    if (!normalizedNext) return null;
+    const normalizedExpected = expectedThreadId?.trim() || null;
+    const result = normalizedExpected === null
+      ? this.db.prepare(`
+        UPDATE deliveries SET reply_thread_id = ?
+        WHERE id = ? AND reply_thread_id IS NULL
+      `).run(normalizedNext, deliveryId)
+      : this.db.prepare(`
+        UPDATE deliveries SET reply_thread_id = ?
+        WHERE id = ? AND reply_thread_id = ?
+      `).run(normalizedNext, deliveryId, normalizedExpected);
+    if (result.changes > 0) return normalizedNext;
     const existing = this.db.prepare('SELECT reply_thread_id FROM deliveries WHERE id = ?').get(deliveryId) as
       { reply_thread_id: string | null } | undefined;
     return existing?.reply_thread_id?.trim() || null;

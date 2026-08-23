@@ -57,6 +57,100 @@ Questions to answer:
   for an ineligible task, asserting that both are handled and that only the
   eligible case reaches the platform dispatcher.
 
+## Scenario: External Thread Writer Ownership
+
+### 1. Scope / Trigger
+
+- Apply this contract when a notification reply continues an external runtime
+  thread and another client can retain or reacquire that thread's writer.
+- Treat a new completion notification as a new local delivery, not as evidence
+  that the referenced external thread is safe to resume.
+
+### 2. Signatures
+
+```typescript
+advanceReplyThreadId(
+  deliveryId: number,
+  expectedThreadId: string | null,
+  nextThreadId: string,
+): string | null
+```
+
+- Reply routes project `metadata.thread_id` as immutable provenance and
+  nullable `reply_thread_id` as the latest persistent fork-chain head.
+- Codex continuation dispatch uses `thread/fork(ephemeral: false,
+  threadSource: "cli")`, followed by `turn/start` on the returned thread ID.
+
+### 3. Contracts
+
+- Treat runtime writer ownership as scoped to the external thread ID, not to a
+  local delivery, request, or service instance.
+- A new notification for an existing thread creates a new local delivery; this
+  must not erase the thread lineage or make direct resume safe.
+- When an external client can retain or reacquire the writer, continue work by
+  forking from the latest persisted head. Do not retry `thread/resume` against
+  the occupied thread or infer availability from the previous turn completing.
+- Advance a persisted fork head with compare-and-swap so stale service
+  instances fail closed instead of silently replacing newer lineage.
+- Serialize replies for one delivery through writer release, then refresh the
+  route before dispatching the next fork.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| Source thread is loaded by Desktop or another client | Fork from the observed head; never retry direct resume |
+| `thread/fork` or `turn/start` fails | Do not advance the persisted head; mark the inbound reply failed |
+| Compare-and-swap sees a different current head | Fail closed and retain the winning head |
+| Duplicate external message ID was already accepted | Return the stored accepted result without another dispatch |
+| Fork completion inherits Desktop markers but has `thread_source: "cli"` | Classify it as Codex CLI and make its QQ notification fork-capable |
+
+### 5. Good / Base / Bad Cases
+
+- Good: two replies to one delivery wait for each writer release and advance
+  `original -> fork-1 -> fork-2`.
+- Base: a CLI-sourced Desktop fork completion creates a new CLI delivery whose
+  first reply forks from that completion thread.
+- Bad: classify the new delivery as ordinary CLI and call `thread/resume`; a
+  Desktop-loaded fork can then fail with `already has an active writer`.
+
+### 6. Tests Required
+
+- Cover two consecutive replies to one delivery and assert the second waits for
+  writer release, refreshes the route, forks from the first result, and advances
+  the head.
+- Cover a completion notification produced by a CLI-sourced Desktop fork and
+  assert it forks again rather than resuming the externally visible thread.
+- Cover stale compare-and-swap state and assert the inbound reply fails without
+  replacing the winning branch head.
+- The CLI-sourced Desktop completion regression must cross the watcher, event
+  ingestion, database delivery/token projection, inbound reply service, and
+  platform dispatcher. Adapter-only and parser-only tests are insufficient.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+const mode = route.client === 'codex-desktop' ? 'fork' : 'resume';
+await database.setReplyThreadId(route.delivery_id, result.threadId);
+```
+
+The client label does not describe current writer ownership, and first-write
+storage cannot advance an append-only continuation chain.
+
+#### Correct
+
+```typescript
+const sourceThreadId = route.reply_thread_id ?? route.metadata.thread_id;
+const result = await codex.dispatch({ mode: 'fork', threadId: sourceThreadId, text });
+const stored = database.advanceReplyThreadId(
+  route.delivery_id,
+  route.reply_thread_id,
+  result.threadId,
+);
+```
+
 ## Scenario: Windows Hosted Runner File Watcher Tests
 
 ### 1. Scope / Trigger

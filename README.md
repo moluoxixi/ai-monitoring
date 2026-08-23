@@ -19,8 +19,8 @@ Codex CLI
 
 QQ 引用回复 Codex 完成通知
   -> OpenClaw before_dispatch 插件 -> 通知中心 :8787
-  -> Codex CLI: thread/resume + turn/start -> 原 CLI 会话
-  -> Codex Desktop: thread/fork + turn/start -> 持久 CLI 分支（原 Desktop 会话不变）
+  -> Codex CLI/Desktop: thread/fork + turn/start -> 持久 CLI 分支链
+  -> 每条回复推进分支头，不抢占可能被 Desktop 持有的源 thread
 
 Codex Desktop
   -> Codex session watcher
@@ -161,9 +161,9 @@ QQ 可直接在通知中心绑定：
 3. 扫码凭据由腾讯官方 `@tencent-connect/qqbot-connector` 获取并写入 OpenClaw；本项目自己的绑定文件只保存发送所需的不透明 target/account ID，UI 和日志不展示这些值。
 4. 绑定完成后立即生效，之后所有 AI 软件的新事件都会发送到 QQ。
 
-Codex CLI 和 Codex Desktop 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。所有外发通知都会在正文开头显示 `[任务ID:...]`；可回复的 QQ 通知还会紧邻显示不透明的 `[AI-MONITOR-REPLY:...]` 路由标记，将标记放在开头可以避免 QQ 引用预览截断长正文。这类 QQ 通知正文不再附加开始时间、完成时间和总耗时字段。OpenClaw 只会认领“私聊 + 引用 + 有效标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端还会重新校验当前 QQ 绑定、标记有效期和 QQ message id 幂等，再通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 续接会话。CLI 通知使用 `thread/resume` 写回原 CLI 会话；Desktop 通知首次使用 `thread/fork` 创建持久 CLI 分支并启动 turn，后续引用直接 resume 该分支，Desktop 原会话及其 writer 始终不变。远程 turn 使用 `approvalPolicy: never`，不会停在无人处理的审批上，也不会绕过 Codex 自身安全限制。
+Codex CLI 和 Codex Desktop 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。所有外发通知都会在正文开头显示 `[任务ID:...]`；可回复的 QQ 通知还会紧邻显示不透明的 `[AI-MONITOR-REPLY:...]` 路由标记，将标记放在开头可以避免 QQ 引用预览截断长正文。这类 QQ 通知正文不再附加开始时间、完成时间和总耗时字段。OpenClaw 只会认领“私聊 + 引用 + 有效标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端还会重新校验当前 QQ 绑定、标记有效期和 QQ message id 幂等，再通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 续接会话。CLI 和 Desktop 通知的每条引用回复都会从该 delivery 的最新 thread 创建持久 CLI 分支，在新分支启动 turn，并原子推进分支头；不会直接 resume 可能正被 Desktop 或其他客户端持有的源 thread。远程 turn 使用 `approvalPolicy: never`，不会停在无人处理的审批上，也不会绕过 Codex 自身安全限制。插件确认语只表示后台 turn 已接受，完整回答会在完成后另发一条 QQ 消息。
 
-当前回复 MVP 仅覆盖 `openclaw-qq + Codex CLI/Desktop + 纯文本引用回复`，不支持 Claude/Qoder/Hermes/Cursor 或图片/语音。QQ 引用预览若只保留 `[任务ID:...]`、丢失不透明路由标记，服务端会用任务 ID 定位同一条 QQ delivery，但仍要求原 route 已生成且有效，并重新校验当前 QQ 绑定；不可续接任务会返回明确提示，不会落回 OpenClaw 模型。CLI 续接内容写入原 session；Desktop 首次续接会创建新的持久 CLI 分支，分支完成通知按 Codex CLI 归类，后续可继续回复，但不保证该分支出现在 Desktop 侧边栏。标记默认 30 天过期。同一 QQ message id 只会提交一次；未知的跨进程执行结果不会自动重放，避免向 Codex 创建重复 turn。
+当前回复 MVP 仅覆盖 `openclaw-qq + Codex CLI/Desktop + 纯文本引用回复`，不支持 Claude/Qoder/Hermes/Cursor 或图片/语音。QQ 引用预览若只保留 `[任务ID:...]`、丢失不透明路由标记，服务端会用任务 ID 定位同一条 QQ delivery，但仍要求原 route 已生成且有效，并重新校验当前 QQ 绑定；不可续接任务会返回明确提示，不会落回 OpenClaw 模型。CLI 和 Desktop 的引用回复都写入新的持久 CLI 分支；同一 delivery 的后续回复从已保存的最新分支继续 fork，因此保留对话历史而不争抢源 thread writer。分支完成通知按 Codex CLI 归类，后续可继续回复；分支可能被 Desktop 索引或打开，但 Desktop 是否显示它不属于 Monitor 的协议保证。标记默认 30 天过期。同一 QQ message id 只会提交一次；未知的跨进程执行结果不会自动重放，避免向 Codex 创建重复 turn。
 
 源码部署并复用全局 OpenClaw Gateway 时，首次启用、升级回复插件或修改 reply token 后运行 `node scripts/ensure-openclaw-plugins.mjs`，再执行 `openclaw gateway restart`。安装脚本会读取仓库 `.env`、安装回复插件并把鉴权配置写入 OpenClaw 本地 state；否则引用消息会落回普通 OpenClaw agent 路由。
 

@@ -470,9 +470,10 @@ describe('DatabaseService idempotent event enrichment', () => {
       reply_thread_id: null,
       client: 'codex-desktop',
     });
-    expect(database.setReplyThreadId(desktopDelivery.id, 'fork-thread-1')).toBe('fork-thread-1');
-    expect(database.setReplyThreadId(desktopDelivery.id, 'fork-thread-loser')).toBe('fork-thread-1');
-    expect(database.resolveReplyRoute(desktopToken!)).toMatchObject({ reply_thread_id: 'fork-thread-1' });
+    expect(database.advanceReplyThreadId(desktopDelivery.id, null, 'fork-thread-1')).toBe('fork-thread-1');
+    expect(database.advanceReplyThreadId(desktopDelivery.id, 'fork-thread-1', 'fork-thread-2')).toBe('fork-thread-2');
+    expect(database.advanceReplyThreadId(desktopDelivery.id, 'fork-thread-1', 'fork-thread-loser')).toBe('fork-thread-2');
+    expect(database.resolveReplyRoute(desktopToken!)).toMatchObject({ reply_thread_id: 'fork-thread-2' });
     expect(database.listDeliveries(10).some((row) => 'reply_thread_id' in row)).toBe(false);
 
     const [failedEventId] = database.insertEvent({

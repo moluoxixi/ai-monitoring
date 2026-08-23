@@ -106,12 +106,14 @@ export class RepliesService {
       if (!currentRoute) throw new Error('reply route disappeared before dispatch');
       const { writerReleased, ...result } = await this.dispatcher.dispatch(currentRoute, text);
       releaseAfter = writerReleased;
-      if (currentRoute.client === 'codex-desktop' && !currentRoute.reply_thread_id) {
-        const storedThreadId = this.database.setReplyThreadId(currentRoute.delivery_id, result.threadId);
-        if (!storedThreadId) throw new Error('Codex reply fork id could not be persisted');
-        if (storedThreadId !== result.threadId) {
-          throw new Error('another server process persisted a different Codex reply fork');
-        }
+      const storedThreadId = this.database.advanceReplyThreadId(
+        currentRoute.delivery_id,
+        currentRoute.reply_thread_id,
+        result.threadId,
+      );
+      if (!storedThreadId) throw new Error('Codex reply fork id could not be persisted');
+      if (storedThreadId !== result.threadId) {
+        throw new Error('another server process advanced the Codex reply fork');
       }
       return result;
     });

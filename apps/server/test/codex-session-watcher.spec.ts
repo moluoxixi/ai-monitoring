@@ -4,13 +4,17 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigService } from '../src/config/app-config.service';
 import type { ChannelsService } from '../src/channels/channels.service';
-import type { EventIngestionService } from '../src/events/event-ingestion.service';
+import { DatabaseService } from '../src/database/database.service';
+import { EventIngestionService } from '../src/events/event-ingestion.service';
 import {
   CodexSessionWatcherService,
   parseCodexSessionLine,
   sanitizeFailureMessage as legacySanitizeFailureMessage,
   summarizeTask as legacySummarizeTask,
 } from '../src/events/codex-session-watcher.service';
+import { ExtensionsService } from '../src/extensions/extensions.service';
+import { PlatformReplyDispatcherService } from '../src/replies/platform-reply-dispatcher.service';
+import { RepliesService } from '../src/replies/replies.service';
 import { sanitizeFailureMessage, summarizeTask } from '../src/utils/event-text';
 
 const tempDirectories: string[] = [];
@@ -340,6 +344,92 @@ describe('Codex session watcher parser', () => {
 });
 
 describe('Codex session file synchronization', () => {
+  it('routes a CLI-sourced Desktop fork completion through QQ as another fork', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'desktop-fork.jsonl');
+    writeFileSync(path, `${JSON.stringify({
+      type: 'session_meta',
+      payload: {
+        session_id: 'desktop-fork-thread',
+        source: 'vscode',
+        originator: 'Codex Desktop',
+        thread_source: 'cli',
+      },
+    })}\n`);
+    appendFileSync(path, `${terminalLine({
+      type: 'task_complete', turn_id: 'desktop-fork-turn', last_agent_message: 'fork completed',
+    })}\n`);
+    const database = new DatabaseService(
+      { dbPath: join(directory, 'monitor.db') } as AppConfigService,
+      new ExtensionsService(),
+    );
+
+    try {
+      const ingestion = new EventIngestionService(
+        database,
+        { answerCaptureGraceMs: 0, recoverableFailureGraceMs: 0 } as AppConfigService,
+        new ExtensionsService(),
+        { markMonitorVerified: vi.fn() } as never,
+      );
+      const watcher = new CodexSessionWatcherService(
+        { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService,
+        { deliveryChannels: vi.fn(() => ['openclaw-qq']) } as unknown as ChannelsService,
+        ingestion,
+      );
+
+      await watcher.syncFile(path, true);
+
+      expect(database.listEvents(10)[0]).toMatchObject({
+        client: 'codex-cli',
+        status: 'completed',
+        metadata: { thread_id: 'desktop-fork-thread', turn_id: 'desktop-fork-turn' },
+      });
+      const claimed = database.claimDueDeliveries(new Date().toISOString(), 20)[0];
+      expect(claimed).toBeDefined();
+      expect(database.markClaimedDelivery(claimed!.id, claimed!.lease_token!, {
+        state: 'sent', attempts: 1, nextAttemptAt: new Date().toISOString(), sentAt: new Date().toISOString(),
+      })).toBe(true);
+      const replyToken = database.ensureDeliveryReplyRoute(claimed!.id, 86_400_000);
+      expect(replyToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(database.resolveReplyRoute(replyToken!)).toMatchObject({
+        client: 'codex-cli',
+        reply_thread_id: null,
+        metadata: { thread_id: 'desktop-fork-thread' },
+      });
+
+      const codex = {
+        dispatch: vi.fn(async () => ({
+          threadId: 'next-fork-thread', turnId: 'next-turn', writerReleased: Promise.resolve(),
+        })),
+      };
+      const replies = new RepliesService(
+        database,
+        { matchesQqBinding: vi.fn(() => true) } as never,
+        new PlatformReplyDispatcherService(codex as never),
+      );
+      await replies.accept({
+        channel: 'openclaw-qq',
+        account_id: 'default',
+        sender_id: 'user-1',
+        message_id: 'qq-message-1',
+        text: '继续',
+        reply_to_body: `[AI-MONITOR-REPLY:${replyToken}]`,
+        reply_to_is_quote: true,
+        is_group: false,
+      });
+
+      expect(codex.dispatch).toHaveBeenCalledExactlyOnceWith({
+        mode: 'fork', threadId: 'desktop-fork-thread', text: '继续',
+      });
+      expect(database.resolveReplyRoute(replyToken!)).toMatchObject({
+        client: 'codex-cli', reply_thread_id: 'next-fork-thread',
+      });
+    } finally {
+      database.onModuleDestroy();
+    }
+  });
+
   it('recovers the session id before scanning the tail of a large file', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);

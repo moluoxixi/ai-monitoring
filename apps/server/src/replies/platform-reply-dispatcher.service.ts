@@ -19,7 +19,7 @@ export class PlatformReplyDispatcherService {
     }
     const replyThreadId = route.reply_thread_id?.trim();
     return this.codex.dispatch({
-      mode: route.client === 'codex-desktop' && !replyThreadId ? 'fork' : 'resume',
+      mode: 'fork',
       threadId: replyThreadId || originalThreadId.trim(),
       text,
     });

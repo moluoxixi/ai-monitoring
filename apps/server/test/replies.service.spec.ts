@@ -22,6 +22,7 @@ const serviceFor = (overrides: {
   duplicateState?: 'processing' | 'accepted' | 'failed';
   replyThreadId?: string | null;
 } = {}) => {
+  let dispatchCount = 0;
   const route: ReplyRoute = {
     delivery_id: 10, event_id: 5, channel: 'openclaw-qq', delivery_state: 'sent',
     reply_token: token, reply_expires_at: new Date(Date.now() + 60_000).toISOString(),
@@ -36,8 +37,8 @@ const serviceFor = (overrides: {
         id: 7, state: overrides.duplicateState, delivery_id: 10, sender_id: 'user-1', account_id: 'default',
       } }
       : { inserted: true, reply: { id: 7, state: 'processing' } }),
-    setReplyThreadId: vi.fn((_deliveryId: number, threadId: string) => {
-      if (!route.reply_thread_id) route.reply_thread_id = threadId;
+    advanceReplyThreadId: vi.fn((_deliveryId: number, expectedThreadId: string | null, threadId: string) => {
+      if (route.reply_thread_id === expectedThreadId) route.reply_thread_id = threadId;
       return route.reply_thread_id;
     }),
     markInboundReply: vi.fn(),
@@ -46,11 +47,14 @@ const serviceFor = (overrides: {
     matchesQqBinding: vi.fn(() => overrides.bound ?? true),
   } as unknown as OpenClawProvider;
   const dispatcher = {
-    dispatch: vi.fn(async () => ({
-      threadId: route.reply_thread_id || (route.client === 'codex-desktop' ? 'fork-thread-1' : 'thread-1'),
-      turnId: 'turn-2',
-      writerReleased: Promise.resolve(),
-    })),
+    dispatch: vi.fn(async () => {
+      dispatchCount += 1;
+      return {
+        threadId: `fork-thread-${dispatchCount}`,
+        turnId: `turn-${dispatchCount}`,
+        writerReleased: Promise.resolve(),
+      };
+    }),
   } as unknown as PlatformReplyDispatcherService;
   return { service: new RepliesService(database, openClaw, dispatcher), database, dispatcher, route };
 };
@@ -67,36 +71,41 @@ describe('RepliesService', () => {
     expect(extractReplyTaskId('[任务ID:0]')).toBeNull();
   });
 
-  it('validates the binding and dispatches one reply to the original route', async () => {
+  it('validates the binding and dispatches one reply to a persisted fork', async () => {
     const { service, database, dispatcher } = serviceFor();
 
     await expect(service.accept(input)).resolves.toMatchObject({
-      ok: true, accepted: true, duplicate: false, threadId: 'thread-1', turnId: 'turn-2',
+      ok: true, accepted: true, duplicate: false, threadId: 'fork-thread-1', turnId: 'turn-1',
     });
     expect(dispatcher.dispatch).toHaveBeenCalledWith(expect.objectContaining({
       delivery_id: 10, metadata: { thread_id: 'thread-1' },
     }), 'continue');
     expect(database.markInboundReply).toHaveBeenCalledWith(7, 'accepted');
-    expect(database.setReplyThreadId).not.toHaveBeenCalled();
+    expect(database.advanceReplyThreadId).toHaveBeenCalledWith(10, null, 'fork-thread-1');
   });
 
-  it('persists the first Desktop fork and reuses it for the next quoted reply', async () => {
-    const { service, database, dispatcher } = serviceFor({ client: 'codex-desktop' });
+  it.each(['codex-cli', 'codex-desktop'] as const)(
+    'advances the persistent fork head for consecutive %s replies',
+    async (client) => {
+      const { service, database, dispatcher } = serviceFor({ client });
 
-    await expect(service.accept(input)).resolves.toMatchObject({
-      accepted: true, threadId: 'fork-thread-1', turnId: 'turn-2',
-    });
-    await expect(service.accept({ ...input, message_id: 'message-2' })).resolves.toMatchObject({ accepted: true });
+      await expect(service.accept(input)).resolves.toMatchObject({
+        accepted: true, threadId: 'fork-thread-1', turnId: 'turn-1',
+      });
+      await expect(service.accept({ ...input, message_id: 'message-2' })).resolves.toMatchObject({
+        accepted: true, threadId: 'fork-thread-2', turnId: 'turn-2',
+      });
 
-    expect(database.setReplyThreadId).toHaveBeenCalledOnce();
-    expect(database.setReplyThreadId).toHaveBeenCalledWith(10, 'fork-thread-1');
-    expect(dispatcher.dispatch).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      client: 'codex-desktop', reply_thread_id: null,
-    }), 'continue');
-    expect(dispatcher.dispatch).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      client: 'codex-desktop', reply_thread_id: 'fork-thread-1',
-    }), 'continue');
-  });
+      expect(database.advanceReplyThreadId).toHaveBeenNthCalledWith(1, 10, null, 'fork-thread-1');
+      expect(database.advanceReplyThreadId).toHaveBeenNthCalledWith(2, 10, 'fork-thread-1', 'fork-thread-2');
+      expect(dispatcher.dispatch).toHaveBeenNthCalledWith(1, expect.objectContaining({
+        client, reply_thread_id: null,
+      }), 'continue');
+      expect(dispatcher.dispatch).toHaveBeenNthCalledWith(2, expect.objectContaining({
+        client, reply_thread_id: 'fork-thread-1',
+      }), 'continue');
+    },
+  );
 
   it('serializes concurrent first Desktop replies and refreshes the persisted route', async () => {
     const { service, dispatcher } = serviceFor({ client: 'codex-desktop' });
@@ -106,7 +115,7 @@ describe('RepliesService', () => {
     vi.mocked(dispatcher.dispatch).mockImplementation(async (route) => {
       calls += 1;
       return {
-        threadId: route.reply_thread_id || 'fork-thread-1',
+        threadId: `fork-thread-${calls}`,
         turnId: `turn-${calls}`,
         writerReleased: calls === 1 ? firstWriterReleased : Promise.resolve(),
       };
@@ -120,7 +129,7 @@ describe('RepliesService', () => {
     expect(dispatcher.dispatch).toHaveBeenCalledOnce();
 
     releaseWriter();
-    await expect(second).resolves.toMatchObject({ accepted: true, threadId: 'fork-thread-1' });
+    await expect(second).resolves.toMatchObject({ accepted: true, threadId: 'fork-thread-2' });
     expect(dispatcher.dispatch).toHaveBeenNthCalledWith(2, expect.objectContaining({
       reply_thread_id: 'fork-thread-1',
     }), 'continue');
@@ -128,15 +137,15 @@ describe('RepliesService', () => {
 
   it('fails clearly when another server process wins Desktop fork persistence', async () => {
     const { service, database } = serviceFor({ client: 'codex-desktop' });
-    vi.mocked(database.setReplyThreadId).mockReturnValue('fork-thread-winner');
+    vi.mocked(database.advanceReplyThreadId).mockReturnValue('fork-thread-winner');
 
     await expect(service.accept(input)).rejects.toThrow(
-      'another server process persisted a different Codex reply fork',
+      'another server process advanced the Codex reply fork',
     );
     expect(database.markInboundReply).toHaveBeenCalledWith(
       7,
       'failed',
-      'another server process persisted a different Codex reply fork',
+      'another server process advanced the Codex reply fork',
     );
   });
 
@@ -225,7 +234,7 @@ describe('PlatformReplyDispatcherService', () => {
     expect(codex.dispatch).not.toHaveBeenCalled();
   });
 
-  it('selects resume for CLI and fork-then-resume for Desktop routes', () => {
+  it('forks from the latest branch for both CLI and Desktop routes', () => {
     const codex = {
       dispatch: vi.fn(async () => ({
         threadId: 'target', turnId: 'turn-1', writerReleased: Promise.resolve(),
@@ -245,13 +254,13 @@ describe('PlatformReplyDispatcherService', () => {
     }, 'second desktop reply');
 
     expect(codex.dispatch).toHaveBeenNthCalledWith(1, {
-      mode: 'resume', threadId: 'original-thread', text: 'cli reply',
+      mode: 'fork', threadId: 'original-thread', text: 'cli reply',
     });
     expect(codex.dispatch).toHaveBeenNthCalledWith(2, {
       mode: 'fork', threadId: 'original-thread', text: 'first desktop reply',
     });
     expect(codex.dispatch).toHaveBeenNthCalledWith(3, {
-      mode: 'resume', threadId: 'fork-thread-1', text: 'second desktop reply',
+      mode: 'fork', threadId: 'fork-thread-1', text: 'second desktop reply',
     });
   });
 });
