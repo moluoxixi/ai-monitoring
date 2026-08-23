@@ -253,7 +253,7 @@ describe('DatabaseService idempotent event enrichment', () => {
     database.onModuleDestroy();
     const migrated = new Sqlite(dbPath, { readonly: true });
     const deliveryColumns = (migrated.pragma('table_info(deliveries)') as Array<{ name: string }>).map((column) => column.name);
-    expect(deliveryColumns).toEqual(expect.arrayContaining(['reply_token', 'reply_expires_at']));
+    expect(deliveryColumns).toEqual(expect.arrayContaining(['reply_token', 'reply_expires_at', 'reply_thread_id']));
     expect(migrated.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'inbound_replies'").get())
       .toEqual({ name: 'inbound_replies' });
     migrated.close();
@@ -406,7 +406,7 @@ describe('DatabaseService idempotent event enrichment', () => {
     second.onModuleDestroy();
   });
 
-  it('creates one stable reply route for a completed Codex QQ delivery', () => {
+  it('creates stable reply routes for completed Codex CLI and Desktop QQ deliveries', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);
     const database = new DatabaseService(
@@ -428,11 +428,12 @@ describe('DatabaseService idempotent event enrichment', () => {
     expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(second).toBe(first);
     expect(database.ensureDeliveryReplyRoute(pushplus.id, 86_400_000)).toBeNull();
-    expect(database.listDeliveries(10).some((row) => 'reply_token' in row)).toBe(false);
+    expect(database.listDeliveries(10).some((row) => 'reply_token' in row || 'reply_thread_id' in row)).toBe(false);
     expect(database.resolveReplyRoute(first!)).toMatchObject({
       delivery_id: qq.id,
       event_id: eventId,
       channel: 'openclaw-qq',
+      reply_thread_id: null,
       client: 'codex-cli',
       metadata: { thread_id: 'thread-123' },
     });
@@ -440,10 +441,54 @@ describe('DatabaseService idempotent event enrichment', () => {
       delivery_id: qq.id,
       event_id: eventId,
       channel: 'openclaw-qq',
+      reply_thread_id: null,
       client: 'codex-cli',
       metadata: { thread_id: 'thread-123' },
     });
     expect(database.resolveReplyRouteForEvent(eventId + 1_000)).toBeNull();
+
+    const [desktopEventId] = database.insertEvent({
+      ...event({ thread_id: 'desktop-thread-1', answer_text: 'done' }, 'continue desktop task'),
+      source_event_id: 'desktop-thread-1:turn-1:completed',
+      client: 'codex-desktop',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    const desktopDelivery = database.getDeliveriesForEvent(desktopEventId)[0]!;
+    const desktopToken = database.ensureDeliveryReplyRoute(desktopDelivery.id, 86_400_000);
+
+    expect(desktopToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(database.resolveReplyRoute(desktopToken!)).toMatchObject({
+      delivery_id: desktopDelivery.id,
+      event_id: desktopEventId,
+      reply_thread_id: null,
+      client: 'codex-desktop',
+      metadata: { thread_id: 'desktop-thread-1' },
+    });
+    expect(database.resolveReplyRouteForEvent(desktopEventId)).toMatchObject({
+      delivery_id: desktopDelivery.id,
+      reply_thread_id: null,
+      client: 'codex-desktop',
+    });
+    expect(database.setReplyThreadId(desktopDelivery.id, 'fork-thread-1')).toBe('fork-thread-1');
+    expect(database.setReplyThreadId(desktopDelivery.id, 'fork-thread-loser')).toBe('fork-thread-1');
+    expect(database.resolveReplyRoute(desktopToken!)).toMatchObject({ reply_thread_id: 'fork-thread-1' });
+    expect(database.listDeliveries(10).some((row) => 'reply_thread_id' in row)).toBe(false);
+
+    const [failedEventId] = database.insertEvent({
+      ...event({ thread_id: 'desktop-thread-failed' }, 'failed desktop task'),
+      source_event_id: 'desktop-thread-failed:turn-1:failed',
+      client: 'codex-desktop',
+    }, ['openclaw-qq']);
+    const [missingThreadEventId] = database.insertEvent({
+      ...event({}, 'desktop task without thread'),
+      source_event_id: 'desktop-thread-missing:turn-1:completed',
+      client: 'codex-desktop',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    expect(database.ensureDeliveryReplyRoute(database.getDeliveriesForEvent(failedEventId)[0]!.id, 86_400_000)).toBeNull();
+    expect(database.ensureDeliveryReplyRoute(database.getDeliveriesForEvent(missingThreadEventId)[0]!.id, 86_400_000)).toBeNull();
     database.onModuleDestroy();
   });
 

@@ -57,6 +57,7 @@ const sessionIdentity = (payload: Record<string, unknown>, currentClient: 'codex
     || String(sourceObject.kind || '').toLowerCase() === 'subagent'
     || threadSource === 'subagent';
   if (isSubagent) return { isSubagent: true, client: currentClient };
+  if (threadSource === 'cli') return { isSubagent: false, client: 'codex-cli' };
   const runtimeText = `${sourceText} ${originator}`;
   if (/\b(cli|command[-_ ]line)\b/.test(runtimeText)) return { isSubagent: false, client: 'codex-cli' };
   if (/\b(desktop|vscode|ide)\b/.test(runtimeText)) return { isSubagent: false, client: 'codex-desktop' };

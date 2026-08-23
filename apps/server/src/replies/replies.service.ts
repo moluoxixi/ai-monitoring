@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { OpenClawProvider } from '../channels/openclaw.provider';
 import { DatabaseService } from '../database/database.service';
+import type { ReplyRoute } from '../database/database.types';
 import type { CreateInboundReplyDto } from './dto/create-inbound-reply.dto';
 import { PlatformReplyDispatcherService } from './platform-reply-dispatcher.service';
 
@@ -29,6 +30,8 @@ export const extractReplyTaskId = (body: string): number | null => {
 
 @Injectable()
 export class RepliesService {
+  private readonly deliveryDispatchTails = new Map<number, Promise<void>>();
+
   constructor(
     private readonly database: DatabaseService,
     private readonly openClaw: OpenClawProvider,
@@ -48,7 +51,7 @@ export class RepliesService {
       : taskId === null ? null : this.database.resolveReplyRouteForEvent(taskId);
     if (!route) {
       if (taskId !== null) {
-        throw new BadRequestException(`任务 ${taskId} 当前不支持引用续接（仅支持 Codex CLI 完成通知）`);
+        throw new BadRequestException(`任务 ${taskId} 当前不支持引用续接（仅支持 Codex CLI/Desktop 完成通知）`);
       }
       throw new NotFoundException('reply route was not found');
     }
@@ -84,14 +87,44 @@ export class RepliesService {
     }
 
     try {
-      const result = await this.dispatcher.dispatch(route, text);
+      const result = await this.dispatchSerialized(route, text);
       this.database.markInboundReply(claimed.reply.id, 'accepted');
       return { ok: true, accepted: true, duplicate: false, ...result };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.database.markInboundReply(claimed.reply.id, 'failed', message);
       if (error instanceof BadRequestException) throw error;
-      throw new ServiceUnavailableException(`unable to resume the Codex conversation: ${message}`);
+      throw new ServiceUnavailableException(`unable to continue the Codex conversation: ${message}`);
     }
+  }
+
+  private async dispatchSerialized(route: ReplyRoute, text: string): Promise<{ threadId: string; turnId: string }> {
+    const previous = this.deliveryDispatchTails.get(route.delivery_id) ?? Promise.resolve();
+    let releaseAfter = Promise.resolve();
+    const dispatch = previous.then(async () => {
+      const currentRoute = this.database.resolveReplyRoute(route.reply_token);
+      if (!currentRoute) throw new Error('reply route disappeared before dispatch');
+      const { writerReleased, ...result } = await this.dispatcher.dispatch(currentRoute, text);
+      releaseAfter = writerReleased;
+      if (currentRoute.client === 'codex-desktop' && !currentRoute.reply_thread_id) {
+        const storedThreadId = this.database.setReplyThreadId(currentRoute.delivery_id, result.threadId);
+        if (!storedThreadId) throw new Error('Codex reply fork id could not be persisted');
+        if (storedThreadId !== result.threadId) {
+          throw new Error('another server process persisted a different Codex reply fork');
+        }
+      }
+      return result;
+    });
+    const tail = dispatch.then(
+      () => releaseAfter,
+      () => releaseAfter,
+    ).then(() => undefined, () => undefined);
+    this.deliveryDispatchTails.set(route.delivery_id, tail);
+    void tail.finally(() => {
+      if (this.deliveryDispatchTails.get(route.delivery_id) === tail) {
+        this.deliveryDispatchTails.delete(route.delivery_id);
+      }
+    });
+    return dispatch;
   }
 }

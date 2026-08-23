@@ -157,6 +157,8 @@ def session_kind(thread_id: str, codex_home: Path | None = None) -> str | None:
         return None
     if identity.get("is_subagent"):
         return "subagent"
+    if identity.get("thread_source") == "cli":
+        return "codex-cli"
     runtime = f"{identity.get('source', '')} {identity.get('originator', '')}".lower()
     if any(marker in runtime for marker in ("desktop", "vscode", "ide")):
         return "codex-desktop"

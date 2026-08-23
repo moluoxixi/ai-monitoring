@@ -348,7 +348,12 @@ export class DatabaseService implements OnModuleDestroy {
         status: string;
         metadata_json: string;
       } | undefined;
-      if (!row || row.channel !== 'openclaw-qq' || row.client !== 'codex-cli' || row.status !== 'completed') return null;
+      if (
+        !row
+        || row.channel !== 'openclaw-qq'
+        || !['codex-cli', 'codex-desktop'].includes(row.client)
+        || row.status !== 'completed'
+      ) return null;
       const threadId = parseMetadata(row.metadata_json).thread_id;
       if (typeof threadId !== 'string' || !threadId.trim()) return null;
       if (row.reply_token) return row.reply_token;
@@ -370,7 +375,7 @@ export class DatabaseService implements OnModuleDestroy {
   resolveReplyRoute(token: string): ReplyRoute | null {
     const row = this.db.prepare(`
       SELECT d.id AS delivery_id, d.event_id, d.channel, d.state AS delivery_state,
-             d.reply_token, d.reply_expires_at, e.client, e.metadata_json
+             d.reply_token, d.reply_expires_at, d.reply_thread_id, e.client, e.metadata_json
       FROM deliveries d JOIN events e ON e.id = d.event_id
       WHERE d.reply_token = ?
     `).get(token) as Record<string, unknown> | undefined;
@@ -382,17 +387,30 @@ export class DatabaseService implements OnModuleDestroy {
   resolveReplyRouteForEvent(eventId: number): ReplyRoute | null {
     const row = this.db.prepare(`
       SELECT d.id AS delivery_id, d.event_id, d.channel, d.state AS delivery_state,
-             d.reply_token, d.reply_expires_at, e.client, e.metadata_json
+             d.reply_token, d.reply_expires_at, d.reply_thread_id, e.client, e.metadata_json
       FROM deliveries d JOIN events e ON e.id = d.event_id
       WHERE d.event_id = ? AND d.channel = 'openclaw-qq'
         AND d.reply_token IS NOT NULL AND d.reply_expires_at IS NOT NULL
-        AND e.client = 'codex-cli' AND e.status = 'completed'
+        AND e.client IN ('codex-cli', 'codex-desktop') AND e.status = 'completed'
         AND typeof(json_extract(e.metadata_json, '$.thread_id')) = 'text'
         AND trim(json_extract(e.metadata_json, '$.thread_id')) != ''
     `).get(eventId) as Record<string, unknown> | undefined;
     if (!row) return null;
     const { metadata_json, ...rest } = row;
     return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as ReplyRoute;
+  }
+
+  setReplyThreadId(deliveryId: number, threadId: string): string | null {
+    const normalized = threadId.trim();
+    if (!normalized) return null;
+    const result = this.db.prepare(`
+      UPDATE deliveries SET reply_thread_id = ?
+      WHERE id = ? AND reply_thread_id IS NULL
+    `).run(normalized, deliveryId);
+    if (result.changes > 0) return normalized;
+    const existing = this.db.prepare('SELECT reply_thread_id FROM deliveries WHERE id = ?').get(deliveryId) as
+      { reply_thread_id: string | null } | undefined;
+    return existing?.reply_thread_id?.trim() || null;
   }
 
   claimInboundReply(input: {
@@ -464,6 +482,7 @@ export class DatabaseService implements OnModuleDestroy {
         lease_expires_at TEXT,
         reply_token TEXT,
         reply_expires_at TEXT,
+        reply_thread_id TEXT,
         UNIQUE(event_id, channel)
       );
       CREATE INDEX IF NOT EXISTS idx_deliveries_due ON deliveries(state, next_attempt_at);
@@ -493,6 +512,7 @@ export class DatabaseService implements OnModuleDestroy {
     if (!deliveryColumns.has('lease_expires_at')) this.db.exec('ALTER TABLE deliveries ADD COLUMN lease_expires_at TEXT');
     if (!deliveryColumns.has('reply_token')) this.db.exec('ALTER TABLE deliveries ADD COLUMN reply_token TEXT');
     if (!deliveryColumns.has('reply_expires_at')) this.db.exec('ALTER TABLE deliveries ADD COLUMN reply_expires_at TEXT');
+    if (!deliveryColumns.has('reply_thread_id')) this.db.exec('ALTER TABLE deliveries ADD COLUMN reply_thread_id TEXT');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_deliveries_lease ON deliveries(state, lease_expires_at)');
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_deliveries_reply_token ON deliveries(reply_token) WHERE reply_token IS NOT NULL');
     this.migrateLegacyClients();
@@ -516,7 +536,7 @@ export class DatabaseService implements OnModuleDestroy {
   }
 
   private deliveryRow(row: Record<string, unknown>, includeAnswerText = false): DeliveryRow {
-    const { metadata_json, answer_text, reply_token, reply_expires_at, ...rest } = row;
+    const { metadata_json, answer_text, reply_token, reply_expires_at, reply_thread_id: _replyThreadId, ...rest } = row;
     return {
       ...rest,
       client: typeof rest.client === 'string' ? this.extensions.resolve(rest.client) : rest.client,

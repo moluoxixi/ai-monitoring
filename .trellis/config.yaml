@@ -157,12 +157,12 @@ channel:
 # prompt_injection:
 #   skip_keyword: "no-trellis"   # "" disables the escape hatch entirely
 
-# Migrated reviewed package map from the previous project configuration.
+# Auto-detected monorepo packages
 packages:
-  desktop:
-    path: apps/desktop
   server:
     path: apps/server
   web:
     path: apps/web
-default_package: "@ai-monitor/desktop"
+  desktop:
+    path: apps/desktop
+default_package: @ai-monitor/server

@@ -13,6 +13,18 @@ export type CodexProcessFactory = (
 
 export type CodexSpawn = typeof spawn;
 
+export interface CodexReplyDispatchInput {
+  mode: 'resume' | 'fork';
+  threadId: string;
+  text: string;
+}
+
+export interface CodexReplyDispatchResult {
+  threadId: string;
+  turnId: string;
+  writerReleased: Promise<void>;
+}
+
 interface CodexProcessInvocation {
   command: string;
   args: string[];
@@ -105,6 +117,7 @@ export class CodexAppServerConnection {
   waitForTurn(turnId: string, timeoutMs: number): Promise<Record<string, unknown>> {
     const completed = this.completions.get(turnId);
     if (completed) return Promise.resolve(completed);
+    if (this.closed) return Promise.reject(new Error('Codex App Server connection is closed'));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.completionWaiters.delete(turnId);
@@ -197,7 +210,7 @@ export class CodexAppServerReplyService implements OnModuleDestroy {
     @Inject(CODEX_PROCESS_FACTORY) private readonly processFactory: CodexProcessFactory,
   ) {}
 
-  async dispatch(threadId: string, text: string): Promise<{ threadId: string; turnId: string }> {
+  async dispatch(input: CodexReplyDispatchInput): Promise<CodexReplyDispatchResult> {
     const child = this.processFactory(this.config.codexCommand, ['app-server'], {
       cwd: this.config.projectRoot,
       env: process.env,
@@ -208,18 +221,35 @@ export class CodexAppServerReplyService implements OnModuleDestroy {
     try {
       await connection.request('initialize', {
         clientInfo: { name: 'ai-monitor', title: 'AI Monitor', version: '1.0.10' },
-        capabilities: { experimentalApi: false, optOutNotificationMethods: ['item/agentMessage/delta'] },
+        capabilities: {
+          experimentalApi: input.mode === 'fork',
+          optOutNotificationMethods: ['item/agentMessage/delta'],
+        },
       });
       connection.notify('initialized', {});
-      await connection.request('thread/resume', { threadId });
+      let targetThreadId = input.threadId;
+      if (input.mode === 'fork') {
+        const fork = objectValue(await connection.request('thread/fork', {
+          threadId: input.threadId,
+          ephemeral: false,
+          threadSource: 'cli',
+          approvalPolicy: 'never',
+        }));
+        const forkThread = objectValue(fork.thread);
+        targetThreadId = typeof forkThread.id === 'string' ? forkThread.id.trim() : '';
+        if (!targetThreadId) throw new Error('Codex App Server did not return a fork thread id');
+      } else {
+        await connection.request('thread/resume', { threadId: targetThreadId });
+      }
       const response = objectValue(await connection.request('turn/start', {
-        threadId,
-        input: [{ type: 'text', text }],
+        threadId: targetThreadId,
+        input: [{ type: 'text', text: input.text }],
         approvalPolicy: 'never',
       }));
       const turnId = typeof objectValue(response.turn).id === 'string' ? objectValue(response.turn).id as string : '';
       if (!turnId) throw new Error('Codex App Server did not return a turn id');
-      void connection.waitForTurn(turnId, this.config.codexReplyTurnTimeoutMs)
+      const writerReleased = connection.waitForTurn(turnId, this.config.codexReplyTurnTimeoutMs)
+        .then(() => undefined)
         .catch((error: unknown) => {
           this.logger.warn(error instanceof Error ? error.message : String(error));
         })
@@ -227,7 +257,7 @@ export class CodexAppServerReplyService implements OnModuleDestroy {
           this.active.delete(connection);
           connection.close();
         });
-      return { threadId, turnId };
+      return { threadId: targetThreadId, turnId, writerReleased };
     } catch (error) {
       this.active.delete(connection);
       connection.close();

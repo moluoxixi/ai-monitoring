@@ -28,6 +28,22 @@ def test_reads_subagent_thread_source_variant(tmp_path):
     assert is_subagent_session("thread-string", tmp_path) is True
 
 
+def test_cli_thread_source_overrides_inherited_desktop_markers(tmp_path):
+    _write_session(tmp_path, "thread-fork", {
+        "source": "vscode", "originator": "Codex Desktop", "thread_source": "cli",
+    })
+
+    assert session_kind("thread-fork", tmp_path) == "codex-cli"
+
+
+def test_subagent_identity_stays_higher_priority_than_cli_thread_source(tmp_path):
+    _write_session(tmp_path, "thread-subagent-fork", {
+        "source": {"type": "subagent"}, "originator": "Codex Desktop", "thread_source": "cli",
+    })
+
+    assert session_kind("thread-subagent-fork", tmp_path) == "subagent"
+
+
 def test_unknown_session_is_not_assumed_to_be_subagent(tmp_path):
     assert is_subagent_session("missing", tmp_path) is False
 

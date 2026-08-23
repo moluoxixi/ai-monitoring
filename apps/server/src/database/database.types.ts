@@ -61,6 +61,7 @@ export interface ReplyRoute {
   delivery_state: string;
   reply_token: string;
   reply_expires_at: string;
+  reply_thread_id: string | null;
   client: string;
   metadata: Record<string, unknown>;
 }

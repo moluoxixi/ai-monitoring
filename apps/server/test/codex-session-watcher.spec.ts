@@ -295,6 +295,34 @@ describe('Codex session watcher parser', () => {
     expect(result.event?.client).toBe('codex-cli');
   });
 
+  it('prefers a CLI thread source over inherited Desktop markers without overriding subagents', () => {
+    const meta = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: {
+        session_id: 'fork-session', source: 'vscode', originator: 'Codex Desktop', thread_source: 'cli',
+      },
+    }));
+    const result = parseCodexSessionLine(
+      terminalLine({ type: 'task_complete', turn_id: 'fork-turn' }),
+      meta.sessionId,
+      'continue from desktop fork',
+      meta.isSubagent,
+      '',
+      meta.client,
+    );
+    const subagent = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: {
+        session_id: 'subagent-fork', source: { type: 'subagent' },
+        originator: 'Codex Desktop', thread_source: 'cli',
+      },
+    }));
+
+    expect(meta).toMatchObject({ isSubagent: false, client: 'codex-cli' });
+    expect(result.event?.client).toBe('codex-cli');
+    expect(subagent).toMatchObject({ isSubagent: true, client: 'codex-desktop' });
+  });
+
   it('reads session metadata when it is not the first JSONL line', () => {
     const meta = parseCodexSessionLine(JSON.stringify({
       type: 'session_meta',

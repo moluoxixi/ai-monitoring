@@ -1,0 +1,4 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Reply route data crosses database, App Server RPC, watcher classification and QQ delivery boundaries."}
+{"file":".trellis/spec/server/backend/quality-guidelines.md","reason":"Requires boundary-contract fixtures, public marker handling and full server validation."}
+{"file":".trellis/spec/server/backend/error-handling.md","reason":"Reply dispatch failures must preserve explicit NestJS error semantics and fail closed."}
+{"file":".trellis/tasks/08-23-codex-desktop-reply-fork/research/codex-app-server-fork.md","reason":"Official and local protocol evidence for thread/read and thread/fork behavior."}

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Review the persisted fork id and session JSONL classification across all boundaries."}
+{"file":".trellis/spec/server/backend/quality-guidelines.md","reason":"Review required regression coverage and public route marker behavior."}
+{"file":".trellis/spec/server/backend/error-handling.md","reason":"Review fail-closed errors and cleanup behavior for fork failures."}
+{"file":".trellis/tasks/08-23-codex-desktop-reply-fork/research/codex-app-server-fork.md","reason":"Verify implementation remains within documented App Server and writer safety boundaries."}

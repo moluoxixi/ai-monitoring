@@ -192,6 +192,27 @@ describe('DeliveryWorkerService', () => {
     );
   });
 
+  it('adds an enabled route marker to a Codex Desktop completion', async () => {
+    const send = vi.fn(() => Promise.resolve());
+    const { service } = serviceFor(send, [{
+      ...delivery(3, 'openclaw-qq'),
+      client: 'codex-desktop',
+      metadata: { thread_id: 'desktop-thread-1', task_summary: 'continue desktop work' },
+    }]);
+    const database = (service as unknown as { database: DatabaseService }).database;
+    vi.mocked(database.ensureDeliveryReplyRoute).mockReturnValue('B'.repeat(43));
+
+    service.processOnce();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+
+    expect(database.ensureDeliveryReplyRoute).toHaveBeenCalledWith(3, undefined);
+    expect(send).toHaveBeenCalledWith(
+      'openclaw-qq',
+      '(Codex Desktop) 任务已完成',
+      expect.stringContaining('[AI-MONITOR-REPLY:' + 'B'.repeat(43) + ']'),
+    );
+  });
+
   it('adds the task ID to non-QQ notifications without exposing a reply route', async () => {
     const send = vi.fn(() => Promise.resolve());
     const { service } = serviceFor(send, [delivery(1, 'openclaw-weixin')]);
