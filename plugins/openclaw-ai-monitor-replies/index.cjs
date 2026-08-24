@@ -92,7 +92,7 @@ const createBeforeDispatchHandler = ({
       const detail = await responseMessage(response);
       return acknowledgement(detail || `AI Monitor 未接受这条回复（HTTP ${response.status}）。`);
     }
-    return acknowledgement("已接收，Codex 正在后台处理；完成后会另发一条 QQ 消息。");
+    return acknowledgement("已接收，AI 任务正在后台处理；完成后会另发一条 QQ 消息。");
   } catch {
     return acknowledgement("AI Monitor 暂时无法接收回复，请稍后重新引用原通知发送。");
   } finally {
@@ -103,7 +103,7 @@ const createBeforeDispatchHandler = ({
 const plugin = {
   id: "ai-monitor-replies",
   name: "AI Monitor Replies",
-  description: "Routes quoted AI Monitor notifications to a background Codex branch.",
+  description: "Routes quoted AI Monitor notifications to a background AI conversation.",
   register(api) {
     api.on("before_dispatch", createBeforeDispatchHandler({ pluginConfig: api.pluginConfig }), {
       priority: 100,

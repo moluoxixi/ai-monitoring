@@ -22,7 +22,7 @@ const definitions = [
     id: 'ai-monitor-replies',
     localPath: process.env.AIMONITOR_REPLY_PLUGIN_PATH?.trim()
       || join(resourceRoot, 'plugins', 'openclaw-ai-monitor-replies'),
-    version: '1.0.4',
+    version: '1.0.5',
     requiredHook: 'before_dispatch',
     requiredStartupCapability: 'hook',
   },

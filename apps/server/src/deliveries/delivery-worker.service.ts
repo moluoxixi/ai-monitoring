@@ -73,9 +73,8 @@ export const notificationContent = (
   };
 };
 
-export const withReplyRoute = (body: string, token: string | null, taskId: number): string => [
+export const withReplyRoute = (body: string, taskId: number): string => [
   `[任务ID:${taskId}]`,
-  ...(token ? [`[AI-MONITOR-REPLY:${token}]`] : []),
   body,
 ].join('\n\n');
 
@@ -152,12 +151,8 @@ export class DeliveryWorkerService implements OnModuleDestroy {
     renewal.unref();
     try {
       const notification = notificationContent(row, this.settings?.notification());
-      const replyToken = this.database.ensureDeliveryReplyRoute(row.id, this.config.replyRouteTtlMs);
-      const body = withReplyRoute(
-        notification.body,
-        row.channel === 'openclaw-qq' ? replyToken : null,
-        row.event_id,
-      );
+      this.database.ensureDeliveryReplyRoute(row.id, this.config.replyRouteTtlMs);
+      const body = withReplyRoute(notification.body, row.event_id);
       await this.channels.send(row.channel, notification.title, body);
       if (this.abandoning) return;
       const now = utcNow();

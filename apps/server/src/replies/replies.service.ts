@@ -51,7 +51,7 @@ export class RepliesService {
       : taskId === null ? null : this.database.resolveReplyRouteForEvent(taskId);
     if (!route) {
       if (taskId !== null) {
-        throw new BadRequestException(`任务 ${taskId} 当前不支持引用续接（仅支持 Codex CLI/Desktop 完成通知）`);
+        throw new BadRequestException(`任务 ${taskId} 当前不支持引用续接（支持 Codex/Claude CLI 与 Desktop，以及 Qoder CLI 完成通知）`);
       }
       throw new NotFoundException('reply route was not found');
     }
@@ -94,7 +94,7 @@ export class RepliesService {
       const message = error instanceof Error ? error.message : String(error);
       this.database.markInboundReply(claimed.reply.id, 'failed', message);
       if (error instanceof BadRequestException) throw error;
-      throw new ServiceUnavailableException(`unable to continue the Codex conversation: ${message}`);
+      throw new ServiceUnavailableException(`unable to continue the AI conversation: ${message}`);
     }
   }
 
@@ -111,11 +111,16 @@ export class RepliesService {
         currentRoute.reply_thread_id,
         result.threadId,
       );
-      if (!storedThreadId) throw new Error('Codex reply fork id could not be persisted');
-      if (storedThreadId !== result.threadId) {
-        throw new Error('another server process advanced the Codex reply fork');
+      if (!storedThreadId) {
+        result.cancel?.();
+        throw new Error('AI reply continuation id could not be persisted');
       }
-      return result;
+      if (storedThreadId !== result.threadId) {
+        result.cancel?.();
+        throw new Error('another server process advanced the AI reply continuation');
+      }
+      const { cancel: _cancel, ...accepted } = result;
+      return accepted;
     });
     const tail = dispatch.then(
       () => releaseAfter,

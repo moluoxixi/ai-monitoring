@@ -29,6 +29,17 @@ const parseMetadata = (value: unknown): Record<string, unknown> => {
   }
 };
 
+const replyContinuationId = (client: string, metadata: Record<string, unknown>): string | null => {
+  const value = ['codex-cli', 'codex-desktop'].includes(client)
+    ? metadata.thread_id
+    : ['claude-cli', 'claude-desktop', 'qoder-cli'].includes(client)
+      ? metadata.session_id
+      : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized && normalized !== 'unknown-session' ? normalized : null;
+};
+
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
   private readonly db: Database.Database;
@@ -43,6 +54,7 @@ export class DatabaseService implements OnModuleDestroy {
     this.db.pragma('foreign_keys = ON');
     this.db.function('ai_client_key', (value: unknown) => this.extensions.resolve(typeof value === 'string' ? value : null));
     this.initialize();
+    this.backfillQoderCliReplyRoutes(config.replyRouteTtlMs);
   }
 
   onModuleDestroy(): void {
@@ -351,11 +363,9 @@ export class DatabaseService implements OnModuleDestroy {
       if (
         !row
         || row.channel !== 'openclaw-qq'
-        || !['codex-cli', 'codex-desktop'].includes(row.client)
         || row.status !== 'completed'
       ) return null;
-      const threadId = parseMetadata(row.metadata_json).thread_id;
-      if (typeof threadId !== 'string' || !threadId.trim()) return null;
+      if (!replyContinuationId(row.client, parseMetadata(row.metadata_json))) return null;
       if (row.reply_token) return row.reply_token;
 
       const token = randomBytes(32).toString('base64url');
@@ -391,13 +401,13 @@ export class DatabaseService implements OnModuleDestroy {
       FROM deliveries d JOIN events e ON e.id = d.event_id
       WHERE d.event_id = ? AND d.channel = 'openclaw-qq'
         AND d.reply_token IS NOT NULL AND d.reply_expires_at IS NOT NULL
-        AND e.client IN ('codex-cli', 'codex-desktop') AND e.status = 'completed'
-        AND typeof(json_extract(e.metadata_json, '$.thread_id')) = 'text'
-        AND trim(json_extract(e.metadata_json, '$.thread_id')) != ''
+        AND e.status = 'completed'
     `).get(eventId) as Record<string, unknown> | undefined;
     if (!row) return null;
     const { metadata_json, ...rest } = row;
-    return { ...rest, metadata: parseMetadata(metadata_json) } as unknown as ReplyRoute;
+    const metadata = parseMetadata(metadata_json);
+    if (!replyContinuationId(String(row.client || ''), metadata)) return null;
+    return { ...rest, metadata } as unknown as ReplyRoute;
   }
 
   advanceReplyThreadId(deliveryId: number, expectedThreadId: string | null, nextThreadId: string): string | null {
@@ -528,6 +538,35 @@ export class DatabaseService implements OnModuleDestroy {
     const update = this.db.prepare('UPDATE events SET client = ? WHERE lower(client) = ?');
     this.db.transaction(() => {
       for (const [legacy, canonical] of this.extensions.legacyMigrations()) update.run(canonical, legacy);
+    })();
+  }
+
+  private backfillQoderCliReplyRoutes(ttlMs: number | undefined): void {
+    const effectiveTtlMs = Math.max(60_000, Number.isFinite(ttlMs) ? ttlMs! : 30 * 24 * 60 * 60_000);
+    const now = Date.now();
+    const rows = this.db.prepare(`
+      SELECT d.id, d.sent_at, e.client, e.metadata_json
+      FROM deliveries d JOIN events e ON e.id = d.event_id
+      WHERE d.channel = 'openclaw-qq' AND d.state = 'sent'
+        AND d.reply_token IS NULL AND e.client = 'qoder-cli' AND e.status = 'completed'
+    `).all() as Array<{ id: number; sent_at: string | null; client: string; metadata_json: string }>;
+    const update = this.db.prepare(`
+      UPDATE deliveries SET reply_token = ?, reply_expires_at = ?
+      WHERE id = ? AND reply_token IS NULL
+    `);
+    this.db.transaction(() => {
+      for (const row of rows) {
+        if (!replyContinuationId(row.client, parseMetadata(row.metadata_json))) continue;
+        const sentAt = Date.parse(row.sent_at || '');
+        if (!Number.isFinite(sentAt)) continue;
+        const expiresAt = sentAt + effectiveTtlMs;
+        if (expiresAt <= now) continue;
+        update.run(
+          randomBytes(32).toString('base64url'),
+          new Date(expiresAt).toISOString().replace(/\.\d{3}Z$/, '+00:00'),
+          row.id,
+        );
+      }
     })();
   }
 

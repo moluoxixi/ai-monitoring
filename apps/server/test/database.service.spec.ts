@@ -406,7 +406,7 @@ describe('DatabaseService idempotent event enrichment', () => {
     second.onModuleDestroy();
   });
 
-  it('creates stable reply routes for completed Codex CLI and Desktop QQ deliveries', () => {
+  it('creates stable reply routes for completed Codex and Claude CLI/Desktop QQ deliveries', () => {
     const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
     directories.push(directory);
     const database = new DatabaseService(
@@ -476,6 +476,28 @@ describe('DatabaseService idempotent event enrichment', () => {
     expect(database.resolveReplyRoute(desktopToken!)).toMatchObject({ reply_thread_id: 'fork-thread-2' });
     expect(database.listDeliveries(10).some((row) => 'reply_thread_id' in row)).toBe(false);
 
+    for (const client of ['claude-cli', 'claude-desktop', 'qoder-cli'] as const) {
+      const sessionId = `${client}-session-1`;
+      const [sessionEventId] = database.insertEvent({
+        ...event({ session_id: sessionId, cwd: 'D:\\project', answer_text: 'done' }, `continue ${client}`),
+        source_event_id: `${sessionId}:turn-1:completed`,
+        client,
+        status: 'completed',
+        error_code: null,
+      }, ['openclaw-qq']);
+      const sessionDelivery = database.getDeliveriesForEvent(sessionEventId)[0]!;
+      const sessionToken = database.ensureDeliveryReplyRoute(sessionDelivery.id, 86_400_000);
+
+      expect(sessionToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      expect(database.resolveReplyRouteForEvent(sessionEventId)).toMatchObject({
+        delivery_id: sessionDelivery.id,
+        event_id: sessionEventId,
+        reply_thread_id: null,
+        client,
+        metadata: { session_id: sessionId, cwd: 'D:\\project' },
+      });
+    }
+
     const [failedEventId] = database.insertEvent({
       ...event({ thread_id: 'desktop-thread-failed' }, 'failed desktop task'),
       source_event_id: 'desktop-thread-failed:turn-1:failed',
@@ -488,9 +510,85 @@ describe('DatabaseService idempotent event enrichment', () => {
       status: 'completed',
       error_code: null,
     }, ['openclaw-qq']);
+    const [unknownClaudeSessionEventId] = database.insertEvent({
+      ...event({ session_id: 'unknown-session' }, 'Claude task without a usable session'),
+      source_event_id: 'claude-session-unknown:turn-1:completed',
+      client: 'claude-desktop',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    const [questEventId] = database.insertEvent({
+      ...event({ session_id: 'task-123.session.execution' }, 'Qoder Quest task'),
+      source_event_id: 'qoder-quest:turn-1:completed',
+      client: 'qoder-quest',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    const [qoderDesktopEventId] = database.insertEvent({
+      ...event({ session_id: 'qoder-desktop-session' }, 'Qoder Desktop task'),
+      source_event_id: 'qoder-desktop:turn-1:completed',
+      client: 'qoder-desktop',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
     expect(database.ensureDeliveryReplyRoute(database.getDeliveriesForEvent(failedEventId)[0]!.id, 86_400_000)).toBeNull();
     expect(database.ensureDeliveryReplyRoute(database.getDeliveriesForEvent(missingThreadEventId)[0]!.id, 86_400_000)).toBeNull();
+    expect(database.ensureDeliveryReplyRoute(
+      database.getDeliveriesForEvent(unknownClaudeSessionEventId)[0]!.id,
+      86_400_000,
+    )).toBeNull();
+    expect(database.ensureDeliveryReplyRoute(database.getDeliveriesForEvent(questEventId)[0]!.id, 86_400_000)).toBeNull();
+    expect(database.ensureDeliveryReplyRoute(database.getDeliveriesForEvent(qoderDesktopEventId)[0]!.id, 86_400_000)).toBeNull();
     database.onModuleDestroy();
+  });
+
+  it('backfills unexpired sent Qoder CLI reply routes on upgrade only', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'ai-monitor-db-'));
+    directories.push(directory);
+    const dbPath = join(directory, 'monitor.db');
+    const config = { dbPath, replyRouteTtlMs: 86_400_000 } as AppConfigService;
+    const first = new DatabaseService(config, new ExtensionsService());
+    const [cliEventId] = first.insertEvent({
+      ...event({ session_id: 'qoder-cli-session' }, 'Qoder CLI task'),
+      source_event_id: 'qoder-cli-session:turn-1:completed',
+      client: 'qoder-cli',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    const [desktopEventId] = first.insertEvent({
+      ...event({ session_id: 'qoder-desktop-session' }, 'Qoder Desktop task'),
+      source_event_id: 'qoder-desktop-session:turn-1:completed',
+      client: 'qoder-desktop',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    const [expiredEventId] = first.insertEvent({
+      ...event({ session_id: 'expired-qoder-cli-session' }, 'Expired Qoder CLI task'),
+      source_event_id: 'expired-qoder-cli-session:turn-1:completed',
+      client: 'qoder-cli',
+      status: 'completed',
+      error_code: null,
+    }, ['openclaw-qq']);
+    first.onModuleDestroy();
+
+    const raw = new Sqlite(dbPath);
+    const recent = new Date(Date.now() - 60_000).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+    const expired = new Date(Date.now() - 2 * 86_400_000).toISOString().replace(/\.\d{3}Z$/, '+00:00');
+    raw.prepare("UPDATE deliveries SET state = 'sent', sent_at = ? WHERE event_id IN (?, ?)")
+      .run(recent, cliEventId, desktopEventId);
+    raw.prepare("UPDATE deliveries SET state = 'sent', sent_at = ? WHERE event_id = ?")
+      .run(expired, expiredEventId);
+    raw.close();
+
+    const upgraded = new DatabaseService(config, new ExtensionsService());
+    expect(upgraded.resolveReplyRouteForEvent(cliEventId)).toMatchObject({
+      event_id: cliEventId,
+      client: 'qoder-cli',
+      metadata: { session_id: 'qoder-cli-session' },
+    });
+    expect(upgraded.resolveReplyRouteForEvent(desktopEventId)).toBeNull();
+    expect(upgraded.resolveReplyRouteForEvent(expiredEventId)).toBeNull();
+    upgraded.onModuleDestroy();
   });
 
   it('deduplicates inbound replies by channel and external message id', () => {

@@ -17,10 +17,10 @@ Codex CLI
   -> notify multiplexer / App Server proxy
   -> 通知中心 :8787
 
-QQ 引用回复 Codex 完成通知
+QQ 引用回复 Codex / Claude 完成通知
   -> OpenClaw before_dispatch 插件 -> 通知中心 :8787
-  -> Codex CLI/Desktop: thread/fork + turn/start -> 持久 CLI 分支链
-  -> 每条回复推进分支头，不抢占可能被 Desktop 持有的源 thread
+  -> Codex: thread/fork + turn/start；Claude: resume + fork-session
+  -> 每条回复推进独立分支头，不抢占 Desktop 持有的源会话
 
 Codex Desktop
   -> Codex session watcher
@@ -161,9 +161,9 @@ QQ 可直接在通知中心绑定：
 3. 扫码凭据由腾讯官方 `@tencent-connect/qqbot-connector` 获取并写入 OpenClaw；本项目自己的绑定文件只保存发送所需的不透明 target/account ID，UI 和日志不展示这些值。
 4. 绑定完成后立即生效，之后所有 AI 软件的新事件都会发送到 QQ。
 
-Codex CLI 和 Codex Desktop 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。所有外发通知都会在正文开头显示 `[任务ID:...]`；可回复的 QQ 通知还会紧邻显示不透明的 `[AI-MONITOR-REPLY:...]` 路由标记，将标记放在开头可以避免 QQ 引用预览截断长正文。这类 QQ 通知正文不再附加开始时间、完成时间和总耗时字段。OpenClaw 只会认领“私聊 + 引用 + 有效标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端还会重新校验当前 QQ 绑定、标记有效期和 QQ message id 幂等，再通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 续接会话。CLI 和 Desktop 通知的每条引用回复都会从该 delivery 的最新 thread 创建持久 CLI 分支，在新分支启动 turn，并原子推进分支头；不会直接 resume 可能正被 Desktop 或其他客户端持有的源 thread。远程 turn 使用 `approvalPolicy: never`，不会停在无人处理的审批上，也不会绕过 Codex 自身安全限制。插件确认语只表示后台 turn 已接受，完整回答会在完成后另发一条 QQ 消息。
+Codex CLI/Desktop、Claude CLI/Desktop 和 Qoder CLI 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。所有新通知只在正文开头显示 `[任务ID:...]`；服务端仍会在数据库中生成不透明 route token，用于保留 30 天有效期、投递状态与分支头校验，但不再把内部标记放进通知影响阅读。已经发出的 `[AI-MONITOR-REPLY:...]` 旧通知继续兼容。这类 QQ 通知正文不附加开始时间、完成时间和总耗时字段。OpenClaw 只会认领“私聊 + 引用 + 有效任务 ID 或旧标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端会重新校验当前 QQ 绑定、route 有效期和 QQ message id 幂等。Codex 通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 从最新 thread 执行 `thread/fork + turn/start`；Claude 和 Qoder CLI 优先从事件记录的项目 `cwd` 通过各自 CLI 执行 `--resume <session> --fork-session`，从 `stream-json` 的初始化事件取得新 session ID；历史事件缺少 cwd 时会回查本地 transcript。三者都原子推进该 delivery 的独立分支头，不直接写回或争抢可能被 Desktop 持有的源会话。远程执行使用非交互审批模式，插件确认语只表示后台任务已接收，完整回答会在完成后另发一条 QQ 消息。
 
-当前回复 MVP 仅覆盖 `openclaw-qq + Codex CLI/Desktop + 纯文本引用回复`，不支持 Claude/Qoder/Hermes/Cursor 或图片/语音。QQ 引用预览若只保留 `[任务ID:...]`、丢失不透明路由标记，服务端会用任务 ID 定位同一条 QQ delivery，但仍要求原 route 已生成且有效，并重新校验当前 QQ 绑定；不可续接任务会返回明确提示，不会落回 OpenClaw 模型。CLI 和 Desktop 的引用回复都写入新的持久 CLI 分支；同一 delivery 的后续回复从已保存的最新分支继续 fork，因此保留对话历史而不争抢源 thread writer。分支完成通知按 Codex CLI 归类，后续可继续回复；分支可能被 Desktop 索引或打开，但 Desktop 是否显示它不属于 Monitor 的协议保证。标记默认 30 天过期。同一 QQ message id 只会提交一次；未知的跨进程执行结果不会自动重放，避免向 Codex 创建重复 turn。
+当前回复范围覆盖 `openclaw-qq + Codex/Claude CLI/Desktop + Qoder CLI + 纯文本私聊引用回复`，不支持 Hermes、Cursor、Qoder Desktop/Quest、QQ群或图片/语音。Qoder Desktop 的 session transcript 位于独立存储，Qoder CLI 1.1.23 会将其拒绝为无效 session，因此不会伪装成可续接。服务端用任务 ID 定位同一条 QQ delivery，但仍要求后台 route 已生成且有效，并重新校验当前 QQ 绑定；不可续接任务会返回明确提示，不会落回 OpenClaw 模型。同一 delivery 的后续回复从已保存的最新 Codex thread、Claude session 或 Qoder CLI session 继续 fork，因此保留对话历史而不争抢源 writer。fork 可能被对应 Desktop 索引或打开，但是否立即显示在 Desktop UI 不属于 Monitor 的协议保证。route 默认 30 天过期，同一 QQ message id 只会提交一次；未知的跨进程执行结果不会自动重放，避免创建重复 turn。
 
 源码部署并复用全局 OpenClaw Gateway 时，首次启用、升级回复插件或修改 reply token 后运行 `node scripts/ensure-openclaw-plugins.mjs`，再执行 `openclaw gateway restart`。安装脚本会读取仓库 `.env`、安装回复插件并把鉴权配置写入 OpenClaw 本地 state；否则引用消息会落回普通 OpenClaw agent 路由。
 
@@ -203,7 +203,7 @@ AIMONITOR_APPRISE_URLS=SERVICE_URL_1,SERVICE_URL_2
 
 若设置 `AIMONITOR_INGEST_TOKEN`，relay 的事件、查询、测试和重试 API 都要求同一个 Bearer token。已安装的 Claude/Codex 生产者会直接读取仓库 `.env`，不需要把 token 写进用户级 Claude/Codex 配置。
 
-QQ 入站回复使用 `AIMONITOR_REPLY_TOKEN`，未单独配置时回退到 `AIMONITOR_INGEST_TOKEN`；两者均为空时 reply endpoint 必须拒绝请求。桌面 App 会在用户数据目录生成受限权限的本地回复令牌并同时注入 Gateway 与 server。可用 `AIMONITOR_REPLY_ROUTE_TTL_DAYS` 调整标记有效天数，用 `AIMONITOR_CODEX_COMMAND` 指定 Codex CLI。Docker 默认会安装并加载引用回复插件，但 Compose 内的 Monitor 无法直接启动宿主机 Codex；若要在容器部署中续接会话，需要显式提供容器内可执行的 Codex CLI、认证和可写会话数据，否则 endpoint 会返回明确的 Codex 启动错误。
+QQ 入站回复使用 `AIMONITOR_REPLY_TOKEN`，未单独配置时回退到 `AIMONITOR_INGEST_TOKEN`；两者均为空时 reply endpoint 必须拒绝请求。桌面 App 会在用户数据目录生成受限权限的本地回复令牌并同时注入 Gateway 与 server。可用 `AIMONITOR_REPLY_ROUTE_TTL_DAYS` 调整 route 有效天数，用 `AIMONITOR_CODEX_COMMAND`、`AIMONITOR_CLAUDE_COMMAND`、`AIMONITOR_QODER_COMMAND` 分别指定 Codex、Claude 和 Qoder CLI。Docker 默认会安装并加载引用回复插件，但 Compose 内的 Monitor 无法直接启动宿主机 CLI；若要在容器部署中续接会话，需要显式提供容器内可执行的 CLI、认证、项目目录和可写会话数据，否则 endpoint 会返回明确的启动错误。
 
 Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指数退避，连续 10 次失败后进入 `dead` 状态。这个保证从 relay 成功接收事件开始，生产者到 relay 的短暂不可用会记录到 stderr，但当前没有跨进程的入口持久队列。
 

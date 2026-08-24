@@ -22,6 +22,7 @@ interface FileState {
   turnId: string;
   taskSummary: string;
   answerSource: string;
+  cwd: string;
   client: QoderClient | null;
 }
 
@@ -30,6 +31,7 @@ interface SessionContext {
   turnId: string;
   taskSummary: string;
   answerSource: string;
+  cwd: string;
   client: 'qoder-desktop' | 'qoder-quest';
 }
 
@@ -39,6 +41,7 @@ interface ParsedQoderLine {
   sessionId: string;
   turnId: string;
   taskSummary: string;
+  cwd: string;
   client: QoderClient | null;
 }
 
@@ -115,6 +118,7 @@ const completionEvent = (
   completionId: string,
   taskSummary: string,
   prefix = 'qoder-session',
+  cwd = '',
 ): NormalizedEvent => ({
   source_event_id: `${prefix}:${sessionId}:${completionId}`,
   source: 'qoder',
@@ -128,6 +132,7 @@ const completionEvent = (
     session_id: sessionId,
     turn_id: completionId,
     ...(taskSummary ? { task_summary: taskSummary } : {}),
+    ...(cwd ? { cwd } : {}),
   },
 });
 
@@ -139,6 +144,7 @@ export const parseQoderSessionLine = (
   currentClient: QoderClient | null = null,
   currentAnswerSource = '',
   currentTurnId = '',
+  currentCwd = '',
 ): ParsedQoderLine => {
   let raw: unknown;
   try {
@@ -150,10 +156,12 @@ export const parseQoderSessionLine = (
       taskSummary: currentTaskSummary,
       client: currentClient,
       answerSource: currentAnswerSource,
+      cwd: currentCwd,
     };
   }
   const item = recordValue(raw);
   const sessionId = String(item.sessionId || item.session_id || currentSessionId || '').trim();
+  const cwd = typeof item.cwd === 'string' && item.cwd.trim() ? item.cwd.trim() : currentCwd;
   const client = inferClient(path, item, sessionId, currentClient);
   const message = recordValue(item.message);
   const role = String(message.role || '').toLowerCase();
@@ -166,11 +174,12 @@ export const parseQoderSessionLine = (
         taskSummary: currentTaskSummary,
         client,
         answerSource: currentAnswerSource,
+        cwd,
       };
     }
     const taskSummary = summarizeTask(contentText(message.content)) || currentTaskSummary;
     const turnId = String(item.uuid || timestampKey(item.timestamp) || currentTurnId).trim();
-    return { sessionId, turnId, taskSummary, client, answerSource: '' };
+    return { sessionId, turnId, taskSummary, client, answerSource: '', cwd };
   }
 
   if (item.type !== 'assistant' || role !== 'assistant') {
@@ -180,6 +189,7 @@ export const parseQoderSessionLine = (
       taskSummary: currentTaskSummary,
       client,
       answerSource: currentAnswerSource,
+      cwd,
     };
   }
   const text = truncateTail(contentText(message.content).trim(), 24_000);
@@ -187,7 +197,7 @@ export const parseQoderSessionLine = (
   const stopReason = String(message.stop_reason || '').toLowerCase();
   const completionId = String(message.id || timestampKey(item.timestamp)).trim();
   if (client !== 'qoder-cli' || stopReason !== 'end_turn' || !sessionId || !completionId || !answerSource) {
-    return { sessionId, turnId: currentTurnId, taskSummary: currentTaskSummary, client, answerSource };
+    return { sessionId, turnId: currentTurnId, taskSummary: currentTaskSummary, client, answerSource, cwd };
   }
 
   return {
@@ -196,7 +206,8 @@ export const parseQoderSessionLine = (
     taskSummary: '',
     client,
     answerSource,
-    event: completionEvent(client, sessionId, completionId, currentTaskSummary),
+    cwd,
+    event: completionEvent(client, sessionId, completionId, currentTaskSummary, 'qoder-session', cwd),
   };
 };
 
@@ -293,6 +304,7 @@ export class QoderSessionWatcherService implements OnModuleInit, OnModuleDestroy
         turnId: '',
         taskSummary: '',
         answerSource: '',
+        cwd: '',
         client: null,
       };
       this.files.set(path, state);
@@ -366,11 +378,13 @@ export class QoderSessionWatcherService implements OnModuleInit, OnModuleDestroy
       state.client,
       state.answerSource,
       state.turnId,
+      state.cwd,
     );
     state.sessionId = parsed.sessionId;
     state.turnId = parsed.turnId;
     state.taskSummary = parsed.taskSummary;
     state.answerSource = parsed.answerSource;
+    state.cwd = parsed.cwd;
     state.client = parsed.client;
     if (parsed.client === 'qoder-desktop' || parsed.client === 'qoder-quest') {
       this.sessions.set(parsed.sessionId, {
@@ -378,6 +392,7 @@ export class QoderSessionWatcherService implements OnModuleInit, OnModuleDestroy
         turnId: parsed.turnId,
         taskSummary: parsed.taskSummary,
         answerSource: parsed.answerSource,
+        cwd: parsed.cwd,
         client: parsed.client,
       });
     }
@@ -438,6 +453,7 @@ export class QoderSessionWatcherService implements OnModuleInit, OnModuleDestroy
       pending.completion.completionId,
       context.taskSummary,
       'qoder-log',
+      context.cwd,
     );
     this.ingestion.ingest(event, this.channels.deliveryChannels(), context.answerSource);
     if (deliveredKey) this.rememberDelivered(deliveredKey);

@@ -16,6 +16,7 @@ const temporaryDirectories: string[] = [];
 const line = (value: Record<string, unknown>): string => JSON.stringify(value);
 const userLine = (sessionId: string, content: unknown, entrypoint?: string): string => line({
   type: 'user', sessionId, entrypoint, timestamp: '2026-08-17T04:00:00Z',
+  cwd: 'D:\\project-new\\qoder-project',
   message: { role: 'user', content },
 });
 const assistantLine = (
@@ -24,6 +25,7 @@ const assistantLine = (
   options: { entrypoint?: string; id?: string; stopReason?: string; timestamp?: string } = {},
 ): string => line({
   type: 'assistant', sessionId, entrypoint: options.entrypoint,
+  cwd: 'D:\\project-new\\qoder-project',
   timestamp: options.timestamp || '2026-08-17T04:00:01Z',
   message: { role: 'assistant', id: options.id, stop_reason: options.stopReason, content },
 });
@@ -65,7 +67,7 @@ describe('Qoder session parser', () => {
       source_event_id: 'qoder-session:cli-session:answer-1',
       client: 'qoder-cli',
       status: 'completed',
-      metadata: { task_summary: '验证 CLI' },
+      metadata: { task_summary: '验证 CLI', cwd: 'D:\\project-new\\qoder-project' },
     });
     expect(completed.answerSource).toBe('CLI 验证通过');
   });

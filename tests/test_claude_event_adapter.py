@@ -45,12 +45,19 @@ def test_unrelated_hook_is_ignored():
 
 
 def test_prompt_summary_and_successful_assistant_content_are_forwarded():
-    payload = {"hook_event_name": "Stop", "session_id": "session", "prompt": "fix the login flow", "last_assistant_message": "answer"}
+    payload = {
+        "hook_event_name": "Stop",
+        "session_id": "session",
+        "cwd": "D:\\project-new\\claude-project",
+        "prompt": "fix the login flow",
+        "last_assistant_message": "answer",
+    }
     with patch("sys.stdin", io.StringIO(json.dumps(payload))), patch.object(claude_event_adapter, "post", return_value=0) as post:
         assert claude_event_adapter.main() == 0
     event = post.call_args.args[0]
     assert event["metadata"]["task_summary"] == "fix the login flow"
     assert event["metadata"]["answer_source"] == "answer"
+    assert event["metadata"]["cwd"] == "D:\\project-new\\claude-project"
 
 
 def test_legacy_stop_reads_only_assistant_text_from_the_transcript(tmp_path):

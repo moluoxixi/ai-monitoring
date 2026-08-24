@@ -41,6 +41,7 @@ describe('ClaudeDesktopTranscriptWatcher', () => {
       type: 'user',
       entrypoint: 'claude-desktop-3p',
       sessionId: 'session',
+      cwd: 'D:\\project-new\\desktop-project',
       message: { role: 'user', content: 'desktop question' },
     }));
     const thinking = parseClaudeDesktopTranscriptLine(JSON.stringify({
@@ -53,7 +54,7 @@ describe('ClaudeDesktopTranscriptWatcher', () => {
         stop_reason: 'end_turn',
         content: [{ type: 'thinking', thinking: 'private reasoning' }],
       },
-    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript);
+    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript, prompt.cwd);
     const answer = parseClaudeDesktopTranscriptLine(JSON.stringify({
       type: 'assistant',
       entrypoint: 'claude-desktop-3p',
@@ -64,7 +65,7 @@ describe('ClaudeDesktopTranscriptWatcher', () => {
         stop_reason: 'end_turn',
         content: [{ type: 'text', text: 'visible answer' }],
       },
-    }), thinking.sessionId, thinking.taskSummary, thinking.answerSource, thinking.desktopTranscript);
+    }), thinking.sessionId, thinking.taskSummary, thinking.answerSource, thinking.desktopTranscript, thinking.cwd);
 
     expect(thinking.event).toBeUndefined();
     expect(JSON.stringify(thinking)).not.toContain('private reasoning');
@@ -74,7 +75,11 @@ describe('ClaudeDesktopTranscriptWatcher', () => {
       source: 'claude-desktop',
       client: 'claude-desktop',
       status: 'completed',
-      metadata: { task_summary: 'desktop question', answer_source: 'visible answer' },
+      metadata: {
+        task_summary: 'desktop question',
+        answer_source: 'visible answer',
+        cwd: 'D:\\project-new\\desktop-project',
+      },
     });
     expect(answer.terminalIdentity).toBe(producerEventId);
     expect(answer.event?.source_event_id).toBe(normalizeEvent({
@@ -191,7 +196,7 @@ describe('ClaudeDesktopTranscriptWatcher', () => {
         role: 'user',
         content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: 'private tool output' }],
       },
-    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript);
+    }), prompt.sessionId, prompt.taskSummary, prompt.answerSource, prompt.desktopTranscript, prompt.cwd);
     const synthetic = parseClaudeDesktopTranscriptLine(JSON.stringify({
       type: 'user',
       entrypoint: 'claude-desktop-3p',

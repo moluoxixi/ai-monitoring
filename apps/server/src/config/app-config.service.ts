@@ -87,6 +87,24 @@ export class AppConfigService {
     60_000,
     numberValue(process.env.AIMONITOR_CODEX_REPLY_TURN_TIMEOUT_MS, 12 * 60 * 60_000),
   );
+  readonly claudeCommand = process.env.AIMONITOR_CLAUDE_COMMAND?.trim() || 'claude';
+  readonly claudeReplyRequestTimeoutMs = Math.max(
+    1_000,
+    numberValue(process.env.AIMONITOR_CLAUDE_REPLY_REQUEST_TIMEOUT_MS, 30_000),
+  );
+  readonly claudeReplyTurnTimeoutMs = Math.max(
+    60_000,
+    numberValue(process.env.AIMONITOR_CLAUDE_REPLY_TURN_TIMEOUT_MS, 12 * 60 * 60_000),
+  );
+  readonly qoderCommand = process.env.AIMONITOR_QODER_COMMAND?.trim() || 'qodercli';
+  readonly qoderReplyRequestTimeoutMs = Math.max(
+    1_000,
+    numberValue(process.env.AIMONITOR_QODER_REPLY_REQUEST_TIMEOUT_MS, 30_000),
+  );
+  readonly qoderReplyTurnTimeoutMs = Math.max(
+    60_000,
+    numberValue(process.env.AIMONITOR_QODER_REPLY_TURN_TIMEOUT_MS, 12 * 60 * 60_000),
+  );
   readonly appriseUrls = (process.env.AIMONITOR_APPRISE_URLS || '')
     .split(',')
     .map((value) => value.trim())

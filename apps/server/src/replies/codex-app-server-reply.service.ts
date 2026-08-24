@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptionsWithoutStdio } from 'node:child_process';
 import { createInterface, type Interface as ReadLineInterface } from 'node:readline';
 import { AppConfigService } from '../config/app-config.service';
+import type { ReplyDispatchResult } from './reply-dispatch.types';
 
 export const CODEX_PROCESS_FACTORY = Symbol('CODEX_PROCESS_FACTORY');
 
@@ -19,11 +20,7 @@ export interface CodexReplyDispatchInput {
   text: string;
 }
 
-export interface CodexReplyDispatchResult {
-  threadId: string;
-  turnId: string;
-  writerReleased: Promise<void>;
-}
+export type CodexReplyDispatchResult = ReplyDispatchResult;
 
 interface CodexProcessInvocation {
   command: string;
@@ -257,7 +254,12 @@ export class CodexAppServerReplyService implements OnModuleDestroy {
           this.active.delete(connection);
           connection.close();
         });
-      return { threadId: targetThreadId, turnId, writerReleased };
+      return {
+        threadId: targetThreadId,
+        turnId,
+        writerReleased,
+        cancel: () => connection.close(),
+      };
     } catch (error) {
       this.active.delete(connection);
       connection.close();

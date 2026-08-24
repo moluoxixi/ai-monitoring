@@ -406,7 +406,11 @@ describe('Codex session file synchronization', () => {
       const replies = new RepliesService(
         database,
         { matchesQqBinding: vi.fn(() => true) } as never,
-        new PlatformReplyDispatcherService(codex as never),
+        new PlatformReplyDispatcherService(
+          codex as never,
+          { dispatch: vi.fn() } as never,
+          { dispatch: vi.fn() } as never,
+        ),
       );
       await replies.accept({
         channel: 'openclaw-qq',

@@ -51,7 +51,7 @@ test('handles the QQBot 2.0.1 before_dispatch shape and posts normalized fields'
     replyToBody: quoted,
   }, { channelId: 'qqbot', accountId: 'default' })
 
-  assert.deepEqual(result, { handled: true, text: '已接收，Codex 正在后台处理；完成后会另发一条 QQ 消息。' })
+  assert.deepEqual(result, { handled: true, text: '已接收，AI 任务正在后台处理；完成后会另发一条 QQ 消息。' })
   assert.equal(request.url, 'http://monitor/reply')
   assert.equal(request.options.headers.authorization, 'Bearer reply-secret')
   assert.deepEqual(JSON.parse(request.options.body), {
@@ -74,7 +74,7 @@ test('claims a quoted task ID when QQ omits the opaque route token', async () =>
     content: '继续修复', isGroup: false, replyToBody: taskOnlyQuote,
   }, { channelId: 'qqbot', accountId: 'default' })
 
-  assert.deepEqual(result, { handled: true, text: '已接收，Codex 正在后台处理；完成后会另发一条 QQ 消息。' })
+  assert.deepEqual(result, { handled: true, text: '已接收，AI 任务正在后台处理；完成后会另发一条 QQ 消息。' })
   assert.equal(JSON.parse(request.options.body).reply_to_body, taskOnlyQuote)
 })
 

@@ -172,7 +172,7 @@ describe('DeliveryWorkerService', () => {
     expect(sent[0]).toBe('[任务ID:42]\n\n提问：a...\n任务结果：12345...');
   });
 
-  it('adds a stable route marker only when the database enables QQ replies', async () => {
+  it('creates a stable QQ reply route without exposing its opaque token', async () => {
     const send = vi.fn(() => Promise.resolve());
     const { service } = serviceFor(send, [{
       ...delivery(1, 'openclaw-qq'),
@@ -187,12 +187,12 @@ describe('DeliveryWorkerService', () => {
     expect(send).toHaveBeenCalledWith(
       'openclaw-qq',
       '(Codex CLI) 任务已完成',
-      '[任务ID:42]\n\n[AI-MONITOR-REPLY:' + 'A'.repeat(43) + ']\n\n'
-        + '提问：continue work\n任务结果：未采集到最终回答',
+      '[任务ID:42]\n\n提问：continue work\n任务结果：未采集到最终回答',
     );
+    expect(database.ensureDeliveryReplyRoute).toHaveBeenCalledWith(1, undefined);
   });
 
-  it('adds an enabled route marker to a Codex Desktop completion', async () => {
+  it('creates an enabled route for a Codex Desktop completion without exposing its token', async () => {
     const send = vi.fn(() => Promise.resolve());
     const { service } = serviceFor(send, [{
       ...delivery(3, 'openclaw-qq'),
@@ -209,7 +209,28 @@ describe('DeliveryWorkerService', () => {
     expect(send).toHaveBeenCalledWith(
       'openclaw-qq',
       '(Codex Desktop) 任务已完成',
-      expect.stringContaining('[AI-MONITOR-REPLY:' + 'B'.repeat(43) + ']'),
+      expect.not.stringContaining('AI-MONITOR-REPLY'),
+    );
+  });
+
+  it('creates an enabled route for a Claude Desktop completion without exposing its token', async () => {
+    const send = vi.fn(() => Promise.resolve());
+    const { service } = serviceFor(send, [{
+      ...delivery(4, 'openclaw-qq'),
+      client: 'claude-desktop',
+      metadata: { session_id: 'desktop-session-1', task_summary: 'continue Claude desktop work' },
+    }]);
+    const database = (service as unknown as { database: DatabaseService }).database;
+    vi.mocked(database.ensureDeliveryReplyRoute).mockReturnValue('C'.repeat(43));
+
+    service.processOnce();
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+
+    expect(database.ensureDeliveryReplyRoute).toHaveBeenCalledWith(4, undefined);
+    expect(send).toHaveBeenCalledWith(
+      'openclaw-qq',
+      '(Claude Desktop) 任务已完成',
+      expect.stringMatching(/^\[任务ID:42\]\n\n(?!\[AI-MONITOR-REPLY:)/),
     );
   });
 

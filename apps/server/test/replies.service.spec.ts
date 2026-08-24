@@ -18,16 +18,20 @@ const input = {
 
 const serviceFor = (overrides: {
   bound?: boolean;
-  client?: 'codex-cli' | 'codex-desktop';
+  client?: 'codex-cli' | 'codex-desktop' | 'claude-cli' | 'claude-desktop' | 'qoder-cli';
   duplicateState?: 'processing' | 'accepted' | 'failed';
   replyThreadId?: string | null;
 } = {}) => {
   let dispatchCount = 0;
+  const client = overrides.client ?? 'codex-cli';
   const route: ReplyRoute = {
     delivery_id: 10, event_id: 5, channel: 'openclaw-qq', delivery_state: 'sent',
     reply_token: token, reply_expires_at: new Date(Date.now() + 60_000).toISOString(),
     reply_thread_id: overrides.replyThreadId ?? null,
-    client: overrides.client ?? 'codex-cli', metadata: { thread_id: 'thread-1' },
+    client,
+    metadata: client.startsWith('claude') || client.startsWith('qoder')
+      ? { session_id: 'session-1', cwd: 'D:\\project' }
+      : { thread_id: 'thread-1' },
   };
   const database = {
     resolveReplyRoute: vi.fn(() => ({ ...route, metadata: { ...route.metadata } })),
@@ -84,7 +88,7 @@ describe('RepliesService', () => {
     expect(database.advanceReplyThreadId).toHaveBeenCalledWith(10, null, 'fork-thread-1');
   });
 
-  it.each(['codex-cli', 'codex-desktop'] as const)(
+  it.each(['codex-cli', 'codex-desktop', 'claude-cli', 'claude-desktop', 'qoder-cli'] as const)(
     'advances the persistent fork head for consecutive %s replies',
     async (client) => {
       const { service, database, dispatcher } = serviceFor({ client });
@@ -136,17 +140,22 @@ describe('RepliesService', () => {
   });
 
   it('fails clearly when another server process wins Desktop fork persistence', async () => {
-    const { service, database } = serviceFor({ client: 'codex-desktop' });
+    const { service, database, dispatcher } = serviceFor({ client: 'codex-desktop' });
+    const cancel = vi.fn();
+    vi.mocked(dispatcher.dispatch).mockResolvedValue({
+      threadId: 'fork-thread-1', turnId: 'turn-1', writerReleased: Promise.resolve(), cancel,
+    });
     vi.mocked(database.advanceReplyThreadId).mockReturnValue('fork-thread-winner');
 
     await expect(service.accept(input)).rejects.toThrow(
-      'another server process advanced the Codex reply fork',
+      'another server process advanced the AI reply continuation',
     );
     expect(database.markInboundReply).toHaveBeenCalledWith(
       7,
       'failed',
-      'another server process advanced the Codex reply fork',
+      'another server process advanced the AI reply continuation',
     );
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('records App Server dispatch failures and returns a clear service error', async () => {
@@ -154,7 +163,7 @@ describe('RepliesService', () => {
     vi.mocked(dispatcher.dispatch).mockRejectedValue(new Error('thread/fork rejected'));
 
     await expect(service.accept(input)).rejects.toThrow(
-      'unable to continue the Codex conversation: thread/fork rejected',
+      'unable to continue the AI conversation: thread/fork rejected',
     );
     expect(database.markInboundReply).toHaveBeenCalledWith(7, 'failed', 'thread/fork rejected');
   });
@@ -222,16 +231,22 @@ describe('RepliesController authentication', () => {
 });
 
 describe('PlatformReplyDispatcherService', () => {
-  it('rejects unsupported clients instead of guessing a resume protocol', () => {
+  it.each([
+    'qoder-desktop', 'qoder-quest', 'hermes-cli', 'hermes-desktop', 'cursor-cli', 'cursor-desktop',
+  ])('rejects unsupported client %s instead of guessing a resume protocol', (client) => {
     const codex = { dispatch: vi.fn() };
-    const dispatcher = new ReplyDispatcher(codex as never);
+    const claude = { dispatch: vi.fn() };
+    const qoder = { dispatch: vi.fn() };
+    const dispatcher = new ReplyDispatcher(codex as never, claude as never, qoder as never);
     expect(() => dispatcher.dispatch({
       delivery_id: 1, event_id: 1, channel: 'openclaw-qq', delivery_state: 'sent',
       reply_token: token, reply_expires_at: new Date(Date.now() + 60_000).toISOString(),
       reply_thread_id: null,
-      client: 'claude-cli', metadata: { session_id: 'session-1' },
+      client, metadata: { session_id: 'session-1' },
     }, 'continue')).toThrow(BadRequestException);
     expect(codex.dispatch).not.toHaveBeenCalled();
+    expect(claude.dispatch).not.toHaveBeenCalled();
+    expect(qoder.dispatch).not.toHaveBeenCalled();
   });
 
   it('forks from the latest branch for both CLI and Desktop routes', () => {
@@ -240,7 +255,7 @@ describe('PlatformReplyDispatcherService', () => {
         threadId: 'target', turnId: 'turn-1', writerReleased: Promise.resolve(),
       })),
     };
-    const dispatcher = new ReplyDispatcher(codex as never);
+    const dispatcher = new ReplyDispatcher(codex as never, { dispatch: vi.fn() } as never, { dispatch: vi.fn() } as never);
     const base = {
       delivery_id: 1, event_id: 1, channel: 'openclaw-qq', delivery_state: 'sent',
       reply_token: token, reply_expires_at: new Date(Date.now() + 60_000).toISOString(),
@@ -262,5 +277,57 @@ describe('PlatformReplyDispatcherService', () => {
     expect(codex.dispatch).toHaveBeenNthCalledWith(3, {
       mode: 'fork', threadId: 'fork-thread-1', text: 'second desktop reply',
     });
+  });
+
+  it('forks Claude CLI and Desktop sessions from the latest persisted session', () => {
+    const codex = { dispatch: vi.fn() };
+    const claude = {
+      dispatch: vi.fn(async () => ({
+        threadId: 'fork-session', turnId: 'fork-session', writerReleased: Promise.resolve(),
+      })),
+    };
+    const dispatcher = new ReplyDispatcher(codex as never, claude as never, { dispatch: vi.fn() } as never);
+    const base = {
+      delivery_id: 1, event_id: 1, channel: 'openclaw-qq', delivery_state: 'sent',
+      reply_token: token, reply_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      metadata: { session_id: 'original-session', cwd: 'D:\\project' },
+    };
+
+    dispatcher.dispatch({ ...base, client: 'claude-cli', reply_thread_id: null }, 'cli reply');
+    dispatcher.dispatch({
+      ...base, client: 'claude-desktop', reply_thread_id: 'fork-session-1',
+    }, 'desktop reply');
+
+    expect(claude.dispatch).toHaveBeenNthCalledWith(1, {
+      sessionId: 'original-session', text: 'cli reply', cwd: 'D:\\project',
+    });
+    expect(claude.dispatch).toHaveBeenNthCalledWith(2, {
+      sessionId: 'fork-session-1', text: 'desktop reply', cwd: 'D:\\project',
+    });
+    expect(codex.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('forks Qoder CLI sessions from the latest persisted session', () => {
+    const codex = { dispatch: vi.fn() };
+    const claude = { dispatch: vi.fn() };
+    const qoder = {
+      dispatch: vi.fn(async () => ({
+        threadId: 'fork-session', turnId: 'fork-session', writerReleased: Promise.resolve(),
+      })),
+    };
+    const dispatcher = new ReplyDispatcher(codex as never, claude as never, qoder as never);
+    const base = {
+      delivery_id: 1, event_id: 1, channel: 'openclaw-qq', delivery_state: 'sent',
+      reply_token: token, reply_expires_at: new Date(Date.now() + 60_000).toISOString(),
+      metadata: { session_id: 'original-session', cwd: 'D:\\project' },
+    };
+
+    dispatcher.dispatch({ ...base, client: 'qoder-cli', reply_thread_id: null }, 'cli reply');
+
+    expect(qoder.dispatch).toHaveBeenNthCalledWith(1, {
+      sessionId: 'original-session', text: 'cli reply', cwd: 'D:\\project',
+    });
+    expect(codex.dispatch).not.toHaveBeenCalled();
+    expect(claude.dispatch).not.toHaveBeenCalled();
   });
 });

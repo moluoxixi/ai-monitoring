@@ -17,6 +17,7 @@ interface TranscriptFileState {
   taskSummary: string;
   answerSource: string;
   desktopTranscript: boolean;
+  cwd: string;
   birthtimeMs: number;
   prefixDigest: string;
 }
@@ -54,6 +55,7 @@ export interface ClaudeDesktopTranscriptResult {
   taskSummary: string;
   answerSource: string;
   desktopTranscript: boolean;
+  cwd: string;
   suppressProvisional?: boolean;
   terminalIdentity?: string;
   terminalTimestampMs?: number;
@@ -78,6 +80,7 @@ export const parseClaudeDesktopTranscriptLine = (
   currentTaskSummary = '',
   currentAnswerSource = '',
   currentDesktopTranscript = false,
+  currentCwd = '',
 ): ClaudeDesktopTranscriptResult => {
   let raw: unknown;
   try {
@@ -88,6 +91,7 @@ export const parseClaudeDesktopTranscriptLine = (
       taskSummary: currentTaskSummary,
       answerSource: currentAnswerSource,
       desktopTranscript: currentDesktopTranscript,
+      cwd: currentCwd,
     };
   }
   const item = recordValue(raw);
@@ -95,8 +99,9 @@ export const parseClaudeDesktopTranscriptLine = (
   const desktopTranscript = currentDesktopTranscript
     || (!sidechain && item.entrypoint === 'claude-desktop-3p');
   const sessionId = String(item.sessionId || item.session_id || currentSessionId);
+  const cwd = typeof item.cwd === 'string' && item.cwd.trim() ? item.cwd.trim() : currentCwd;
   if (!desktopTranscript || sidechain) {
-    return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript };
+    return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript, cwd };
   }
 
   if (item.type === 'user') {
@@ -110,13 +115,14 @@ export const parseClaudeDesktopTranscriptLine = (
       && promptContent;
     const summary = humanPrompt ? summarizeTask(textValue(message.content, 2_000)) : '';
     if (!summary) {
-      return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript };
+      return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript, cwd };
     }
     return {
       sessionId,
       taskSummary: summary,
       answerSource: '',
       desktopTranscript,
+      cwd,
       suppressProvisional: Boolean(sessionId),
     };
   }
@@ -124,27 +130,28 @@ export const parseClaudeDesktopTranscriptLine = (
   if (item.type === 'assistant') {
     const message = recordValue(item.message);
     if (message.role !== 'assistant') {
-      return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript };
+      return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript, cwd };
     }
     const answer = textValue(message.content) || currentAnswerSource;
     if (String(message.stop_reason || '').toLowerCase() !== 'end_turn') {
-      return { sessionId, taskSummary: currentTaskSummary, answerSource: answer, desktopTranscript };
+      return { sessionId, taskSummary: currentTaskSummary, answerSource: answer, desktopTranscript, cwd };
     }
     if (!answer) {
-      return { sessionId, taskSummary: currentTaskSummary, answerSource: '', desktopTranscript };
+      return { sessionId, taskSummary: currentTaskSummary, answerSource: '', desktopTranscript, cwd };
     }
     const turnId = String(message.id || item.uuid || '');
     const terminalIdentity = turnId
       ? claudeDesktopTerminalEventId('assistant', turnId, 'completed')
       : '';
     if (!sessionId || !turnId) {
-      return { sessionId, taskSummary: currentTaskSummary, answerSource: answer, desktopTranscript };
+      return { sessionId, taskSummary: currentTaskSummary, answerSource: answer, desktopTranscript, cwd };
     }
     return {
       sessionId,
       taskSummary: currentTaskSummary,
       answerSource: answer,
       desktopTranscript,
+      cwd,
       terminalIdentity,
       terminalTimestampMs: transcriptTimestampMs(item.timestamp),
       event: {
@@ -159,6 +166,7 @@ export const parseClaudeDesktopTranscriptLine = (
         metadata: {
           session_id: sessionId,
           turn_id: turnId,
+          ...(cwd ? { cwd } : {}),
           ...(currentTaskSummary ? { task_summary: currentTaskSummary } : {}),
           ...(answer ? { answer_source: answer } : {}),
         },
@@ -174,13 +182,14 @@ export const parseClaudeDesktopTranscriptLine = (
       ? claudeDesktopTerminalEventId('system', turnId, 'failed')
       : '';
     if (!sessionId || !turnId) {
-      return { sessionId, taskSummary: currentTaskSummary, answerSource: '', desktopTranscript };
+      return { sessionId, taskSummary: currentTaskSummary, answerSource: '', desktopTranscript, cwd };
     }
     return {
       sessionId,
       taskSummary: currentTaskSummary,
       answerSource: '',
       desktopTranscript,
+      cwd,
       terminalIdentity,
       terminalTimestampMs: transcriptTimestampMs(item.timestamp),
       event: {
@@ -195,6 +204,7 @@ export const parseClaudeDesktopTranscriptLine = (
         metadata: {
           session_id: sessionId,
           turn_id: turnId,
+          ...(cwd ? { cwd } : {}),
           ...(currentTaskSummary ? { task_summary: currentTaskSummary } : {}),
           ...(failureMessage ? { failure_message: failureMessage } : {}),
         },
@@ -202,7 +212,7 @@ export const parseClaudeDesktopTranscriptLine = (
     };
   }
 
-  return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript };
+  return { sessionId, taskSummary: currentTaskSummary, answerSource: currentAnswerSource, desktopTranscript, cwd };
 };
 
 @Injectable()
@@ -308,6 +318,7 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
       taskSummary: '',
       answerSource: '',
       desktopTranscript: false,
+      cwd: '',
       birthtimeMs,
       prefixDigest: '',
     };
@@ -335,11 +346,13 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
         state.taskSummary,
         state.answerSource,
         state.desktopTranscript,
+        state.cwd,
       );
       state.sessionId = parsed.sessionId;
       state.taskSummary = parsed.taskSummary;
       state.answerSource = parsed.event ? '' : parsed.answerSource;
       state.desktopTranscript = parsed.desktopTranscript;
+      state.cwd = parsed.cwd;
       if (parsed.terminalIdentity) this.seenTerminalIds.add(parsed.terminalIdentity);
     }
     return state;
@@ -376,6 +389,7 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
       current.taskSummary = '';
       current.answerSource = '';
       current.desktopTranscript = false;
+      current.cwd = '';
       current.prefixDigest = '';
     }
     const chunk = bytes.subarray(current.offset);
@@ -390,11 +404,13 @@ export class ClaudeDesktopTranscriptWatcherService implements OnModuleInit, OnMo
         current.taskSummary,
         current.answerSource,
         current.desktopTranscript,
+        current.cwd,
       );
       current.sessionId = parsed.sessionId;
       current.taskSummary = parsed.taskSummary;
       current.answerSource = parsed.event ? '' : parsed.answerSource;
       current.desktopTranscript = parsed.desktopTranscript;
+      current.cwd = parsed.cwd;
       if (parsed.suppressProvisional && parsed.sessionId) {
         this.ingestion.suppressProvisionalFailures?.('claude-desktop', parsed.sessionId);
       }

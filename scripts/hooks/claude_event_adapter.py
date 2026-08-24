@@ -226,6 +226,8 @@ def main() -> int:
     assistant_answer = ""
     if status == "completed":
         assistant_answer = _assistant_answer(item) or transcript.answer
+    cwd = item.get("cwd")
+    cwd = cwd.strip() if isinstance(cwd, str) else ""
     event = {
         "source": source,
         "client": client,
@@ -238,6 +240,7 @@ def main() -> int:
         "metadata": {
             "session_id": session_id,
             "turn_id": turn_id,
+            **({"cwd": cwd} if cwd else {}),
             **({"task_summary": task_summary} if task_summary else {}),
             **({"answer_source": assistant_answer} if assistant_answer else {}),
             **({"notification_state": "diagnostic"} if status == "tool_failed" else {}),
