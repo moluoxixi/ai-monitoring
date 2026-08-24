@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { watch, type FSWatcher } from 'chokidar';
-import { createReadStream, existsSync, readdirSync, statSync, type Stats } from 'node:fs';
+import { createReadStream, existsSync, readdirSync, statSync, type Dirent, type Stats } from 'node:fs';
 import { extname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { AppConfigService } from '../config/app-config.service';
@@ -324,6 +324,14 @@ const applyCodexSessionLine = (line: string, state: FileState): ParsedTerminalEv
 
 const fileIdentity = (stats: Stats): string => `${stats.dev}:${stats.ino}:${stats.birthtimeMs}`;
 
+const filesystemErrorCode = (error: unknown): string => {
+  if (!error || typeof error !== 'object' || !('code' in error)) return '';
+  return String((error as { code?: unknown }).code || '');
+};
+
+const isTransientDiscoveryError = (error: unknown): boolean =>
+  ['ENOENT', 'ENOTDIR'].includes(filesystemErrorCode(error));
+
 const emptyFileState = (identity: string, offset: number): FileState => ({
   identity,
   offset,
@@ -464,27 +472,57 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
   }
 
   private discoverFiles(): void {
-    for (const [path, size] of this.captureStartupFiles(this.config.codexSessionsPath)) {
-      const state = this.files.get(path);
-      if (state?.offset === size) continue;
-      if (!state) {
-        this.files.set(path, emptyFileState('', 0));
+    try {
+      for (const [path, size] of this.captureStartupFiles(this.config.codexSessionsPath)) {
+        const state = this.files.get(path);
+        if (state?.offset === size) continue;
+        if (!state) {
+          this.files.set(path, emptyFileState('', 0));
+        }
+        this.enqueue(path, true, undefined, true);
       }
-      this.enqueue(path, true, undefined, true);
+    } catch (error) {
+      this.logger.warn(`Unable to scan Codex sessions: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   private captureStartupFiles(root: string): Map<string, number> {
     const files = new Map<string, number>();
     const visit = (directory: string): void => {
-      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      let entries: Dirent[];
+      try {
+        entries = this.readDirectory(directory);
+      } catch (error) {
+        this.warnDiscoveryFailure('read directory', directory, error);
+        return;
+      }
+      for (const entry of entries) {
         const path = join(directory, entry.name);
         if (entry.isDirectory()) visit(path);
-        else if (entry.isFile() && extname(entry.name).toLowerCase() === '.jsonl') files.set(path, statSync(path).size);
+        else if (entry.isFile() && extname(entry.name).toLowerCase() === '.jsonl') {
+          try {
+            files.set(path, this.fileSize(path));
+          } catch (error) {
+            this.warnDiscoveryFailure('inspect file', path, error);
+          }
+        }
       }
     };
     visit(root);
     return files;
+  }
+
+  private readDirectory(directory: string): Dirent[] {
+    return readdirSync(directory, { withFileTypes: true });
+  }
+
+  private fileSize(path: string): number {
+    return statSync(path).size;
+  }
+
+  private warnDiscoveryFailure(action: string, path: string, error: unknown): void {
+    if (isTransientDiscoveryError(error)) return;
+    this.logger.warn(`Unable to ${action} while scanning Codex sessions (${path}): ${error instanceof Error ? error.message : String(error)}`);
   }
 
   private async readFileOwner(path: string, state: FileState): Promise<void> {

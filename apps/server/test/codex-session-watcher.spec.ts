@@ -897,6 +897,81 @@ describe('Codex session file synchronization', () => {
     }), []);
   });
 
+  it('keeps scanning and recovers when a discovered session file disappears before stat', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const keptPath = join(directory, 'kept.jsonl');
+    const vanishedPath = join(directory, 'vanished.jsonl');
+    writeFileSync(keptPath, `${JSON.stringify({ type: 'session_meta', payload: { id: 'kept-session' } })}\n`);
+    appendFileSync(keptPath, `${terminalLine({ type: 'task_complete', turn_id: 'kept-turn' })}\n`);
+    writeFileSync(vanishedPath, `${JSON.stringify({ type: 'session_meta', payload: { id: 'vanished-session' } })}\n`);
+    appendFileSync(vanishedPath, `${terminalLine({ type: 'task_complete', turn_id: 'vanished-turn' })}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+    const internals = service as unknown as {
+      discoverFiles(): void;
+      queue: Promise<void>;
+      fileSize(path: string): number;
+    };
+    const actualFileSize = internals.fileSize.bind(service);
+    const fileSize = vi.spyOn(internals, 'fileSize').mockImplementation((path) => {
+      if (path === vanishedPath) {
+        throw Object.assign(new Error('session file disappeared'), { code: 'ENOENT' });
+      }
+      return actualFileSize(path);
+    });
+
+    expect(() => internals.discoverFiles()).not.toThrow();
+    await internals.queue;
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'kept-session:kept-turn:completed',
+    }), []);
+
+    fileSize.mockRestore();
+    internals.discoverFiles();
+    await internals.queue;
+    expect(insertEvent).toHaveBeenCalledTimes(2);
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'vanished-session:vanished-turn:completed',
+    }), []);
+  });
+
+  it('keeps scanning sibling files when a discovered directory disappears', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const vanishedDirectory = join(directory, 'vanished-directory');
+    mkdirSync(vanishedDirectory);
+    const keptPath = join(directory, 'kept-after-directory-race.jsonl');
+    writeFileSync(keptPath, `${JSON.stringify({ type: 'session_meta', payload: { id: 'directory-race-session' } })}\n`);
+    appendFileSync(keptPath, `${terminalLine({ type: 'task_complete', turn_id: 'directory-race-turn' })}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+    const internals = service as unknown as {
+      discoverFiles(): void;
+      queue: Promise<void>;
+      readDirectory(path: string): Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
+    };
+    const actualReadDirectory = internals.readDirectory.bind(service);
+    const rootEntries = actualReadDirectory(directory);
+    const orderedRootEntries = [
+      ...rootEntries.filter((entry) => entry.name === 'vanished-directory'),
+      ...rootEntries.filter((entry) => entry.name !== 'vanished-directory'),
+    ];
+    vi.spyOn(internals, 'readDirectory').mockImplementation((path) => {
+      if (path === directory) return orderedRootEntries;
+      if (path === vanishedDirectory) {
+        throw Object.assign(new Error('session directory disappeared'), { code: 'ENOENT' });
+      }
+      return actualReadDirectory(path);
+    });
+
+    expect(() => internals.discoverFiles()).not.toThrow();
+    await internals.queue;
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'directory-race-session:directory-race-turn:completed',
+    }), []);
+  });
+
   it('retries a discovered session file after a transient read failure', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);

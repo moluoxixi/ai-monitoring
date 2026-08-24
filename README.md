@@ -315,7 +315,7 @@ Relay 收到事件后先写 SQLite outbox，再由 Apprise 投递；失败会指
 | 通知中心 | `http://127.0.0.1:8787` | 默认入口、任务/消息概览、重试和通道状态 |
 | OpenClaw Gateway | `127.0.0.1:18789` | 后台 QQ/微信机器人网关，不作为用户入口 |
 
-可用 `.\scripts\install-task.ps1` 将通知 relay 注册为当前用户登录时启动项。脚本优先使用 Task Scheduler；权限不足时自动回退到当前用户 Startup 快捷方式，无需管理员权限。使用 `.\scripts\install-task.ps1 -Remove` 可移除。
+可用 `.\scripts\install-task.ps1` 将通知 relay 注册为当前用户登录时启动项。脚本优先使用 Task Scheduler；权限不足时自动回退到当前用户 Startup 快捷方式，无需管理员权限。两种入口都会通过 supervisor 运行 relay，服务意外退出后等待 5 秒自动重启，运行日志写入 `data/relay-supervisor.log`。手工前台调试仍使用 `.\scripts\run-relay.ps1`；使用 `.\scripts\install-task.ps1 -Remove` 可移除自启动。
 
 <!-- AIRULES:TRELLIS:START -->
 

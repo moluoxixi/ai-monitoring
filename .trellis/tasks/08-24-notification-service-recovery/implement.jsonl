@@ -1,0 +1,4 @@
+{"file":".trellis/spec/server/backend/index.md","reason":"服务端 watcher 与测试的规范入口"}
+{"file":".trellis/spec/server/backend/error-handling.md","reason":"瞬时文件系统错误的处理边界"}
+{"file":".trellis/spec/server/backend/quality-guidelines.md","reason":"watcher 回归测试与现有状态机契约"}
+{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"新增 supervisor 前核对现有启动脚本模式"}

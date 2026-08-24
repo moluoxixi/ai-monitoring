@@ -16,7 +16,7 @@
     "desktop:install-macos-runtime": "sh scripts/install-macos-desktop-runtime.sh",
     "desktop:install-windows-runtime": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-windows-desktop-runtime.ps1",
     "start": "npm run start:prod -w @ai-monitor/server",
-    "test": "node --test scripts/desktop-toolchain.spec.mjs scripts/uninstall-openclaw-ai-monitor-replies.spec.mjs plugins/openclaw-ai-monitor-replies/index.spec.mjs && npm run test -w @ai-monitor/server && npm run test -w @ai-monitor/web",
+    "test": "node --test scripts/desktop-toolchain.spec.mjs scripts/run-relay-supervisor.spec.mjs scripts/uninstall-openclaw-ai-monitor-replies.spec.mjs plugins/openclaw-ai-monitor-replies/index.spec.mjs && npm run test -w @ai-monitor/server && npm run test -w @ai-monitor/web",
     "typecheck": "npm run typecheck -w @ai-monitor/server && npm run typecheck -w @ai-monitor/web"
   },
   "devDependencies": {

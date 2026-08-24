@@ -438,6 +438,140 @@ if (isTerminal(record) && (!state.isFork || state.ownedTurnIds.has(record.payloa
 
 ---
 
+## Scenario: Filesystem Discovery and Windows Relay Supervision
+
+### 1. Scope / Trigger
+
+- Apply the discovery contract when a session watcher enumerates directories
+  periodically or during startup and then performs a second filesystem
+  operation on an enumerated path.
+- Apply the supervision contract when Windows starts the source-deployed relay
+  from Task Scheduler or the current-user Startup folder.
+- The two contracts are complementary: discovery reduces process exits;
+  supervision restores the service after any remaining unexpected exit.
+
+### 2. Signatures
+
+```typescript
+captureStartupFiles(root: string): Map<string, number>
+discoverFiles(): void
+```
+
+```powershell
+.\scripts\run-relay-supervisor.ps1 `
+  [-BindHost <string>] [-Port <int>] `
+  [-RestartDelaySeconds <0..3600>] [-MaxRuns <int>] `
+  [-RelayScript <path>] [-LogPath <path>] [-MutexName <name>]
+
+.\scripts\install-task.ps1 [-RelayTaskName <string>] [-Remove]
+```
+
+- `MaxRuns=0` means unlimited supervision; positive values are for bounded
+  diagnostics and deterministic tests.
+- `run-relay.ps1` remains the manual foreground entry point. Login startup
+  entries invoke `run-relay-supervisor.ps1` instead.
+
+### 3. Contracts
+
+- Treat `readdir` followed by `stat`, recursive `readdir`, or stream open as a
+  time-of-check/time-of-use boundary. An enumerated path is not proof that the
+  path still exists for the next operation.
+- `ENOENT` and `ENOTDIR` during discovery are expected races: skip only the
+  affected item or subtree and continue the same scan. Log unexpected errors,
+  but no synchronous discovery exception may escape a polling timer callback.
+- Startup enumeration and periodic discovery must share the same guarded scan;
+  do not maintain a safe runtime path and a separate unsafe startup path.
+- Keep session parsing errors in the existing per-file Promise queue. Discovery
+  guards must not suppress parser, ingestion, or delivery failures.
+- Windows login entries provide a trigger, not process supervision. Both the
+  scheduled-task action and Startup shortcut must invoke the supervisor.
+- The supervisor owns at most one relay per Windows user across login sessions,
+  using a user-SID-qualified `Global\\` mutex. It runs one child synchronously,
+  records the exit code in UTF-8, waits before retrying, and never creates a
+  tight restart loop.
+- Install, fallback, upgrade, and remove paths must converge: a successful
+  scheduled-task install removes a stale shortcut, fallback removes a stale
+  task, and legacy Phoenix task/shortcut entries are always removed.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| JSONL file disappears between enumeration and `stat` | Skip that file; continue siblings; retry on a later scan |
+| Nested directory disappears before recursive `readdir` | Skip that subtree; continue siblings |
+| Discovery sees an unexpected filesystem error | Warn and keep the Node process alive |
+| Per-file read fails after enqueue | Existing queue logs it, clears the pending marker, and retries later |
+| Relay child exits with any code | Log the code, wait `RestartDelaySeconds`, then start one replacement |
+| Second supervisor starts for the same Windows user | Fail the mutex acquisition and exit without launching a relay |
+| Task Scheduler creation succeeds | Remove stale Startup shortcut; use supervisor action |
+| Task Scheduler creation fails | Remove stale task; create supervisor shortcut |
+| Installer runs after Phoenix removal | Delete legacy Phoenix task and shortcut idempotently |
+
+### 5. Good / Base / Bad Cases
+
+- Good: one rollout file is deleted during `stat`; another file in the same
+  directory is ingested, and the deleted path is handled if it reappears.
+- Base: a stable directory produces the same startup sizes and delivery
+  behavior as before the guards were added.
+- Good: Node exits unexpectedly; the hidden supervisor logs the exit, waits
+  five seconds, and restores `/api/health` without requiring another login.
+- Bad: wrap the entire directory walk in one catch and discard already found
+  siblings after one race.
+- Bad: register `run-relay.ps1` directly under `ONLOGON` and assume Task
+  Scheduler will restart a process that exits hours later.
+
+### 6. Tests Required
+
+- Deterministically inject `ENOENT` between enumeration and file-size lookup;
+  assert no throw, same-scan sibling ingestion, and later recovery.
+- Force a disappearing directory to be visited before a stable sibling; assert
+  the sibling is still ingested so traversal order cannot make the test pass.
+- Run the complete watcher suite to preserve CLI, Desktop, fork, partial-line,
+  startup, backfill, and polling behavior.
+- On Windows PowerShell 5.1, run a bounded supervisor against a stub relay;
+  assert two runs, a non-zero exit code, a real non-zero delay, UTF-8 child
+  output, and clean termination at `MaxRuns`.
+- Validate that install-task source routes both scheduled and shortcut actions
+  through the supervisor and that the shared cleanup removes task and shortcut
+  forms of current and legacy entries.
+- Finish with full tests, type-check, build, PowerShell parser validation, and
+  a local smoke test that kills the supervised Node child and observes health
+  recovery.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+for (const entry of readdirSync(directory, { withFileTypes: true })) {
+  if (entry.isFile()) files.set(entry.name, statSync(entry.name).size);
+}
+setInterval(() => discoverFiles(), 2_000);
+```
+
+```powershell
+schtasks.exe /Create /SC ONLOGON /TR "powershell -File run-relay.ps1"
+```
+
+#### Correct
+
+```typescript
+for (const entry of safeReadDirectory(directory)) {
+  try {
+    files.set(path, fileSize(path));
+  } catch (error) {
+    if (!isTransientDiscoveryError(error)) logger.warn(error);
+  }
+}
+```
+
+```powershell
+schtasks.exe /Create /SC ONLOGON /TR `
+  "powershell -File run-relay-supervisor.ps1"
+```
+
+---
+
 ## Code Review Checklist
 
 <!-- What reviewers should check -->
