@@ -22,18 +22,46 @@ def test_reads_subagent_object_source_without_returning_transcript(tmp_path):
     assert "private" not in json.dumps(identity)
 
 
+def test_reads_empty_subagent_object_as_structured_subagent_evidence(tmp_path):
+    _write_session(tmp_path, "thread-empty-subagent", {"source": {"subagent": {}}})
+
+    assert session_kind("thread-empty-subagent", tmp_path) == "subagent"
+
+
 def test_reads_subagent_thread_source_variant(tmp_path):
     _write_session(tmp_path, "thread-string", {"source": "vscode", "thread_source": "subagent"})
 
     assert is_subagent_session("thread-string", tmp_path) is True
 
 
-def test_cli_thread_source_overrides_inherited_desktop_markers(tmp_path):
+def test_explicit_desktop_markers_override_cli_thread_source(tmp_path):
     _write_session(tmp_path, "thread-fork", {
         "source": "vscode", "originator": "Codex Desktop", "thread_source": "cli",
     })
 
-    assert session_kind("thread-fork", tmp_path) == "codex-cli"
+    assert session_kind("thread-fork", tmp_path) == "codex-desktop"
+
+
+def test_explicit_cli_runtime_is_kept_as_cli(tmp_path):
+    _write_session(tmp_path, "thread-cli", {
+        "source": "cli", "originator": "codex-tui", "thread_source": "user",
+    })
+
+    assert session_kind("thread-cli", tmp_path) == "codex-cli"
+
+
+def test_cli_thread_source_is_a_fallback_without_runtime_markers(tmp_path):
+    _write_session(tmp_path, "thread-cli-fallback", {"thread_source": "cli"})
+
+    assert session_kind("thread-cli-fallback", tmp_path) == "codex-cli"
+
+
+def test_valid_identity_without_known_markers_uses_watcher_owned_desktop_fallback(tmp_path):
+    _write_session(tmp_path, "thread-runtime-fallback", {
+        "source": "exec", "thread_source": "user",
+    })
+
+    assert session_kind("thread-runtime-fallback", tmp_path) == "codex-desktop"
 
 
 def test_subagent_identity_stays_higher_priority_than_cli_thread_source(tmp_path):

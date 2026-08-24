@@ -81,6 +81,41 @@ def test_desktop_completion_is_owned_by_the_session_watcher(monkeypatch):
     post.assert_not_called()
 
 
+def test_desktop_fork_with_cli_thread_source_is_not_relayed_or_fanned_out(tmp_path, monkeypatch):
+    thread_id = "desktop-cli-source-thread"
+    session_path = tmp_path / "sessions" / "2026" / "08"
+    session_path.mkdir(parents=True)
+    (session_path / f"rollout-{thread_id}.jsonl").write_text(json.dumps({
+        "type": "session_meta",
+        "payload": {
+            "session_id": thread_id,
+            "source": "vscode",
+            "originator": "Codex Desktop",
+            "thread_source": "cli",
+        },
+    }) + "\n", encoding="utf-8")
+    payload = {
+        "type": "agent-turn-complete",
+        "thread-id": thread_id,
+        "turn-id": "turn",
+        "input-messages": ["desktop task"],
+    }
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+
+    with patch("urllib.request.urlopen") as post:
+        assert codex_notify_multiplexer.relay_completion(payload) is False
+    post.assert_not_called()
+
+    monkeypatch.setattr(codex_notify_multiplexer, "load_targets", lambda: [["target.exe"]])
+    monkeypatch.setattr(codex_notify_multiplexer.sys, "argv", ["wrapper", json.dumps(payload)])
+    with patch.object(codex_notify_multiplexer.subprocess, "run") as run, patch.object(
+        codex_notify_multiplexer, "relay_completion"
+    ) as relay:
+        assert codex_notify_multiplexer.main() == 0
+    run.assert_not_called()
+    relay.assert_not_called()
+
+
 def test_task_summary_has_a_strict_length_limit():
     assert len(codex_notify_multiplexer.summarize_task("a" * 2_100)) == 2_000
     assert codex_notify_multiplexer.summarize_task(

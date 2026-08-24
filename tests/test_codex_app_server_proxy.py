@@ -1,3 +1,4 @@
+import json
 from unittest.mock import Mock, patch
 
 from scripts.codex_app_server_proxy import ProtocolMonitor
@@ -60,4 +61,24 @@ def test_subagent_protocol_event_is_filtered_before_network_post(monkeypatch):
     request.__exit__ = Mock(return_value=False)
     with patch("urllib.request.urlopen", return_value=request) as post:
         ProtocolMonitor._relay(("subagent", "turn"), "turn", "failed", "internal", {})
+    post.assert_not_called()
+
+
+def test_desktop_fork_with_cli_thread_source_is_filtered_before_network_post(tmp_path, monkeypatch):
+    thread_id = "desktop-proxy-thread"
+    session_path = tmp_path / "sessions" / "2026" / "08"
+    session_path.mkdir(parents=True)
+    (session_path / f"rollout-{thread_id}.jsonl").write_text(json.dumps({
+        "type": "session_meta",
+        "payload": {
+            "session_id": thread_id,
+            "source": "vscode",
+            "originator": "Codex Desktop",
+            "thread_source": "cli",
+        },
+    }) + "\n", encoding="utf-8")
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+
+    with patch("urllib.request.urlopen") as post:
+        ProtocolMonitor._relay((thread_id, "turn"), "turn", "failed", "desktop failure", {})
     post.assert_not_called()

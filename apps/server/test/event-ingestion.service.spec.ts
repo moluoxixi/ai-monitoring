@@ -198,4 +198,37 @@ describe('EventIngestionService', () => {
 
     expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({ client: 'claude-cli' }), [], 1_500);
   });
+
+  it('keeps an attributed Desktop event hidden when only the CLI extension is visible', () => {
+    const setup = serviceFor(vi.fn(() => [7, true, 0]));
+    const settings = {
+      markMonitorVerified: setup.markMonitorVerified,
+      snapshot: vi.fn(() => ({
+        visibleExtensions: ['codex-cli'],
+        hasVisiblePreference: true,
+      })),
+    };
+    const scanner = {
+      snapshot: vi.fn(() => ({
+        scanStatus: 'reliable',
+        platforms: {
+          'codex-cli': { detected: true },
+          'codex-desktop': { detected: true },
+        },
+      })),
+    };
+    const service = new EventIngestionService(
+      setup.database, setup.config, setup.extensions, settings as never, scanner as never,
+    );
+
+    service.ingest({
+      ...event(),
+      source: 'codex-session',
+      client: 'codex-desktop',
+    }, ['openclaw-qq']);
+
+    expect(setup.insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      client: 'codex-desktop',
+    }), [], 1_500);
+  });
 });

@@ -1,0 +1,4 @@
+{"file":".trellis/spec/server/backend/index.md","reason":"服务端客户端归属与 watcher 规范入口"}
+{"file":".trellis/spec/server/backend/quality-guidelines.md","reason":"真实 runtime shape、watcher 与跨层回归契约"}
+{"file":".trellis/spec/server/backend/reply-continuation.md","reason":"CLI/Desktop 统一 fork 的回复路由契约"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"TypeScript watcher、Python hook、database route 与 dispatcher 的一致性"}

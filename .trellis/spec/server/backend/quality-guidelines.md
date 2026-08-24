@@ -103,24 +103,24 @@ advanceReplyThreadId(
 | `thread/fork` or `turn/start` fails | Do not advance the persisted head; mark the inbound reply failed |
 | Compare-and-swap sees a different current head | Fail closed and retain the winning head |
 | Duplicate external message ID was already accepted | Return the stored accepted result without another dispatch |
-| Fork completion inherits Desktop markers but has `thread_source: "cli"` | Classify it as Codex CLI and make its QQ notification fork-capable |
+| Fork completion has Desktop runtime markers and `thread_source: "cli"` | Preserve `codex-desktop`; make its QQ notification fork-capable independently |
 
 ### 5. Good / Base / Bad Cases
 
 - Good: two replies to one delivery wait for each writer release and advance
   `original -> fork-1 -> fork-2`.
-- Base: a CLI-sourced Desktop fork completion creates a new CLI delivery whose
+- Base: a CLI-sourced Desktop fork completion creates a Desktop delivery whose
   first reply forks from that completion thread.
-- Bad: classify the new delivery as ordinary CLI and call `thread/resume`; a
-  Desktop-loaded fork can then fail with `already has an active writer`.
+- Bad: use the client label to choose `thread/resume`; a Desktop-loaded fork can
+  then fail with `already has an active writer` regardless of its label.
 
 ### 6. Tests Required
 
 - Cover two consecutive replies to one delivery and assert the second waits for
   writer release, refreshes the route, forks from the first result, and advances
   the head.
-- Cover a completion notification produced by a CLI-sourced Desktop fork and
-  assert it forks again rather than resuming the externally visible thread.
+- Cover a completion notification produced by a CLI-sourced Desktop fork;
+  assert the event and route remain Desktop and the reply still forks.
 - Cover stale compare-and-swap state and assert the inbound reply fails without
   replacing the winning branch head.
 - The CLI-sourced Desktop completion regression must cross the watcher, event
@@ -434,6 +434,114 @@ if (state.isFork && isOwnedStart(state, record)) state.ownedTurnIds.add(record.p
 if (isTerminal(record) && (!state.isFork || state.ownedTurnIds.has(record.payload.turn_id))) {
   ingestTerminal(state.sessionId, record);
 }
+```
+
+---
+
+## Scenario: Codex Client Attribution vs Thread Source
+
+### 1. Scope / Trigger
+
+- Apply when Codex `session_meta` is projected to the public event `client`, or
+  when Python notify/proxy adapters decide whether the session watcher owns a
+  completion.
+- A persistent App Server fork can retain `source: "vscode"` and
+  `originator: "Codex Desktop"` while setting `thread_source: "cli"`.
+
+### 2. Signatures
+
+```typescript
+sessionIdentity(payload, currentClient): {
+  isSubagent: boolean;
+  client: 'codex-cli' | 'codex-desktop';
+}
+```
+
+```python
+session_kind(thread_id: str, codex_home: Path | None = None) -> str | None
+```
+
+Relevant persisted fields are `source`, `originator`, `thread_source`, and
+`forked_from_id` from the first valid `session_meta` that owns the file.
+
+### 3. Contracts
+
+- `client` identifies the observed user runtime surface; `thread_source`
+  describes thread creation/execution semantics. Do not treat them as the same
+  dimension.
+- Structured subagent evidence has highest priority and suppresses user
+  notifications.
+- Explicit Desktop/VSCode/IDE runtime markers classify `codex-desktop`, even
+  when `thread_source` is `cli`.
+- Explicit CLI/TUI/command-line runtime markers classify `codex-cli`.
+- Use `thread_source: "cli"` as a CLI fallback only when no stronger runtime
+  marker exists.
+- A valid identity with no known runtime marker remains watcher-owned Desktop;
+  Python returns unknown only when no identity can be found. This keeps hook,
+  proxy, and watcher ownership mutually exclusive.
+- A structured `source.subagent` object is subagent evidence even when the
+  object is empty; JavaScript and Python truthiness must not diverge here.
+- TypeScript watcher and Python identity helpers must implement the same
+  priority. Otherwise the watcher and hook/proxy can both claim one completion.
+- Client attribution never selects resume versus fork. Both public Codex
+  clients continue through a persistent fork from the latest branch head.
+
+### 4. Validation & Error Matrix
+
+| Persisted evidence | Required result |
+|---|---|
+| Structured subagent + any runtime/thread markers | subagent; no user delivery |
+| `source=vscode`, `originator=Codex Desktop`, `thread_source=cli` | `codex-desktop`; watcher owns completion |
+| `source=cli`, `originator=codex-tui`, `thread_source=user` | `codex-cli` |
+| No runtime marker, `thread_source=cli` | `codex-cli` fallback |
+| Valid identity, no known runtime/thread marker | `codex-desktop` watcher-owned fallback |
+| `source.subagent={}` | subagent; no user delivery |
+| Desktop fork is replied to from QQ | Route remains Desktop; dispatcher uses `mode=fork` |
+| Desktop extension hidden, CLI visible | Persist event; create no delivery |
+| Later copied `session_meta` conflicts with the file owner | Ignore it; keep first-owner attribution |
+
+### 5. Good / Base / Bad Cases
+
+- Good: a Desktop-created persistent fork is displayed as Desktop, skipped by
+  the notify multiplexer, and remains reply-capable through another fork.
+- Base: an independent `codex-tui` rollout stays CLI.
+- Bad: `thread_source=cli` runs before runtime markers and relabels every
+  Desktop App Server fork as CLI.
+- Bad: fix only TypeScript; Python then relays the same Desktop completion that
+  the watcher also ingests.
+
+### 6. Tests Required
+
+- Use the real conflict shape in TypeScript parser and file-level watcher
+  tests; assert Desktop client and subagent precedence.
+- Keep explicit CLI and marker-free `thread_source=cli` fallback fixtures.
+- Cover valid unknown runtime fallback and an empty structured subagent object
+  in both language implementations.
+- Cross watcher -> ingestion -> database delivery/reply route -> inbound reply
+  -> dispatcher; assert Desktop attribution and `mode=fork` together.
+- Use an actual temporary rollout in Python multiplexer tests; do not mock
+  `session_kind`. Assert neither relay POST nor legacy target fan-out occurs.
+- Exercise App Server proxy ownership with the same real rollout shape and
+  assert it performs no network POST.
+- Run complete server and Python suites so notification ownership and reply
+  routing changes are checked together.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+if (threadSource === 'cli') return { client: 'codex-cli' };
+if (desktopRuntimeMarker) return { client: 'codex-desktop' };
+```
+
+#### Correct
+
+```typescript
+if (isSubagent) return subagentIdentity;
+if (desktopRuntimeMarker) return { client: 'codex-desktop' };
+if (cliRuntimeMarker) return { client: 'codex-cli' };
+if (threadSource === 'cli') return { client: 'codex-cli' };
 ```
 
 ---

@@ -265,6 +265,7 @@ describe('Codex session watcher parser', () => {
   it('recognizes string and typed subagent metadata variants', () => {
     for (const source of [
       'subagent',
+      { subagent: {} },
       { type: 'subagent' },
       { kind: 'subagent' },
     ]) {
@@ -299,7 +300,7 @@ describe('Codex session watcher parser', () => {
     expect(result.event?.client).toBe('codex-cli');
   });
 
-  it('prefers a CLI thread source over inherited Desktop markers without overriding subagents', () => {
+  it('prefers explicit Desktop markers over a CLI thread source without overriding subagents', () => {
     const meta = parseCodexSessionLine(JSON.stringify({
       type: 'session_meta',
       payload: {
@@ -322,9 +323,27 @@ describe('Codex session watcher parser', () => {
       },
     }));
 
-    expect(meta).toMatchObject({ isSubagent: false, client: 'codex-cli' });
-    expect(result.event?.client).toBe('codex-cli');
+    expect(meta).toMatchObject({ isSubagent: false, client: 'codex-desktop' });
+    expect(result.event?.client).toBe('codex-desktop');
     expect(subagent).toMatchObject({ isSubagent: true, client: 'codex-desktop' });
+  });
+
+  it('uses a CLI thread source only as a fallback without runtime markers', () => {
+    const meta = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: { session_id: 'fallback-cli-session', thread_source: 'cli' },
+    }));
+
+    expect(meta).toMatchObject({ isSubagent: false, client: 'codex-cli' });
+  });
+
+  it('keeps the watcher-owned Desktop fallback for an unrecognized runtime marker', () => {
+    const meta = parseCodexSessionLine(JSON.stringify({
+      type: 'session_meta',
+      payload: { session_id: 'unknown-runtime-session', source: 'exec', thread_source: 'user' },
+    }));
+
+    expect(meta).toMatchObject({ isSubagent: false, client: 'codex-desktop' });
   });
 
   it('reads session metadata when it is not the first JSONL line', () => {
@@ -419,7 +438,7 @@ describe('Codex session file synchronization', () => {
     expect(insertEvent).toHaveBeenCalledOnce();
     expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
       source_event_id: 'fork-session:fork-turn:completed',
-      client: 'codex-cli',
+      client: 'codex-desktop',
       message: '提问：fork prompt',
       metadata: expect.objectContaining({
         thread_id: 'fork-session',
@@ -432,7 +451,7 @@ describe('Codex session file synchronization', () => {
         },
       }),
     }), [], 'fork final answer');
-    expect(suppressProvisionalFailures).toHaveBeenCalledWith('codex-cli', 'fork-session');
+    expect(suppressProvisionalFailures).toHaveBeenCalledWith('codex-desktop', 'fork-session');
   });
 
   it('restores persistent fork ownership before scanning the tail of a large file', async () => {
@@ -525,7 +544,7 @@ describe('Codex session file synchronization', () => {
     }), []);
   });
 
-  it('routes a CLI-sourced Desktop fork completion through QQ as another fork', async () => {
+  it('keeps a CLI-sourced Desktop fork labeled as Desktop while replying through another fork', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);
     const path = join(directory, 'desktop-fork.jsonl');
@@ -551,7 +570,22 @@ describe('Codex session file synchronization', () => {
         database,
         { answerCaptureGraceMs: 0, recoverableFailureGraceMs: 0 } as AppConfigService,
         new ExtensionsService(),
-        { markMonitorVerified: vi.fn() } as never,
+        {
+          markMonitorVerified: vi.fn(),
+          snapshot: vi.fn(() => ({
+            visibleExtensions: ['codex-desktop'],
+            hasVisiblePreference: true,
+          })),
+        } as never,
+        {
+          snapshot: vi.fn(() => ({
+            scanStatus: 'reliable',
+            platforms: {
+              'codex-cli': { detected: true },
+              'codex-desktop': { detected: true },
+            },
+          })),
+        } as never,
       );
       const watcher = new CodexSessionWatcherService(
         { codexSessionsPath: directory, codexBackfillMinutes: 120 } as AppConfigService,
@@ -562,7 +596,7 @@ describe('Codex session file synchronization', () => {
       await watcher.syncFile(path, true);
 
       expect(database.listEvents(10)[0]).toMatchObject({
-        client: 'codex-cli',
+        client: 'codex-desktop',
         status: 'completed',
         metadata: { thread_id: 'desktop-fork-thread', turn_id: 'desktop-fork-turn' },
       });
@@ -574,7 +608,7 @@ describe('Codex session file synchronization', () => {
       const replyToken = database.ensureDeliveryReplyRoute(claimed!.id, 86_400_000);
       expect(replyToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(database.resolveReplyRoute(replyToken!)).toMatchObject({
-        client: 'codex-cli',
+        client: 'codex-desktop',
         reply_thread_id: null,
         metadata: { thread_id: 'desktop-fork-thread' },
       });
@@ -608,7 +642,7 @@ describe('Codex session file synchronization', () => {
         mode: 'fork', threadId: 'desktop-fork-thread', text: '继续',
       });
       expect(database.resolveReplyRoute(replyToken!)).toMatchObject({
-        client: 'codex-cli', reply_thread_id: 'next-fork-thread',
+        client: 'codex-desktop', reply_thread_id: 'next-fork-thread',
       });
     } finally {
       database.onModuleDestroy();

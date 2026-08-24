@@ -18,7 +18,8 @@ def _text(value: Any) -> str:
 
 def _is_subagent_source(value: Any) -> bool:
     if isinstance(value, dict):
-        if value.get("subagent"):
+        subagent = value.get("subagent")
+        if isinstance(subagent, dict) or subagent:
             return True
         return _text(value.get("type")) == "subagent" or _text(value.get("kind")) == "subagent"
     return _text(value) == "subagent"
@@ -116,7 +117,7 @@ def _session_index(codex_home: Path | None = None) -> dict[str, dict[str, Any]]:
 
 def read_session_identity(thread_id: str, codex_home: Path | None = None) -> dict[str, Any]:
     """Return safe session metadata fields; never return instructions or transcript content."""
-    cache_key = (str(codex_home or ""), thread_id)
+    cache_key = (str(_session_roots(codex_home)[0].parent), thread_id)
     if cache_key in _IDENTITY_CACHE:
         return dict(_IDENTITY_CACHE[cache_key])
     candidates = _candidate_paths(thread_id, codex_home)
@@ -157,11 +158,12 @@ def session_kind(thread_id: str, codex_home: Path | None = None) -> str | None:
         return None
     if identity.get("is_subagent"):
         return "subagent"
+    runtime = f"{identity.get('source', '')} {identity.get('originator', '')}".lower()
+    runtime = re.sub(r"[_-]+", " ", runtime)
+    if re.search(r"\b(desktop|vscode|ide)\b", runtime):
+        return "codex-desktop"
+    if re.search(r"\b(cli|tui|command line)\b", runtime):
+        return "codex-cli"
     if identity.get("thread_source") == "cli":
         return "codex-cli"
-    runtime = f"{identity.get('source', '')} {identity.get('originator', '')}".lower()
-    if any(marker in runtime for marker in ("desktop", "vscode", "ide")):
-        return "codex-desktop"
-    if any(marker in runtime for marker in ("cli", "command-line", "command_line")):
-        return "codex-cli"
-    return None
+    return "codex-desktop"
