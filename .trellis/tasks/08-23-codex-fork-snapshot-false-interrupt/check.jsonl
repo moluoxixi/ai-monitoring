@@ -1,0 +1,2 @@
+{"file":".trellis/spec/server/backend/quality-guidelines.md","reason":"核验真实 runtime fixture、fork snapshot identity 和测试要求"}
+{"file":".trellis/tasks/08-23-codex-fork-snapshot-false-interrupt/research/root-cause.md","reason":"复核修复是否覆盖现场根因而非仅改变通知文案"}

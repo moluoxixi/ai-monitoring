@@ -19,7 +19,12 @@ const INITIAL_TAIL_BYTES = 1024 * 1024;
 interface FileState {
   identity: string;
   offset: number;
+  ownerEstablished: boolean;
   sessionId: string;
+  isFork: boolean;
+  forkCreatedAtMs: number | null;
+  ownedTurnIds: Set<string>;
+  activeOwnedTurnId: string;
   taskSummary: string;
   answerSource: string;
   startedAt: string;
@@ -79,6 +84,18 @@ const responseItemUserText = (item: Record<string, unknown>, payload: Record<str
     .map((content) => String(content.text))
     .join('\n')
     .trim();
+};
+
+const protocolTimestampMs = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null;
+    return Math.abs(value) < 100_000_000_000 ? value * 1_000 : value;
+  }
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return Math.abs(numeric) < 100_000_000_000 ? numeric * 1_000 : numeric;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 export const parseCodexSessionLine = (
@@ -210,7 +227,119 @@ export const parseCodexSessionLine = (
   };
 };
 
+const unchangedFileResult = (state: FileState): ParsedTerminalEvent => ({
+  sessionId: state.sessionId,
+  taskSummary: state.taskSummary,
+  answerSource: state.answerSource,
+  isSubagent: state.isSubagent,
+  client: state.client,
+  timestampMs: null,
+});
+
+const applyParsedFileResult = (state: FileState, parsed: ParsedTerminalEvent): void => {
+  state.sessionId = parsed.sessionId;
+  state.taskSummary = parsed.taskSummary;
+  state.answerSource = parsed.event ? '' : parsed.answerSource;
+  state.startedAt = parsed.consumeStartedTiming ? '' : parsed.startedAt ?? state.startedAt;
+  state.startedTurnId = parsed.consumeStartedTiming ? '' : parsed.startedTurnId ?? state.startedTurnId;
+  state.isSubagent = parsed.isSubagent;
+  state.client = parsed.client;
+};
+
+const applyCodexSessionLine = (line: string, state: FileState): ParsedTerminalEvent => {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(line);
+  } catch {
+    return unchangedFileResult(state);
+  }
+  const item = recordValue(raw);
+  const payload = recordValue(item.payload);
+  if (item.type === 'session_meta') {
+    if (state.ownerEstablished) return unchangedFileResult(state);
+    const sessionId = String(payload.session_id || payload.id || '').trim();
+    if (!sessionId) return unchangedFileResult(state);
+    const identity = sessionIdentity({ ...item, ...payload }, state.client);
+    state.ownerEstablished = true;
+    state.sessionId = sessionId;
+    state.isSubagent = identity.isSubagent;
+    state.client = identity.client;
+    state.isFork = Boolean(String(payload.forked_from_id || '').trim());
+    state.forkCreatedAtMs = state.isFork
+      ? protocolTimestampMs(payload.timestamp) ?? protocolTimestampMs(item.timestamp)
+      : null;
+    return unchangedFileResult(state);
+  }
+  if (!state.ownerEstablished) return unchangedFileResult(state);
+
+  const responseUserMessage = responseItemUserText(item, payload);
+  const kind = item.type === 'event_msg' ? String(payload.type || '') : '';
+  const turnId = String(payload.turn_id || '');
+  if (state.isFork) {
+    if (kind === 'task_started') {
+      const startedAtMs = protocolTimestampMs(payload.started_at);
+      const forkCreatedAtSecond = state.forkCreatedAtMs === null
+        ? null
+        : Math.floor(state.forkCreatedAtMs / 1_000) * 1_000;
+      if (!turnId || forkCreatedAtSecond === null || startedAtMs === null || startedAtMs < forkCreatedAtSecond) {
+        return unchangedFileResult(state);
+      }
+      state.ownedTurnIds.add(turnId);
+      state.activeOwnedTurnId = turnId;
+    } else if (responseUserMessage || kind === 'user_message' || kind === 'agent_message') {
+      if (!state.activeOwnedTurnId || !state.ownedTurnIds.has(state.activeOwnedTurnId)) {
+        return unchangedFileResult(state);
+      }
+    } else if (kind === 'task_complete' || kind === 'turn_aborted') {
+      if (!turnId || !state.ownedTurnIds.has(turnId)) return unchangedFileResult(state);
+    }
+  }
+
+  const preserveOwnedTiming = state.isFork
+    && Boolean(responseUserMessage || kind === 'user_message')
+    && state.startedTurnId === state.activeOwnedTurnId;
+  const ownedStartedAt = state.startedAt;
+  const ownedStartedTurnId = state.startedTurnId;
+  const parsed = parseCodexSessionLine(
+    line,
+    state.sessionId,
+    state.taskSummary,
+    state.isSubagent,
+    state.answerSource,
+    state.client,
+    state.startedAt,
+    state.startedTurnId,
+  );
+  applyParsedFileResult(state, parsed);
+  if (preserveOwnedTiming) {
+    state.startedAt = ownedStartedAt;
+    state.startedTurnId = ownedStartedTurnId;
+  }
+  if (state.isFork && parsed.event && turnId) {
+    state.ownedTurnIds.delete(turnId);
+    if (state.activeOwnedTurnId === turnId) state.activeOwnedTurnId = '';
+  }
+  return parsed;
+};
+
 const fileIdentity = (stats: Stats): string => `${stats.dev}:${stats.ino}:${stats.birthtimeMs}`;
+
+const emptyFileState = (identity: string, offset: number): FileState => ({
+  identity,
+  offset,
+  ownerEstablished: false,
+  sessionId: '',
+  isFork: false,
+  forkCreatedAtMs: null,
+  ownedTurnIds: new Set<string>(),
+  activeOwnedTurnId: '',
+  taskSummary: '',
+  answerSource: '',
+  startedAt: '',
+  startedTurnId: '',
+  isSubagent: false,
+  client: 'codex-desktop',
+});
 
 @Injectable()
 export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy {
@@ -275,23 +404,20 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     if (!state || state.identity !== identity || readableSize < state.offset) {
       const cutoff = Date.now() - this.config.codexBackfillMinutes * 60_000;
       if (stats.mtimeMs < cutoff) {
-        this.files.set(path, { identity, offset: readableSize, sessionId: '', taskSummary: '', answerSource: '', startedAt: '', startedTurnId: '', isSubagent: false, client: 'codex-desktop' });
+        const skippedState = emptyFileState(identity, readableSize);
+        await this.readFileOwner(path, skippedState);
+        this.files.set(path, skippedState);
         return;
       }
-      state = {
-        identity,
-        offset: Math.max(0, readableSize - INITIAL_TAIL_BYTES),
-        sessionId: '',
-        taskSummary: '',
-        answerSource: '',
-        startedAt: '',
-        startedTurnId: '',
-        isSubagent: false,
-        client: 'codex-desktop',
-      };
+      state = emptyFileState(identity, Math.max(0, readableSize - INITIAL_TAIL_BYTES));
       if (state.offset > 0) {
         const context = await this.readContextBefore(path, state.offset);
+        state.ownerEstablished = context.ownerEstablished;
         state.sessionId = context.sessionId;
+        state.isFork = context.isFork;
+        state.forkCreatedAtMs = context.forkCreatedAtMs;
+        state.ownedTurnIds = context.ownedTurnIds;
+        state.activeOwnedTurnId = context.activeOwnedTurnId;
         state.taskSummary = context.taskSummary;
         state.answerSource = context.answerSource;
         state.startedAt = context.startedAt;
@@ -302,7 +428,6 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
       this.files.set(path, state);
     }
     if (readableSize === state.offset) return;
-    if (!state.sessionId) state.sessionId = await this.readSessionId(path);
 
     const start = state.offset;
     const bytes = await this.readBytes(path, start, readableSize);
@@ -315,14 +440,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     for (const rawLine of lines) {
       const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
       if (!line) continue;
-      const parsed = parseCodexSessionLine(line, state.sessionId, state.taskSummary, state.isSubagent, state.answerSource, state.client, state.startedAt, state.startedTurnId);
-      state.sessionId = parsed.sessionId;
-      state.taskSummary = parsed.taskSummary;
-      state.answerSource = parsed.event ? '' : parsed.answerSource;
-      state.startedAt = parsed.consumeStartedTiming ? '' : parsed.startedAt ?? state.startedAt;
-      state.startedTurnId = parsed.consumeStartedTiming ? '' : parsed.startedTurnId ?? state.startedTurnId;
-      state.isSubagent = parsed.isSubagent;
-      state.client = parsed.client;
+      const parsed = applyCodexSessionLine(line, state);
       if (parsed.suppressProvisional && parsed.sessionId) {
         this.ingestion.suppressProvisionalFailures?.(parsed.client, parsed.sessionId);
       }
@@ -350,7 +468,7 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
       const state = this.files.get(path);
       if (state?.offset === size) continue;
       if (!state) {
-        this.files.set(path, { identity: '', offset: 0, sessionId: '', taskSummary: '', answerSource: '', startedAt: '', startedTurnId: '', isSubagent: false, client: 'codex-desktop' });
+        this.files.set(path, emptyFileState('', 0));
       }
       this.enqueue(path, true, undefined, true);
     }
@@ -369,43 +487,30 @@ export class CodexSessionWatcherService implements OnModuleInit, OnModuleDestroy
     return files;
   }
 
-  private async readSessionId(path: string): Promise<string> {
+  private async readFileOwner(path: string, state: FileState): Promise<void> {
     const stream = createReadStream(path, { encoding: 'utf8' });
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
     try {
       for await (const line of lines) {
-        const sessionId = parseCodexSessionLine(line).sessionId;
-        if (sessionId) return sessionId;
+        applyCodexSessionLine(line, state);
+        if (state.ownerEstablished) return;
       }
-      return '';
     } finally {
       lines.close();
       stream.destroy();
     }
   }
 
-  private async readContextBefore(path: string, end: number): Promise<Pick<FileState, 'sessionId' | 'taskSummary' | 'answerSource' | 'startedAt' | 'startedTurnId' | 'isSubagent' | 'client'>> {
-    let sessionId = '';
-    let taskSummary = '';
-    let answerSource = '';
-    let startedAt = '';
-    let startedTurnId = '';
-    let isSubagent = false;
-    let client: 'codex-cli' | 'codex-desktop' = 'codex-desktop';
+  private async readContextBefore(path: string, end: number): Promise<Omit<FileState, 'identity' | 'offset'>> {
+    const state = emptyFileState('', 0);
     const stream = createReadStream(path, { encoding: 'utf8', end: end - 1 });
     const lines = createInterface({ input: stream, crlfDelay: Infinity });
     try {
       for await (const line of lines) {
-        const parsed = parseCodexSessionLine(line, sessionId, taskSummary, isSubagent, answerSource, client, startedAt, startedTurnId);
-        sessionId = parsed.sessionId;
-        taskSummary = parsed.taskSummary;
-        answerSource = parsed.event ? '' : parsed.answerSource;
-        startedAt = parsed.consumeStartedTiming ? '' : parsed.startedAt ?? startedAt;
-        startedTurnId = parsed.consumeStartedTiming ? '' : parsed.startedTurnId ?? startedTurnId;
-        isSubagent = parsed.isSubagent;
-        client = parsed.client;
+        applyCodexSessionLine(line, state);
       }
-      return { sessionId, taskSummary, answerSource, startedAt, startedTurnId, isSubagent, client };
+      const { identity: _identity, offset: _offset, ...context } = state;
+      return context;
     } finally {
       lines.close();
       stream.destroy();

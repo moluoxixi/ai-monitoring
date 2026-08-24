@@ -112,6 +112,10 @@ persisted record and use that exact shape as a regression fixture. Assert the
 final projection (notification, UI state, or stored event), not only RPC
 acceptance and parser behavior in isolation.
 
+When a runtime copies or forks an append-only log, also identify the immutable
+file owner and the boundary between copied history and new records. Do not use
+later metadata records or rewritten top-level timestamps as ownership proof.
+
 ---
 
 ## Checklist for Cross-Layer Features

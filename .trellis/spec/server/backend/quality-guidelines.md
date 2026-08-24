@@ -322,6 +322,122 @@ state.offset = lastCompleteNewlineAtOrBefore(startupSnapshotSize);
 
 ---
 
+## Scenario: Codex Persistent Fork Snapshot Ownership
+
+### 1. Scope / Trigger
+
+- Apply this contract when `CodexSessionWatcherService` reads a persisted
+  `thread/fork` JSONL file.
+- A fork file contains its own first `session_meta`, a copied parent/ancestor
+  transcript, and later records owned by the fork. Copied records are history,
+  even when Codex rewrites their top-level timestamps to the fork creation time.
+
+### 2. Signatures
+
+Relevant persisted fields:
+
+```typescript
+type ForkSessionMeta = {
+  type: 'session_meta';
+  timestamp?: string;
+  payload: {
+    id?: string;
+    session_id?: string;
+    forked_from_id: string;
+    timestamp?: string;
+    thread_source?: string;
+  };
+};
+
+type CodexTaskStarted = {
+  type: 'event_msg';
+  payload: { type: 'task_started'; turn_id: string; started_at: number | string };
+};
+```
+
+- `started_at` can be Unix seconds while meta timestamps are ISO strings with
+  milliseconds. Compare at the coarsest precision shared by both values.
+- `task_complete` and `turn_aborted` carry `turn_id`, but no session/thread ID.
+
+### 3. Contracts
+
+- The first valid `session_meta` owns the physical JSONL file. Lock its session
+  ID, client classification, and subagent classification for the file lifetime.
+- A non-empty `forked_from_id` on the owner meta marks the file as a fork.
+  Later parent/ancestor meta records never replace the owner.
+- In a fork file, accept a `task_started` only when its normalized `started_at`
+  is not earlier than the owner fork timestamp at shared timestamp precision.
+- Only an accepted `task_started.turn_id` can authorize prompt, answer,
+  provisional-failure suppression, timing, or a terminal event for that fork.
+- `syncFile` and prefix recovery must replay the same state transition. Backfill
+  skips may suppress historical ingestion, but must still retain the first
+  owner meta so future appends remain observable.
+- If ownership or the time boundary cannot be proved, fail closed by skipping
+  that fork terminal. Do not infer ownership from top-level copied timestamps,
+  file names, parent-file availability, process state, or scan order.
+- Ordinary non-fork sessions retain their legacy terminal behavior, including
+  terminals observed without a preceding `task_started`.
+
+### 4. Validation & Error Matrix
+
+| Condition | Required result |
+|---|---|
+| First meta has `forked_from_id` | Lock fork owner and boundary |
+| Later meta has a parent/ancestor ID | Ignore it for file identity |
+| Copied turn starts before fork boundary | Do not update state or ingest its terminal |
+| Fork turn starts in the same second as a millisecond meta timestamp | Compare at seconds precision and accept it |
+| Fork boundary or `started_at` is missing/invalid | Do not ingest the unproven terminal |
+| File exceeds the tail window | Recover owner, boundary, owned turns, summary, answer, and timing from the prefix |
+| Old file is outside the backfill window, then receives a new append | Skip old terminals, retain owner, ingest the new turn |
+| Ordinary non-fork terminal has no observed start | Preserve existing ingestion behavior |
+
+### 5. Good / Base / Bad Cases
+
+- Good: fork meta -> copied parent abort -> owned fork start/prompt/answer/complete;
+  only the fork completion is delivered with the fork ID.
+- Base: ordinary CLI/Desktop JSONL continues to accept its current terminal
+  shapes and classification rules.
+- Bad: each copied `session_meta` overwrites `currentSessionId`, or a copied
+  `turn_aborted` is accepted merely because it has a `turn_id`.
+- Bad: compare second-resolution `started_at` directly against millisecond
+  fork time and drop a valid same-second fork turn.
+
+### 6. Tests Required
+
+- File-level fixture with owner fork meta, multiple foreign meta records,
+  copied prompts, copied `task_complete`, copied `turn_aborted`, and one owned
+  completion. Assert exactly one ingest with fork session/turn/client/answer.
+- Large-file fixture where owner/boundary/owned start are before the last 1 MiB
+  and the owned terminal is in the tail.
+- Same-second seconds-vs-milliseconds fixture copied from a real persisted fork.
+- Missing/invalid boundary fixture that asserts no ingest or provisional
+  suppression.
+- Old-file backfill fixture that appends a new terminal after the historical
+  offset was skipped.
+- Run the existing ordinary CLI, Desktop, subagent, partial-line, timing, and
+  startup recovery watcher suite unchanged.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+if (record.type === 'session_meta') currentSessionId = record.payload.session_id;
+if (record.payload.type === 'turn_aborted') ingestInterrupted(currentSessionId);
+```
+
+#### Correct
+
+```typescript
+if (!state.ownerEstablished && record.type === 'session_meta') lockOwner(state, record);
+if (state.isFork && isOwnedStart(state, record)) state.ownedTurnIds.add(record.payload.turn_id);
+if (isTerminal(record) && (!state.isFork || state.ownedTurnIds.has(record.payload.turn_id))) {
+  ingestTerminal(state.sessionId, record);
+}
+```
+
+---
+
 ## Code Review Checklist
 
 <!-- What reviewers should check -->

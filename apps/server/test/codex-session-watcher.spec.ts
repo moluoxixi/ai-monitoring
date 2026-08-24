@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -344,6 +344,187 @@ describe('Codex session watcher parser', () => {
 });
 
 describe('Codex session file synchronization', () => {
+  it('ignores copied parent terminals and only ingests turns owned by a persistent fork', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'persistent-fork.jsonl');
+    const forkCreatedAt = new Date();
+    forkCreatedAt.setMilliseconds(5);
+    const parentStartedAt = new Date(forkCreatedAt.getTime() - 60_000);
+    writeFileSync(path, [
+      JSON.stringify({
+        timestamp: forkCreatedAt.toISOString(),
+        type: 'session_meta',
+        payload: {
+          id: 'fork-session',
+          session_id: 'fork-session',
+          forked_from_id: 'parent-session',
+          timestamp: forkCreatedAt.toISOString(),
+          source: 'vscode',
+          originator: 'Codex Desktop',
+          thread_source: 'cli',
+        },
+      }),
+      JSON.stringify({
+        timestamp: forkCreatedAt.toISOString(),
+        type: 'session_meta',
+        payload: {
+          id: 'parent-session', session_id: 'parent-session', source: 'vscode', thread_source: 'user',
+        },
+      }),
+      terminalLine({
+        type: 'task_started', turn_id: 'parent-completed-turn',
+        started_at: Math.floor(parentStartedAt.getTime() / 1_000),
+      }, forkCreatedAt.toISOString()),
+      terminalLine({ type: 'user_message', message: 'copied parent prompt' }, forkCreatedAt.toISOString()),
+      terminalLine({ type: 'task_complete', turn_id: 'parent-completed-turn' }, forkCreatedAt.toISOString()),
+      JSON.stringify({
+        timestamp: forkCreatedAt.toISOString(),
+        type: 'session_meta',
+        payload: { id: 'ancestor-session', session_id: 'ancestor-session', source: 'vscode' },
+      }),
+      terminalLine({
+        type: 'task_started', turn_id: 'parent-aborted-turn',
+        started_at: Math.floor(parentStartedAt.getTime() / 1_000),
+      }, forkCreatedAt.toISOString()),
+      terminalLine({ type: 'turn_aborted', turn_id: 'parent-aborted-turn', reason: 'interrupted' }, forkCreatedAt.toISOString()),
+    ].join('\n') + '\n');
+    const { service, insertEvent, suppressProvisionalFailures } = serviceFor(directory);
+
+    await service.syncFile(path);
+
+    expect(insertEvent).not.toHaveBeenCalled();
+    expect(suppressProvisionalFailures).not.toHaveBeenCalled();
+
+    const ownedStartedAt = new Date(forkCreatedAt.getTime() + 903);
+    const ownedCompletedAt = new Date(ownedStartedAt.getTime() + 2_500);
+    appendFileSync(path, [
+      terminalLine({
+        type: 'task_started', turn_id: 'fork-turn',
+        started_at: Math.floor(ownedStartedAt.getTime() / 1_000),
+      }, ownedStartedAt.toISOString()),
+      JSON.stringify({
+        timestamp: ownedStartedAt.toISOString(),
+        type: 'response_item',
+        payload: {
+          type: 'message', role: 'user', content: [{ type: 'input_text', text: 'fork prompt' }],
+        },
+      }),
+      terminalLine({ type: 'agent_message', message: 'fork final answer' }, ownedCompletedAt.toISOString()),
+      terminalLine({ type: 'task_complete', turn_id: 'fork-turn' }, ownedCompletedAt.toISOString()),
+    ].join('\n') + '\n');
+
+    await service.syncFile(path);
+
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'fork-session:fork-turn:completed',
+      client: 'codex-cli',
+      message: '提问：fork prompt',
+      metadata: expect.objectContaining({
+        thread_id: 'fork-session',
+        turn_id: 'fork-turn',
+        task_summary: 'fork prompt',
+        timing: {
+          started_at: ownedStartedAt.toISOString(),
+          completed_at: ownedCompletedAt.toISOString(),
+          duration_ms: 2_500,
+        },
+      }),
+    }), [], 'fork final answer');
+    expect(suppressProvisionalFailures).toHaveBeenCalledWith('codex-cli', 'fork-session');
+  });
+
+  it('restores persistent fork ownership before scanning the tail of a large file', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'large-persistent-fork.jsonl');
+    const forkCreatedAt = new Date();
+    const ownedStartedAt = new Date(forkCreatedAt.getTime() + 1_500);
+    const ownedCompletedAt = new Date(ownedStartedAt.getTime() + 5_000);
+    writeFileSync(path, [
+      JSON.stringify({
+        timestamp: forkCreatedAt.toISOString(),
+        type: 'session_meta',
+        payload: {
+          id: 'large-fork', session_id: 'large-fork', forked_from_id: 'large-parent',
+          timestamp: forkCreatedAt.toISOString(), thread_source: 'cli',
+        },
+      }),
+      JSON.stringify({ type: 'session_meta', payload: { id: 'large-parent', session_id: 'large-parent' } }),
+      terminalLine({
+        type: 'task_started', turn_id: 'copied-turn',
+        started_at: Math.floor((forkCreatedAt.getTime() - 60_000) / 1_000),
+      }, forkCreatedAt.toISOString()),
+      terminalLine({ type: 'turn_aborted', turn_id: 'copied-turn' }, forkCreatedAt.toISOString()),
+      terminalLine({
+        type: 'task_started', turn_id: 'large-fork-turn',
+        started_at: Math.floor(ownedStartedAt.getTime() / 1_000),
+      }, ownedStartedAt.toISOString()),
+      terminalLine({ type: 'user_message', message: 'large fork prompt' }, ownedStartedAt.toISOString()),
+    ].join('\n') + '\n');
+    appendFileSync(path, `${'x'.repeat(1024)}\n`.repeat(1100));
+    appendFileSync(path, `${terminalLine({
+      type: 'task_complete', turn_id: 'large-fork-turn', last_agent_message: 'large fork answer',
+    }, ownedCompletedAt.toISOString())}\n`);
+    const { service, insertEvent } = serviceFor(directory);
+
+    await service.syncFile(path);
+
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'large-fork:large-fork-turn:completed',
+      client: 'codex-cli',
+      message: '提问：large fork prompt',
+      metadata: expect.objectContaining({ thread_id: 'large-fork', turn_id: 'large-fork-turn' }),
+    }), [], 'large fork answer');
+  });
+
+  it('does not ingest a fork terminal when its turn ownership cannot be proven', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'unknown-fork-boundary.jsonl');
+    writeFileSync(path, [
+      JSON.stringify({
+        type: 'session_meta',
+        payload: { id: 'unknown-fork', session_id: 'unknown-fork', forked_from_id: 'parent' },
+      }),
+      terminalLine({ type: 'task_started', turn_id: 'unproven-turn', started_at: 'not-a-time' }),
+      terminalLine({ type: 'task_complete', turn_id: 'unproven-turn' }),
+    ].join('\n') + '\n');
+    const { service, insertEvent, suppressProvisionalFailures } = serviceFor(directory);
+
+    await service.syncFile(path);
+
+    expect(insertEvent).not.toHaveBeenCalled();
+    expect(suppressProvisionalFailures).not.toHaveBeenCalled();
+  });
+
+  it('retains the owner of an old skipped file so later appended turns are ingested', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
+    tempDirectories.push(directory);
+    const path = join(directory, 'old-session.jsonl');
+    writeFileSync(path, `${JSON.stringify({
+      type: 'session_meta', payload: { id: 'old-session', session_id: 'old-session', source: 'cli' },
+    })}\n`);
+    const oldTimestamp = new Date(Date.now() - 3 * 60 * 60_000);
+    utimesSync(path, oldTimestamp, oldTimestamp);
+    const { service, insertEvent } = serviceFor(directory);
+
+    await service.syncFile(path);
+    expect(insertEvent).not.toHaveBeenCalled();
+
+    appendFileSync(path, `${terminalLine({ type: 'task_complete', turn_id: 'new-turn' })}\n`);
+    await service.syncFile(path);
+
+    expect(insertEvent).toHaveBeenCalledOnce();
+    expect(insertEvent).toHaveBeenCalledWith(expect.objectContaining({
+      source_event_id: 'old-session:new-turn:completed',
+      client: 'codex-cli',
+      metadata: expect.objectContaining({ thread_id: 'old-session', turn_id: 'new-turn' }),
+    }), []);
+  });
+
   it('routes a CLI-sourced Desktop fork completion through QQ as another fork', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'codex-watcher-'));
     tempDirectories.push(directory);
