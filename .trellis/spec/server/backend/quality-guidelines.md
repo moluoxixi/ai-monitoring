@@ -42,6 +42,10 @@ Questions to answer:
   that supports an inbound action, the inbound adapter must still claim that
   marker and return a deterministic unsupported response. It must not fall
   through to an unrelated generic agent or provider.
+- Notification text is rendered exactly once before channel selection. The
+  delivery worker owns the complete user-visible string (including title,
+  task ID, and body); `ChannelProvider` implementations are transport adapters
+  and must not compose, prepend, or otherwise rewrite it.
 
 ---
 
@@ -53,6 +57,8 @@ Questions to answer:
   (for example, a task/event ID) from capability-bearing routing tokens; the
   former may be shown on every channel, while the latter must remain limited to
   eligible channels and events.
+- Cross-channel delivery tests must assert that QQ and at least one non-QQ
+  provider receive the exact same rendered message string.
 - Runtime plugin tests must cover both an eligible marker and a public marker
   for an ineligible task, asserting that both are handled and that only the
   eligible case reaches the platform dispatcher.

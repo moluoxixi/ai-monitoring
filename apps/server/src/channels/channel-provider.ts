@@ -23,7 +23,13 @@ export interface ChannelProvider {
   readonly ids: readonly string[];
   availableChannels(): string[];
   status(): Promise<ChannelStatus[]>;
-  send(channel: string, title: string, body: string): Promise<void>;
+  /**
+   * Deliver the already-rendered notification text.
+   *
+   * Providers are transport adapters only. They must not prepend titles,
+   * append metadata, or otherwise rewrite the message.
+   */
+  send(channel: string, message: string): Promise<void>;
   startBinding?(channel: string): Promise<BindingStartResult>;
   bindCredential?(channel: string, credential: string | Record<string, unknown>): Promise<BindingWaitResult>;
   waitBinding?(channel: string): Promise<BindingWaitResult>;

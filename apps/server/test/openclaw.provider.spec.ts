@@ -150,7 +150,7 @@ describe('OpenClawProvider binding', () => {
       action: 'send', channel: OPENCLAW_WEIXIN, dryRun: false, messageId: 'message-1',
     }));
 
-    await provider.send(OPENCLAW_WEIXIN, 'title', 'body');
+    await provider.send(OPENCLAW_WEIXIN, 'title\n\nbody');
 
     expect(run).toHaveBeenCalledWith(
       expect.any(String),
@@ -173,7 +173,7 @@ describe('OpenClawProvider binding', () => {
       return JSON.stringify({ ok: true });
     });
 
-    await provider.send(OPENCLAW_QQ, 'title', 'body');
+    await provider.send(OPENCLAW_QQ, 'title\n\nbody');
 
     expect(run).toHaveBeenCalledWith(
       expect.any(String),
@@ -218,7 +218,7 @@ describe('OpenClawProvider binding', () => {
       return 'completed';
     });
 
-    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toThrow('did not confirm');
+    await expect(provider.send(OPENCLAW_QQ, 'title\n\nbody')).rejects.toThrow('did not confirm');
   });
 
   it('does not classify a QQ execution timeout as retryable', async () => {
@@ -232,7 +232,7 @@ describe('OpenClawProvider binding', () => {
       return JSON.stringify({ ok: true });
     });
 
-    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(provider.send(OPENCLAW_QQ, 'title\n\nbody')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
   });
 
   it('does not classify an unreadable QQ history as retryable', async () => {
@@ -247,7 +247,7 @@ describe('OpenClawProvider binding', () => {
       return JSON.stringify({ ok: true });
     });
 
-    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(provider.send(OPENCLAW_QQ, 'title\n\nbody')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
   });
 
   it('does not retry a QQ history entry that is still pending', async () => {
@@ -263,7 +263,7 @@ describe('OpenClawProvider binding', () => {
       return 'completed';
     });
 
-    await expect(provider.send(OPENCLAW_QQ, 'title', 'body')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(provider.send(OPENCLAW_QQ, 'title\n\nbody')).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
   });
 
   it('rejects direct outbound responses without a message id', async () => {
@@ -273,7 +273,7 @@ describe('OpenClawProvider binding', () => {
     }));
     run.mockResolvedValueOnce(JSON.stringify({ action: 'send', channel: OPENCLAW_WEIXIN, dryRun: false }));
 
-    await expect(provider.send(OPENCLAW_WEIXIN, 'title', 'body')).rejects.toThrow('did not confirm');
+    await expect(provider.send(OPENCLAW_WEIXIN, 'title\n\nbody')).rejects.toThrow('did not confirm');
   });
 
   it('explains when Weixin rejects an expired conversation context', async () => {
@@ -283,7 +283,7 @@ describe('OpenClawProvider binding', () => {
     }));
     run.mockRejectedValueOnce(new ProcessExecutionError('OutboundDeliveryError: sendMessage ret=-2 errmsg=prepare failed'));
 
-    await expect(provider.send(OPENCLAW_WEIXIN, 'title', 'body'))
+    await expect(provider.send(OPENCLAW_WEIXIN, 'title\n\nbody'))
       .rejects.toThrow('微信会话不可用，请在微信中给机器人发送任意一条消息后重试');
   });
 });

@@ -156,10 +156,9 @@ export class OpenClawProvider implements ChannelProvider {
     this.cancelBindingSession(channel);
   }
 
-  async send(channel: string, title: string, body: string): Promise<void> {
+  async send(channel: string, message: string): Promise<void> {
     const binding = this.loadBindings()[channel];
     if (!binding) throw new Error(`OpenClaw channel is not bound: ${channel}`);
-    const message = `${title}\n\n${body}`.trim();
     if (channel === OPENCLAW_QQ) {
       await this.sendGatewayAnnouncement(binding, message);
       return;

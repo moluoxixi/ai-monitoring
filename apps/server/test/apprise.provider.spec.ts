@@ -48,10 +48,10 @@ describe('AppriseProvider', () => {
   it('sends through the configured URL with full redaction and supports unbind', async () => {
     await provider.bindCredential('apprise-feishu', { token: 'feishu_token-123' });
     run.mockClear();
-    await provider.send('apprise-feishu', 'title', 'body');
+    await provider.send('apprise-feishu', 'title\n\nbody');
     expect(run).toHaveBeenCalledWith(
       expect.any(String),
-      ['--title', 'title', '--body', 'body', 'feishu://feishu_token-123'],
+      ['--body', 'title\n\nbody', 'feishu://feishu_token-123'],
       expect.objectContaining({ redact: expect.arrayContaining(['feishu_token-123', 'feishu://feishu_token-123']) }),
     );
     expect(await provider.unbind('apprise-feishu')).toBe(true);

@@ -6,7 +6,6 @@ import { DeliveryOutcomeUnknownError } from '../channels/channel-provider';
 import { DatabaseService, utcNow } from '../database/database.service';
 import type { DeliveryRow } from '../database/database.types';
 import { cleanAnswerText, truncateText } from '../utils/event-text';
-import { formatEventTiming } from '../utils/event-timing';
 import { UserSettingsService } from '../settings/user-settings.service';
 import { DEFAULT_RESULT_LIMIT, DEFAULT_TASK_LIMIT, type NotificationSettings } from '../settings/user-settings.types';
 const LEASE_MS = 5 * 60_000;
@@ -48,15 +47,11 @@ export const notificationContent = (
     : '';
   const message = cleanText(row.message);
   const summary = taskSummary || message || cleanText(row.title);
-  const timing = row.channel === 'openclaw-qq'
-    ? ''
-    : formatEventTiming(row.metadata, row.event_created_at);
-  const withTiming = (content: string): string => timing ? `${timing}\n${content}` : content;
   const automationId = cleanText(row.metadata?.automation_id);
   if (row.status === 'completed' && automationId && row.metadata?.automation_decision === 'NOTIFY') {
     return {
       title: `${automationId} 有新进展`,
-      body: withTiming(truncateText(answer || message || '未提供进展内容', limits.resultLimit)),
+      body: truncateText(answer || message || '未提供进展内容', limits.resultLimit),
     };
   }
   const failureMessage = cleanText(row.metadata?.failure_message)
@@ -67,9 +62,9 @@ export const notificationContent = (
   const failed = ['failed', 'tool_failed'].includes(row.status);
   return {
     title: `(${clientLabel(row.client)}) ${statusLabel(row.status)}`,
-    body: withTiming(failed
+    body: failed
       ? `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n失败消息：${truncateText(failureMessage, limits.resultLimit)}`
-      : `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n任务结果：${truncateText(answer || '未采集到最终回答', limits.resultLimit)}`),
+      : `提问：${truncateText(summary || '未提供', limits.taskLimit)}\n任务结果：${truncateText(answer || '未采集到最终回答', limits.resultLimit)}`,
   };
 };
 
@@ -77,6 +72,19 @@ export const withReplyRoute = (body: string, taskId: number): string => [
   `[任务ID:${taskId}]`,
   body,
 ].join('\n\n');
+
+/**
+ * Render the complete user-visible notification once, before selecting a
+ * delivery provider. The resulting string is the QQ wire format and is the
+ * only message payload every provider is allowed to send.
+ */
+export const notificationMessage = (
+  row: DeliveryRow,
+  limits: NotificationSettings = { taskLimit: DEFAULT_TASK_LIMIT, resultLimit: DEFAULT_RESULT_LIMIT },
+): string => {
+  const content = notificationContent(row, limits);
+  return [content.title, withReplyRoute(content.body, row.event_id)].join('\n\n').trim();
+};
 
 @Injectable()
 export class DeliveryWorkerService implements OnModuleDestroy {
@@ -150,10 +158,9 @@ export class DeliveryWorkerService implements OnModuleDestroy {
     }, LEASE_RENEWAL_MS);
     renewal.unref();
     try {
-      const notification = notificationContent(row, this.settings?.notification());
+      const message = notificationMessage(row, this.settings?.notification());
       this.database.ensureDeliveryReplyRoute(row.id, this.config.replyRouteTtlMs);
-      const body = withReplyRoute(notification.body, row.event_id);
-      await this.channels.send(row.channel, notification.title, body);
+      await this.channels.send(row.channel, message);
       if (this.abandoning) return;
       const now = utcNow();
       this.database.markClaimedDelivery(row.id, row.lease_token, {

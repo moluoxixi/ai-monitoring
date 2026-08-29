@@ -68,12 +68,12 @@ export class PushPlusProvider implements ChannelProvider {
     return true;
   }
 
-  async send(channel: string, title: string, body: string): Promise<void> {
+  async send(channel: string, message: string): Promise<void> {
     this.assertChannel(channel);
     const token = this.readToken();
     if (!token) throw new Error('PushPlus is not bound');
     const url = `pushplus://${token}`;
-    await this.runner.run(this.cliPath, ['--title', title, '--body', body, url], {
+    await this.runner.run(this.cliPath, ['--body', message, url], {
       timeoutMs: 45_000,
       cwd: this.config.projectRoot,
       redact: [token, url],

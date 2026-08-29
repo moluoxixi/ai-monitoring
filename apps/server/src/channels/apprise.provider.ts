@@ -106,7 +106,7 @@ export class AppriseProvider implements ChannelProvider {
     return true;
   }
 
-  async send(channel: string, title: string, body: string): Promise<void> {
+  async send(channel: string, message: string): Promise<void> {
     const definition = apprisePlatform(channel);
     let url = '';
     let secrets: string[] = [];
@@ -122,7 +122,7 @@ export class AppriseProvider implements ChannelProvider {
       url = this.config.appriseUrls[index] || '';
     }
     if (!url) throw new Error(`unknown notification channel: ${channel}`);
-    await this.runner.run(this.cliPath, ['--title', title, '--body', body, url], {
+    await this.runner.run(this.cliPath, ['--body', message, url], {
       timeoutMs: 45_000,
       cwd: this.config.projectRoot,
       redact: [url, ...secrets],

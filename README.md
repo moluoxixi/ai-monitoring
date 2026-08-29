@@ -161,7 +161,7 @@ QQ 可直接在通知中心绑定：
 3. 扫码凭据由腾讯官方 `@tencent-connect/qqbot-connector` 获取并写入 OpenClaw；本项目自己的绑定文件只保存发送所需的不透明 target/account ID，UI 和日志不展示这些值。
 4. 绑定完成后立即生效，之后所有 AI 软件的新事件都会发送到 QQ。
 
-Codex CLI/Desktop、Claude CLI/Desktop 和 Qoder CLI 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。所有新通知只在正文开头显示 `[任务ID:...]`；服务端仍会在数据库中生成不透明 route token，用于保留 30 天有效期、投递状态与分支头校验，但不再把内部标记放进通知影响阅读。已经发出的 `[AI-MONITOR-REPLY:...]` 旧通知继续兼容。这类 QQ 通知正文不附加开始时间、完成时间和总耗时字段。OpenClaw 只会认领“私聊 + 引用 + 有效任务 ID 或旧标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端会重新校验当前 QQ 绑定、route 有效期和 QQ message id 幂等。Codex 通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 从最新 thread 执行 `thread/fork + turn/start`；Claude 和 Qoder CLI 优先从事件记录的项目 `cwd` 通过各自 CLI 执行 `--resume <session> --fork-session`，从 `stream-json` 的初始化事件取得新 session ID；历史事件缺少 cwd 时会回查本地 transcript。三者都原子推进该 delivery 的独立分支头，不直接写回或争抢可能被 Desktop 持有的源会话。远程执行使用非交互审批模式，插件确认语只表示后台任务已接收，完整回答会在完成后另发一条 QQ 消息。
+Codex CLI/Desktop、Claude CLI/Desktop 和 Qoder CLI 完成通知支持引用回复：在 QQ 中长按该通知并选择“回复”，输入纯文本后发送。所有新通知都由通知中心先渲染成同一条完整文本（标题、`[任务ID:...]` 和正文），再交给各渠道 provider 投递；服务端仍会在数据库中生成不透明 route token，用于保留 30 天有效期、投递状态与分支头校验，但不再把内部标记放进通知影响阅读。已经发出的 `[AI-MONITOR-REPLY:...]` 旧通知继续兼容。为与 QQ 消息格式保持一致，统一正文不附加开始时间、完成时间和总耗时字段。OpenClaw 只会认领“私聊 + 引用 + 有效任务 ID 或旧标记”的消息，普通 QQ 对话、群消息和引用其它通知都会继续走原 OpenClaw 行为。服务端会重新校验当前 QQ 绑定、route 有效期和 QQ message id 幂等。Codex 通过 [Codex App Server](https://developers.openai.com/codex/app-server/) 从最新 thread 执行 `thread/fork + turn/start`；Claude 和 Qoder CLI 优先从事件记录的项目 `cwd` 通过各自 CLI 执行 `--resume <session> --fork-session`，从 `stream-json` 的初始化事件取得新 session ID；历史事件缺少 cwd 时会回查本地 transcript。三者都原子推进该 delivery 的独立分支头，不直接写回或争抢可能被 Desktop 持有的源会话。远程执行使用非交互审批模式，插件确认语只表示后台任务已接收，完整回答会在完成后另发一条 QQ 消息。
 
 当前回复范围覆盖 `openclaw-qq + Codex/Claude CLI/Desktop + Qoder CLI + 纯文本私聊引用回复`，不支持 Hermes、Cursor、Qoder Desktop/Quest、QQ群或图片/语音。Qoder Desktop 的 session transcript 位于独立存储，Qoder CLI 1.1.23 会将其拒绝为无效 session，因此不会伪装成可续接。服务端用任务 ID 定位同一条 QQ delivery，但仍要求后台 route 已生成且有效，并重新校验当前 QQ 绑定；不可续接任务会返回明确提示，不会落回 OpenClaw 模型。同一 delivery 的后续回复从已保存的最新 Codex thread、Claude session 或 Qoder CLI session 继续 fork，因此保留对话历史而不争抢源 writer。fork 可能被对应 Desktop 索引或打开，但是否立即显示在 Desktop UI 不属于 Monitor 的协议保证。route 默认 30 天过期，同一 QQ message id 只会提交一次；未知的跨进程执行结果不会自动重放，避免创建重复 turn。
 
@@ -169,7 +169,7 @@ Codex CLI/Desktop、Claude CLI/Desktop 和 Qoder CLI 完成通知支持引用回
 
 微信也可在通知中心点击“绑定”。服务调用腾讯插件官方 `openclaw channels login --channel openclaw-weixin` 流程，并把插件生成的二维码显示在页面中；扫码确认后，需要先在微信中给机器人发送任意一条消息，使腾讯协议签发主动回复所需的 context token。页面验证该 token 已由插件落盘后，才会读取当前账号 ID 和扫码用户 ID 作为通知路由并显示绑定成功。本项目自己的绑定文件不保存微信 token，也不会通过“最近私聊”猜测接收目标。
 
-QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，Docker 启动入口会校验固定插件版本并应用跨平台兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
+QQ 通知由 OpenClaw Gateway 的官方 `cron --announce` 路径投递，确保复用已运行的 QQ Bot 连接；微信通知使用标准 `message send --json` 直连接口；Apprise/PushPlus 使用 Apprise CLI。上述 provider 都只接收通知中心已经渲染好的完整文本，不再分别拼接标题或正文。正文不经过模型改写，Gateway/插件未确认时不会标记为成功。腾讯微信插件 2.4.6 的 direct-send 入口不会自动恢复已落盘的 context token，Docker 启动入口会校验固定插件版本并应用跨平台兼容补丁，防止 CLI 返回消息 ID 但微信未实际展示。OpenClaw 返回失败时，delivery 保持在 SQLite outbox 中指数退避；连续 10 次失败后进入死信，可通过 relay 重试 API 手工重试。
 
 ## 通知通道
 

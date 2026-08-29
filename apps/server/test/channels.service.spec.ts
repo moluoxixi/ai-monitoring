@@ -22,4 +22,19 @@ describe('ChannelsService', () => {
 
     expect(service.deliveryChannels()).toEqual(['pushplus', 'openclaw-qq', 'openclaw-weixin']);
   });
+
+  it('forwards the pre-rendered message unchanged to the provider', async () => {
+    const apprise = provider(['apprise-feishu']);
+    const pushPlus = provider([]);
+    const openClaw = provider([]);
+    const service = new ChannelsService(
+      apprise as unknown as AppriseProvider,
+      pushPlus as unknown as PushPlusProvider,
+      openClaw as unknown as OpenClawProvider,
+    );
+
+    await service.send('apprise-feishu', '(Codex CLI) 任务已完成\n\n[任务ID:42]\n\n任务结果');
+
+    expect(apprise.send).toHaveBeenCalledWith('apprise-feishu', '(Codex CLI) 任务已完成\n\n[任务ID:42]\n\n任务结果');
+  });
 });

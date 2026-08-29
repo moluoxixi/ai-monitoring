@@ -33,9 +33,9 @@ export class ChannelsService {
     return value;
   }
 
-  async send(channel: string, title: string, body: string): Promise<void> {
+  async send(channel: string, message: string): Promise<void> {
     const provider = this.provider(channel);
-    await provider.send(channel, title, body);
+    await provider.send(channel, message);
   }
 
   async startBinding(channel: string): Promise<BindingStartResult> {

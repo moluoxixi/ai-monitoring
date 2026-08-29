@@ -4,7 +4,7 @@ import type { ChannelsService } from '../src/channels/channels.service';
 import type { DatabaseService } from '../src/database/database.service';
 import type { DeliveryRow } from '../src/database/database.types';
 import { DeliveryOutcomeUnknownError } from '../src/channels/channel-provider';
-import { DeliveryWorkerService, notificationContent } from '../src/deliveries/delivery-worker.service';
+import { DeliveryWorkerService, notificationContent, notificationMessage } from '../src/deliveries/delivery-worker.service';
 
 const delivery = (id: number, channel: string, eventId = 42): DeliveryRow => ({
   id,
@@ -133,7 +133,7 @@ describe('DeliveryWorkerService', () => {
     expect(content.body).toBe('提问：q\n任务结果：r');
   });
 
-  it('keeps timing fields for non-QQ notifications', () => {
+  it('uses the same QQ-compatible content for every channel', () => {
     const content = notificationContent({
       ...delivery(1, 'openclaw-weixin'),
       metadata: {
@@ -146,19 +146,22 @@ describe('DeliveryWorkerService', () => {
       answer_text: 'result',
     });
 
-    expect(content.body).toBe([
-      '开始时间：2026-08-17 20:00:00（北京时间）',
-      '完成时间：2026-08-17 20:00:01（北京时间）',
-      '总耗时：1秒',
-      '提问：question',
-      '任务结果：result',
-    ].join('\n'));
+    expect(content.body).toBe('提问：question\n任务结果：result');
+  });
+
+  it('renders one complete message before selecting a provider', () => {
+    const qq = notificationMessage({ ...delivery(1, 'openclaw-qq'), answer_text: 'result' });
+    const weixin = notificationMessage({ ...delivery(2, 'openclaw-weixin'), answer_text: 'result' });
+
+    expect(qq).toBe('(Codex CLI) 任务已完成\n\n[任务ID:42]\n\n提问：Delivery test\n任务结果：result');
+    expect(weixin).toBe('(Codex CLI) 任务已完成\n\n[任务ID:42]\n\n提问：Delivery test\n任务结果：result');
+    expect(qq).toBe(weixin);
   });
 
   it('reads the current settings when a delivery starts', async () => {
     const sent: string[] = [];
-    const send = vi.fn((_channel: string, _title: string, body: string) => {
-      sent.push(body);
+    const send = vi.fn((_channel: string, message: string) => {
+      sent.push(message);
       return Promise.resolve();
     });
     const settings = { notification: vi.fn(() => ({ taskLimit: 4, resultLimit: 8 })) };
@@ -169,7 +172,7 @@ describe('DeliveryWorkerService', () => {
     await service.processOnce();
 
     expect(settings.notification).toHaveBeenCalled();
-    expect(sent[0]).toBe('[任务ID:42]\n\n提问：a...\n任务结果：12345...');
+    expect(sent[0]).toBe('(Codex CLI) 任务已完成\n\n[任务ID:42]\n\n提问：a...\n任务结果：12345...');
   });
 
   it('creates a stable QQ reply route without exposing its opaque token', async () => {
@@ -186,8 +189,7 @@ describe('DeliveryWorkerService', () => {
 
     expect(send).toHaveBeenCalledWith(
       'openclaw-qq',
-      '(Codex CLI) 任务已完成',
-      '[任务ID:42]\n\n提问：continue work\n任务结果：未采集到最终回答',
+      '(Codex CLI) 任务已完成\n\n[任务ID:42]\n\n提问：continue work\n任务结果：未采集到最终回答',
     );
     expect(database.ensureDeliveryReplyRoute).toHaveBeenCalledWith(1, undefined);
   });
@@ -208,8 +210,7 @@ describe('DeliveryWorkerService', () => {
     expect(database.ensureDeliveryReplyRoute).toHaveBeenCalledWith(3, undefined);
     expect(send).toHaveBeenCalledWith(
       'openclaw-qq',
-      '(Codex Desktop) 任务已完成',
-      expect.not.stringContaining('AI-MONITOR-REPLY'),
+      expect.stringContaining('(Codex Desktop) 任务已完成'),
     );
   });
 
@@ -229,8 +230,7 @@ describe('DeliveryWorkerService', () => {
     expect(database.ensureDeliveryReplyRoute).toHaveBeenCalledWith(4, undefined);
     expect(send).toHaveBeenCalledWith(
       'openclaw-qq',
-      '(Claude Desktop) 任务已完成',
-      expect.stringMatching(/^\[任务ID:42\]\n\n(?!\[AI-MONITOR-REPLY:)/),
+      expect.stringMatching(/^\(Claude Desktop\) 任务已完成\n\n\[任务ID:42\]\n\n(?!\[AI-MONITOR-REPLY:)/),
     );
   });
 
@@ -245,8 +245,7 @@ describe('DeliveryWorkerService', () => {
 
     expect(send).toHaveBeenCalledWith(
       'openclaw-weixin',
-      '(Codex CLI) 任务已完成',
-      expect.stringMatching(/^\[任务ID:42\]\n\n(?!\[AI-MONITOR-REPLY:)/),
+      expect.stringMatching(/^\(Codex CLI\) 任务已完成\n\n\[任务ID:42\]\n\n(?!\[AI-MONITOR-REPLY:)/),
     );
   });
 

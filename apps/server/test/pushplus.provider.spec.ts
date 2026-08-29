@@ -51,11 +51,11 @@ describe('PushPlusProvider', () => {
   it('sends via the Apprise CLI and redacts token and URL', async () => {
     const token = 'Token_1234567890123456789012345678';
     await provider.bindCredential(PUSHPLUS, token);
-    await provider.send(PUSHPLUS, 'AI Monitor', '任务已完成');
+    await provider.send(PUSHPLUS, 'AI Monitor\n\n任务已完成');
     const url = `pushplus://${token}`;
     expect(run).toHaveBeenCalledWith(
       expect.any(String),
-      ['--title', 'AI Monitor', '--body', '任务已完成', url],
+      ['--body', 'AI Monitor\n\n任务已完成', url],
       expect.objectContaining({ redact: [token, url] }),
     );
   });
@@ -64,7 +64,7 @@ describe('PushPlusProvider', () => {
     mkdirSync(join(root, 'nested'), { recursive: true });
     writeFileSync(config.pushPlusBindingPath, JSON.stringify({ version: 1, token: 'invalid' }));
     expect((await provider.status())[0]).toMatchObject({ bound: false, error: true });
-    await expect(provider.send(PUSHPLUS, 'title', 'body')).rejects.toThrow('not bound');
+    await expect(provider.send(PUSHPLUS, 'title\n\nbody')).rejects.toThrow('not bound');
     expect(await provider.unbind(PUSHPLUS)).toBe(true);
     expect(existsSync(config.pushPlusBindingPath)).toBe(false);
     expect(await provider.unbind(PUSHPLUS)).toBe(false);
